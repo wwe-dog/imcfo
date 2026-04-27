@@ -184,7 +184,7 @@ const detectType = (
   if (/朋友还我|别人还我/.test(text)) {
     return {
       type: "income",
-      warning: "这句话可能是收入，也可能是应收款收回，请确认后再入账。",
+      warning: "这句话可能表示收入，也可能表示应收款收回，请确认或手动修改后再入账。",
     };
   }
 
@@ -199,7 +199,7 @@ const detectType = (
 
   return {
     type: "expense",
-    warning: "暂时没有明确识别交易类型，已按日常支出生成草稿，请手动确认。",
+    warning: "暂未明确识别交易类型，已按日常支出生成草稿，请确认或手动修改后再入账。",
   };
 };
 
@@ -235,7 +235,7 @@ export const parseNaturalLanguageTransaction = (
     date: extractDate(text, baseDate),
     cashFlowType: meta.cashFlowType,
     cashFlowLabel: meta.cashFlowLabel,
-    impactText: detectedType.warning ? "这句话可能有多种会计含义，请确认后再入账。" : meta.impactText,
+    impactText: detectedType.warning ? "这句话可能有多种会计含义，请确认或手动修改后再入账。" : meta.impactText,
     warning: detectedType.warning,
   };
 };

@@ -28,7 +28,7 @@ export default function SettingsScreen({
     try {
       const serializedData = await onExport();
       setExportedJson(serializedData);
-      Alert.alert("导出成功", "完整数据 JSON 已显示在下方导出区域。");
+      Alert.alert("导出成功", "完整数据 JSON 已生成，并显示在下方导出区域。");
     } catch {
       Alert.alert("导出失败", "无法导出本地数据。");
     } finally {
@@ -49,7 +49,7 @@ export default function SettingsScreen({
       setImportJson("");
       Alert.alert("导入成功", "本地数据已被新 JSON 替换，首页和报表会按新数据刷新。");
     } catch {
-      Alert.alert("导入失败", "JSON 无法通过校验，或数据替换失败。");
+      Alert.alert("导入失败", "JSON 格式或数据结构校验失败，未完成导入。");
     } finally {
       setIsImporting(false);
     }
@@ -63,7 +63,7 @@ export default function SettingsScreen({
   };
 
   const confirmClear = () => {
-    Alert.alert("确认清空本地数据", "这会删除当前本地数据，并保留一个空的数据壳。", [
+    Alert.alert("确认清空本地数据", "这会删除当前本地数据，并保留空白数据结构。", [
       { text: "取消", style: "cancel" },
       { text: "确认清空", style: "destructive", onPress: () => void onClear() },
     ]);
@@ -74,7 +74,7 @@ export default function SettingsScreen({
       <View>
         <Text style={styles.eyebrow}>Settings</Text>
         <Text style={styles.title}>设置</Text>
-        <Text style={styles.copy}>V0.1 先聚焦本地数据管理，不接入云端、账号或外部同步。</Text>
+        <Text style={styles.copy}>V0.1 只管理本地数据，不接入云端、账号或外部同步。</Text>
       </View>
 
       <View style={styles.panel}>
@@ -91,7 +91,7 @@ export default function SettingsScreen({
 
       <View style={styles.panel}>
         <Text style={styles.panelTitle}>导出本地数据</Text>
-        <Text style={styles.copy}>导出会生成完整的 App 数据 JSON，便于你手动备份或复制检查。</Text>
+        <Text style={styles.copy}>导出会生成完整的应用数据 JSON，便于手动备份或复制留存。</Text>
         <Pressable onPress={() => void handleExport()} style={styles.button} disabled={isExporting}>
           <Text style={styles.buttonText}>{isExporting ? "正在导出..." : "导出本地数据"}</Text>
         </Pressable>
@@ -107,7 +107,7 @@ export default function SettingsScreen({
 
       <View style={styles.panel}>
         <Text style={styles.panelTitle}>导入本地数据</Text>
-        <Text style={styles.copy}>请粘贴完整 JSON。导入后会直接替换当前本地数据。</Text>
+        <Text style={styles.copy}>请粘贴完整 JSON。导入后会替换当前本地数据，请先确认内容来源可靠。</Text>
         <TextInput
           multiline
           placeholder="把完整 JSON 粘贴到这里"

@@ -125,7 +125,7 @@ export default function App() {
       return (
         <View style={styles.loading}>
           <ActivityIndicator color="#17251b" />
-          <Text style={styles.loadingText}>{errorMessage ?? "正在加载本地数据"}</Text>
+      <Text style={styles.loadingText}>{errorMessage ?? "正在加载本地数据..."}</Text>
         </View>
       );
     }
@@ -161,7 +161,7 @@ export default function App() {
         return (
           <SettingsScreen
             appVersion={data.version}
-            storageMode="本地移动存储（AsyncStorage）"
+            storageMode="本地移动存储"
             onExport={handleExport}
             onImport={handleImport}
             onReset={handleReset}

@@ -12,19 +12,19 @@ export default function DashboardScreen({ summary }: DashboardScreenProps) {
     <View style={styles.stack}>
       <View>
         <Text style={styles.eyebrow}>{summary.period.label}</Text>
-        <Text style={styles.title}>个人公司财报总览</Text>
+        <Text style={styles.title}>个人财报总览</Text>
         <Text style={styles.copy}>先看清资产、负债、收入、费用、利润和所有者权益。</Text>
       </View>
       <View style={styles.grid}>
         <MetricCard label="资产" value={formatCurrency(summary.totalAssets)} />
         <MetricCard label="负债" value={formatCurrency(summary.totalLiabilities)} />
-        <MetricCard label="所有者权益" value={formatCurrency(summary.ownerEquity)} hint="个人净资产" />
+        <MetricCard label="所有者权益（个人净资产）" value={formatCurrency(summary.ownerEquity)} hint="资产 - 负债" />
         <MetricCard label="收入" value={formatCurrency(summary.totalIncome)} />
         <MetricCard label="费用" value={formatCurrency(summary.totalExpenses)} />
         <MetricCard label="利润" value={formatCurrency(summary.profit)} />
       </View>
       <View style={styles.panel}>
-        <Text style={styles.panelTitle}>轻量经营提示</Text>
+        <Text style={styles.panelTitle}>本期经营提示</Text>
         <Text style={styles.copy}>
           本期利润为{summary.profit >= 0 ? "正" : "负"}，现金净变化为
           {formatCurrency(summary.cashNetChange)}，资产负债率为

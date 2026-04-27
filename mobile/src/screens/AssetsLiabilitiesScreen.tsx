@@ -214,7 +214,7 @@ export default function AssetsLiabilitiesScreen({
       <View>
         <Text style={styles.eyebrow}>Assets & Liabilities</Text>
         <Text style={styles.title}>资产负债</Text>
-        <Text style={styles.copy}>先把你拥有什么、欠了什么录进去，作为个人资产负债表底稿。</Text>
+        <Text style={styles.copy}>先录入你拥有什么、欠了什么，用于生成个人资产负债表。</Text>
       </View>
 
       <View style={styles.summaryPanel}>
@@ -227,7 +227,7 @@ export default function AssetsLiabilitiesScreen({
           <Text style={styles.summaryValue}>{formatCurrency(summary.totalLiabilities)}</Text>
         </View>
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>所有者权益</Text>
+          <Text style={styles.summaryLabel}>所有者权益（个人净资产）</Text>
           <Text style={styles.summaryValue}>{formatCurrency(summary.ownerEquity)}</Text>
         </View>
       </View>

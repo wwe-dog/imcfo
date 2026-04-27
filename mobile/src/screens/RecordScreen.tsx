@@ -130,7 +130,7 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
     }
 
     if (!category.trim()) {
-      Alert.alert("请填写分类", "分类是必填项，例如工资薪金、餐饮、基金买入。");
+      Alert.alert("请填写分类", "分类是必填项，例如工资薪金、餐饮、投资资产。");
       return null;
     }
 
@@ -167,7 +167,7 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
       setNote("");
       setDraft(null);
       setNaturalText("");
-      setSuccessMessage("保存成功，金额和备注已清空，可以继续记录下一笔。");
+      setSuccessMessage("已保存，金额和备注已清空，可以继续记录下一笔。");
     } catch {
       Alert.alert("保存失败", "这笔记录没有保存成功，请稍后重试。");
     } finally {
@@ -180,7 +180,7 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
       <View>
         <Text style={styles.eyebrow}>Record</Text>
         <Text style={styles.title}>记一笔</Text>
-        <Text style={styles.copy}>直接描述发生了什么，先识别成草稿，确认后再入账。</Text>
+        <Text style={styles.copy}>用一句话描述这笔钱发生了什么，确认识别结果后再入账。</Text>
       </View>
 
       <View style={styles.form}>
@@ -231,7 +231,7 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
           </View>
           <View style={styles.impactBox}>
             <Text style={styles.ruleTitle}>会计影响说明</Text>
-            <Text style={styles.copy}>{draft.warning ? "这句话可能有多种会计含义，请确认后再入账。" : selectedMeta.impactText}</Text>
+            <Text style={styles.copy}>{draft.warning ? "这句话可能有多种会计含义，请确认或手动修改后再入账。" : selectedMeta.impactText}</Text>
           </View>
           <Pressable disabled={isSaving} onPress={() => void handleSubmit()} style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}>
             <Text style={styles.saveButtonText}>{isSaving ? "入账中..." : "确认入账"}</Text>
@@ -303,7 +303,7 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
             ))}
           </View>
         ) : (
-          <Text style={styles.warningText}>当前没有可用账户，请先恢复示例数据或后续添加账户管理能力。</Text>
+            <Text style={styles.warningText}>当前没有可用账户，请先在设置中恢复示例数据；后续版本会提供账户管理能力。</Text>
         )}
 
         <Text style={styles.label}>日期</Text>
