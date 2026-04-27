@@ -1,0 +1,322 @@
+import type { Account, Asset, CashFlowType, Liability, Transaction, TransactionType } from "../models";
+
+export interface TransactionRule {
+  type: TransactionType;
+  label: string;
+  cashFlowType: CashFlowType;
+  accountingEffect: string;
+  limitation?: string;
+}
+
+export interface TransactionInput {
+  type: TransactionType;
+  amount: number;
+  category: string;
+  accountId: string;
+  date: string;
+  note?: string;
+}
+
+export interface FinancialState {
+  accounts: Account[];
+  assets: Asset[];
+  liabilities: Liability[];
+  transactions: Transaction[];
+}
+
+export interface AssetInput {
+  id?: string;
+  name: string;
+  category: Asset["category"];
+  amount: number;
+  accountId?: string;
+  note?: string;
+}
+
+export interface LiabilityInput {
+  id?: string;
+  name: string;
+  category: Liability["category"];
+  amount: number;
+  dueDate?: string;
+  note?: string;
+}
+
+export const transactionRules: TransactionRule[] = [
+  {
+    type: "income",
+    label: "收入",
+    cashFlowType: "operating",
+    accountingEffect: "资产增加，收入增加，经营活动现金流入。",
+  },
+  {
+    type: "expense",
+    label: "支出",
+    cashFlowType: "operating",
+    accountingEffect: "费用增加，资产减少，经营活动现金流出。",
+  },
+  {
+    type: "assetIncrease",
+    label: "资产增加",
+    cashFlowType: "nonCash",
+    accountingEffect: "资产增加，暂不自动确认为收入。",
+  },
+  {
+    type: "assetDecrease",
+    label: "资产减少",
+    cashFlowType: "nonCash",
+    accountingEffect: "资产减少，暂不自动确认为费用。",
+  },
+  {
+    type: "liabilityIncrease",
+    label: "负债增加",
+    cashFlowType: "financing",
+    accountingEffect: "负债增加，通常对应筹资活动现金流入。",
+  },
+  {
+    type: "liabilityDecrease",
+    label: "负债减少",
+    cashFlowType: "financing",
+    accountingEffect: "负债减少，通常对应筹资活动现金流出。",
+  },
+  {
+    type: "transfer",
+    label: "转账",
+    cashFlowType: "nonCash",
+    accountingEffect: "账户之间转移，不影响收入、费用或利润。",
+  },
+  {
+    type: "investmentBuy",
+    label: "投资买入",
+    cashFlowType: "investing",
+    accountingEffect: "投资资产增加，现金资产减少，投资活动现金流出，不直接影响利润表。",
+  },
+  {
+    type: "investmentSell",
+    label: "投资卖出",
+    cashFlowType: "investing",
+    accountingEffect: "现金资产增加，投资资产减少，投资活动现金流入。",
+    limitation: "V0.1 暂无成本基础字段，投资卖出默认不确认投资收益或亏损。",
+  },
+  {
+    type: "repayment",
+    label: "还款",
+    cashFlowType: "financing",
+    accountingEffect: "负债减少，资产减少，筹资活动现金流出。",
+  },
+  {
+    type: "creditCardExpense",
+    label: "信用卡消费",
+    cashFlowType: "nonCash",
+    accountingEffect: "费用增加，负债增加，不产生现金流出。",
+  },
+  {
+    type: "creditCardRepayment",
+    label: "信用卡还款",
+    cashFlowType: "financing",
+    accountingEffect: "负债减少，资产减少，筹资活动现金流出。",
+  },
+];
+
+export const getTransactionRule = (type: TransactionType): TransactionRule =>
+  transactionRules.find((rule) => rule.type === type) ?? transactionRules[0];
+
+export const createTransactionFromInput = (input: TransactionInput): Transaction => {
+  const rule = getTransactionRule(input.type);
+  const timestamp = new Date().toISOString();
+
+  return {
+    id: `tx-${Date.now()}`,
+    date: input.date,
+    amount: input.amount,
+    type: input.type,
+    category: input.category.trim(),
+    accountId: input.accountId,
+    cashFlowType: rule.cashFlowType,
+    note: input.note?.trim() || rule.limitation,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+};
+
+const updateAccountBalance = (accounts: Account[], accountId: string, delta: number): Account[] =>
+  accounts.map((account) =>
+    account.id === accountId
+      ? {
+          ...account,
+          balance: account.balance + delta,
+          updatedAt: new Date().toISOString(),
+        }
+      : account,
+  );
+
+const updateAssetByAccount = (assets: Asset[], accountId: string, delta: number): Asset[] =>
+  assets.map((asset) =>
+    asset.accountId === accountId
+      ? {
+          ...asset,
+          amount: Math.max(0, asset.amount + delta),
+          currentValue: Math.max(0, asset.currentValue + delta),
+          updatedAt: new Date().toISOString(),
+        }
+      : asset,
+  );
+
+const updateFirstInvestmentAsset = (assets: Asset[], delta: number): Asset[] =>
+  assets.map((asset) =>
+    asset.category === "investment"
+      ? {
+          ...asset,
+          amount: Math.max(0, asset.amount + delta),
+          currentValue: Math.max(0, asset.currentValue + delta),
+          updatedAt: new Date().toISOString(),
+        }
+      : asset,
+  );
+
+const updateFirstLiability = (liabilities: Liability[], delta: number): Liability[] =>
+  liabilities.map((liability, index) =>
+    index === 0
+      ? {
+          ...liability,
+          amount: Math.max(0, liability.amount + delta),
+          updatedAt: new Date().toISOString(),
+        }
+      : liability,
+  );
+
+export const applyTransactionToFinancialState = <T extends FinancialState>(
+  state: T,
+  transaction: Transaction,
+): T => {
+  let accounts = state.accounts;
+  let assets = state.assets;
+  let liabilities = state.liabilities;
+
+  switch (transaction.type) {
+    case "income":
+    case "assetIncrease":
+      accounts = updateAccountBalance(accounts, transaction.accountId, transaction.amount);
+      assets = updateAssetByAccount(assets, transaction.accountId, transaction.amount);
+      break;
+    case "expense":
+    case "assetDecrease":
+      accounts = updateAccountBalance(accounts, transaction.accountId, -transaction.amount);
+      assets = updateAssetByAccount(assets, transaction.accountId, -transaction.amount);
+      break;
+    case "investmentBuy":
+      accounts = updateAccountBalance(accounts, transaction.accountId, -transaction.amount);
+      assets = updateAssetByAccount(assets, transaction.accountId, -transaction.amount);
+      assets = updateFirstInvestmentAsset(assets, transaction.amount);
+      break;
+    case "investmentSell":
+      accounts = updateAccountBalance(accounts, transaction.accountId, transaction.amount);
+      assets = updateAssetByAccount(assets, transaction.accountId, transaction.amount);
+      assets = updateFirstInvestmentAsset(assets, -transaction.amount);
+      break;
+    case "liabilityIncrease":
+      accounts = updateAccountBalance(accounts, transaction.accountId, transaction.amount);
+      assets = updateAssetByAccount(assets, transaction.accountId, transaction.amount);
+      liabilities = updateFirstLiability(liabilities, transaction.amount);
+      break;
+    case "liabilityDecrease":
+    case "repayment":
+    case "creditCardRepayment":
+      accounts = updateAccountBalance(accounts, transaction.accountId, -transaction.amount);
+      assets = updateAssetByAccount(assets, transaction.accountId, -transaction.amount);
+      liabilities = updateFirstLiability(liabilities, -transaction.amount);
+      break;
+    case "creditCardExpense":
+      liabilities = updateFirstLiability(liabilities, transaction.amount);
+      break;
+    case "transfer":
+      break;
+  }
+
+  return {
+    ...state,
+    accounts,
+    assets,
+    liabilities,
+    transactions: [transaction, ...state.transactions],
+  };
+};
+
+export const upsertAssetInFinancialState = <T extends FinancialState>(
+  state: T,
+  input: AssetInput,
+): T => {
+  const timestamp = new Date().toISOString();
+  const asset: Asset = {
+    id: input.id ?? `asset-${Date.now()}`,
+    name: input.name.trim(),
+    category: input.category,
+    amount: input.amount,
+    currentValue: input.amount,
+    valuationMethod: "manual",
+    accountId: input.accountId || undefined,
+    note: input.note?.trim() || undefined,
+    createdAt: input.id
+      ? state.assets.find((currentAsset) => currentAsset.id === input.id)?.createdAt ?? timestamp
+      : timestamp,
+    updatedAt: timestamp,
+  };
+
+  const existingIndex = state.assets.findIndex((currentAsset) => currentAsset.id === asset.id);
+  const assets =
+    existingIndex >= 0
+      ? state.assets.map((currentAsset) => (currentAsset.id === asset.id ? asset : currentAsset))
+      : [asset, ...state.assets];
+
+  return {
+    ...state,
+    assets,
+  };
+};
+
+export const deleteAssetFromFinancialState = <T extends FinancialState>(state: T, assetId: string): T => ({
+  ...state,
+  assets: state.assets.filter((asset) => asset.id !== assetId),
+});
+
+export const upsertLiabilityInFinancialState = <T extends FinancialState>(
+  state: T,
+  input: LiabilityInput,
+): T => {
+  const timestamp = new Date().toISOString();
+  const liability: Liability = {
+    id: input.id ?? `liability-${Date.now()}`,
+    name: input.name.trim(),
+    category: input.category,
+    amount: input.amount,
+    dueDate: input.dueDate?.trim() || undefined,
+    note: input.note?.trim() || undefined,
+    createdAt: input.id
+      ? state.liabilities.find((currentLiability) => currentLiability.id === input.id)?.createdAt ?? timestamp
+      : timestamp,
+    updatedAt: timestamp,
+  };
+
+  const existingIndex = state.liabilities.findIndex(
+    (currentLiability) => currentLiability.id === liability.id,
+  );
+  const liabilities =
+    existingIndex >= 0
+      ? state.liabilities.map((currentLiability) =>
+          currentLiability.id === liability.id ? liability : currentLiability,
+        )
+      : [liability, ...state.liabilities];
+
+  return {
+    ...state,
+    liabilities,
+  };
+};
+
+export const deleteLiabilityFromFinancialState = <T extends FinancialState>(
+  state: T,
+  liabilityId: string,
+): T => ({
+  ...state,
+  liabilities: state.liabilities.filter((liability) => liability.id !== liabilityId),
+});
