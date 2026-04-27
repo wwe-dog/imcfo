@@ -30,7 +30,19 @@ const tabs: Array<{ key: ScreenKey; label: string }> = [
 
 export default function App() {
   const [activeScreen, setActiveScreen] = useState<ScreenKey>("dashboard");
-  const { data, summary, errorMessage, isLoading, saveTransaction, resetDemoData, exportData } = useAppData();
+  const {
+    data,
+    summary,
+    errorMessage,
+    isLoading,
+    saveTransaction,
+    saveAsset,
+    deleteAsset,
+    saveLiability,
+    deleteLiability,
+    resetDemoData,
+    exportData,
+  } = useAppData();
 
   const handleExport = async () => {
     try {
@@ -61,20 +73,44 @@ export default function App() {
     }
   };
 
-  const handleSaveAsset = async (_input: AssetInput) => {
-    Alert.alert("暂未开放", "资产负债 CRUD 将在独立功能分支中实现。");
+  const handleSaveAsset = async (input: AssetInput) => {
+    try {
+      await saveAsset(input);
+      Alert.alert(input.id ? "资产已更新" : "资产已添加", "首页、报表和资产负债表已按最新资产数据刷新。");
+    } catch {
+      Alert.alert("保存失败", "无法保存这项资产。");
+      throw new Error("无法保存这项资产。");
+    }
   };
 
-  const handleDeleteAsset = async (_assetId: string) => {
-    Alert.alert("暂未开放", "资产负债 CRUD 将在独立功能分支中实现。");
+  const handleDeleteAsset = async (assetId: string) => {
+    try {
+      await deleteAsset(assetId);
+      Alert.alert("资产已删除", "首页、报表和资产负债表已按最新资产数据刷新。");
+    } catch {
+      Alert.alert("删除失败", "无法删除这项资产。");
+      throw new Error("无法删除这项资产。");
+    }
   };
 
-  const handleSaveLiability = async (_input: LiabilityInput) => {
-    Alert.alert("暂未开放", "资产负债 CRUD 将在独立功能分支中实现。");
+  const handleSaveLiability = async (input: LiabilityInput) => {
+    try {
+      await saveLiability(input);
+      Alert.alert(input.id ? "负债已更新" : "负债已添加", "首页、报表和资产负债表已按最新负债数据刷新。");
+    } catch {
+      Alert.alert("保存失败", "无法保存这项负债。");
+      throw new Error("无法保存这项负债。");
+    }
   };
 
-  const handleDeleteLiability = async (_liabilityId: string) => {
-    Alert.alert("暂未开放", "资产负债 CRUD 将在独立功能分支中实现。");
+  const handleDeleteLiability = async (liabilityId: string) => {
+    try {
+      await deleteLiability(liabilityId);
+      Alert.alert("负债已删除", "首页、报表和资产负债表已按最新负债数据刷新。");
+    } catch {
+      Alert.alert("删除失败", "无法删除这项负债。");
+      throw new Error("无法删除这项负债。");
+    }
   };
 
   const renderScreen = () => {

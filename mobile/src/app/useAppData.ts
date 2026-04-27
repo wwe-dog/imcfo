@@ -3,6 +3,12 @@ import { buildDashboardSummary } from "../domain/accounting/calculations";
 import {
   applyTransactionToFinancialState,
   createTransactionFromInput,
+  deleteAssetFromFinancialState,
+  deleteLiabilityFromFinancialState,
+  upsertAssetInFinancialState,
+  upsertLiabilityInFinancialState,
+  type AssetInput,
+  type LiabilityInput,
   type TransactionInput,
 } from "../domain/accounting/transactionRules";
 import { asyncStorageAdapter } from "../storage/asyncStorageAdapter";
@@ -20,6 +26,10 @@ interface UseAppDataResult {
   isSaving: boolean;
   reloadData: () => Promise<void>;
   saveTransaction: (input: TransactionInput) => Promise<void>;
+  saveAsset: (input: AssetInput) => Promise<AppData>;
+  deleteAsset: (assetId: string) => Promise<AppData>;
+  saveLiability: (input: LiabilityInput) => Promise<AppData>;
+  deleteLiability: (liabilityId: string) => Promise<AppData>;
   replaceData: (updater: (current: AppData) => AppData) => Promise<AppData>;
   resetDemoData: () => Promise<AppData>;
   exportData: () => Promise<string>;
@@ -92,6 +102,29 @@ export function useAppData(storage: StorageAdapter = asyncStorageAdapter): UseAp
     [replaceData],
   );
 
+  const saveAsset = useCallback(
+    async (input: AssetInput) => replaceData((currentData) => upsertAssetInFinancialState(currentData, input)),
+    [replaceData],
+  );
+
+  const deleteAsset = useCallback(
+    async (assetId: string) =>
+      replaceData((currentData) => deleteAssetFromFinancialState(currentData, assetId)),
+    [replaceData],
+  );
+
+  const saveLiability = useCallback(
+    async (input: LiabilityInput) =>
+      replaceData((currentData) => upsertLiabilityInFinancialState(currentData, input)),
+    [replaceData],
+  );
+
+  const deleteLiability = useCallback(
+    async (liabilityId: string) =>
+      replaceData((currentData) => deleteLiabilityFromFinancialState(currentData, liabilityId)),
+    [replaceData],
+  );
+
   const resetDemoData = useCallback(async () => {
     setStatus("saving");
     setErrorMessage(null);
@@ -132,6 +165,10 @@ export function useAppData(storage: StorageAdapter = asyncStorageAdapter): UseAp
     isSaving: status === "saving",
     reloadData: loadFromStorage,
     saveTransaction,
+    saveAsset,
+    deleteAsset,
+    saveLiability,
+    deleteLiability,
     replaceData,
     resetDemoData,
     exportData,
