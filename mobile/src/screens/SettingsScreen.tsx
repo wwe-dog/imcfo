@@ -1,5 +1,6 @@
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useState } from "react";
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { sharedStyles, theme } from "../styles/theme";
 
 interface SettingsScreenProps {
   appVersion: string;
@@ -71,14 +72,16 @@ export default function SettingsScreen({
 
   return (
     <View style={styles.stack}>
-      <View>
-        <Text style={styles.eyebrow}>Settings</Text>
-        <Text style={styles.title}>设置</Text>
-        <Text style={styles.copy}>V0.1 只管理本地数据，不接入云端、账号或外部同步。</Text>
+      <View style={sharedStyles.pageHeader}>
+        <Text style={sharedStyles.eyebrow}>Settings</Text>
+        <Text style={sharedStyles.pageTitle}>设置</Text>
+        <Text style={sharedStyles.pageCopy}>
+          V0.1 只管理本地数据，不接入云端、账号或外部同步。
+        </Text>
       </View>
 
-      <View style={styles.panel}>
-        <Text style={styles.panelTitle}>当前数据状态</Text>
+      <View style={[sharedStyles.card, styles.panel]}>
+        <Text style={sharedStyles.sectionTitle}>当前数据状态</Text>
         <View style={styles.metaRow}>
           <Text style={styles.metaLabel}>数据版本</Text>
           <Text style={styles.metaValue}>{appVersion}</Text>
@@ -89,47 +92,65 @@ export default function SettingsScreen({
         </View>
       </View>
 
-      <View style={styles.panel}>
-        <Text style={styles.panelTitle}>导出本地数据</Text>
-        <Text style={styles.copy}>导出会生成完整的应用数据 JSON，便于手动备份或复制留存。</Text>
-        <Pressable onPress={() => void handleExport()} style={styles.button} disabled={isExporting}>
-          <Text style={styles.buttonText}>{isExporting ? "正在导出..." : "导出本地数据"}</Text>
+      <View style={[sharedStyles.card, styles.panel]}>
+        <Text style={sharedStyles.sectionTitle}>导出本地数据</Text>
+        <Text style={sharedStyles.pageCopy}>
+          导出会生成完整的应用数据 JSON，便于手动备份或复制留存。
+        </Text>
+        <Pressable
+          disabled={isExporting}
+          onPress={() => void handleExport()}
+          style={[sharedStyles.primaryButton, isExporting && styles.buttonDisabled]}
+        >
+          <Text style={sharedStyles.primaryButtonText}>
+            {isExporting ? "正在导出..." : "导出本地数据"}
+          </Text>
         </Pressable>
         <TextInput
-          multiline
           editable={false}
+          multiline
           placeholder="导出的完整 JSON 会显示在这里"
           placeholderTextColor="#8a9380"
-          style={[styles.input, styles.textArea, styles.readOnlyInput]}
+          style={[sharedStyles.input, sharedStyles.textArea, styles.readOnlyInput, styles.largeTextArea]}
           value={exportedJson}
         />
       </View>
 
-      <View style={styles.panel}>
-        <Text style={styles.panelTitle}>导入本地数据</Text>
-        <Text style={styles.copy}>请粘贴完整 JSON。导入后会替换当前本地数据，请先确认内容来源可靠。</Text>
+      <View style={[sharedStyles.card, styles.panel]}>
+        <Text style={sharedStyles.sectionTitle}>导入本地数据</Text>
+        <Text style={sharedStyles.pageCopy}>
+          请粘贴完整 JSON。导入后会替换当前本地数据，请先确认内容来源可靠。
+        </Text>
         <TextInput
           multiline
+          onChangeText={setImportJson}
           placeholder="把完整 JSON 粘贴到这里"
           placeholderTextColor="#8a9380"
-          style={[styles.input, styles.textArea]}
-          value={importJson}
-          onChangeText={setImportJson}
+          style={[sharedStyles.input, sharedStyles.textArea, styles.largeTextArea]}
           textAlignVertical="top"
+          value={importJson}
         />
-        <Pressable onPress={() => void handleImport()} style={styles.button} disabled={isImporting}>
-          <Text style={styles.buttonText}>{isImporting ? "正在导入..." : "导入本地数据"}</Text>
+        <Pressable
+          disabled={isImporting}
+          onPress={() => void handleImport()}
+          style={[sharedStyles.primaryButton, isImporting && styles.buttonDisabled]}
+        >
+          <Text style={sharedStyles.primaryButtonText}>
+            {isImporting ? "正在导入..." : "导入本地数据"}
+          </Text>
         </Pressable>
       </View>
 
-      <View style={styles.panel}>
-        <Text style={styles.panelTitle}>重置与清空</Text>
-        <Text style={styles.copy}>恢复示例数据会覆盖当前数据；清空数据会保留空白数据结构，适合重新开始。</Text>
-        <Pressable onPress={confirmReset} style={styles.button}>
-          <Text style={styles.buttonText}>恢复示例数据</Text>
+      <View style={[sharedStyles.card, styles.panel]}>
+        <Text style={sharedStyles.sectionTitle}>重置与清空</Text>
+        <Text style={sharedStyles.pageCopy}>
+          恢复示例数据会覆盖当前数据；清空数据会保留空白数据结构，适合重新开始。
+        </Text>
+        <Pressable onPress={confirmReset} style={sharedStyles.primaryButton}>
+          <Text style={sharedStyles.primaryButtonText}>恢复示例数据</Text>
         </Pressable>
-        <Pressable onPress={confirmClear} style={[styles.button, styles.dangerButton]}>
-          <Text style={[styles.buttonText, styles.dangerText]}>清空所有本地数据</Text>
+        <Pressable onPress={confirmClear} style={styles.dangerButton}>
+          <Text style={styles.dangerButtonText}>清空所有本地数据</Text>
         </Pressable>
       </View>
     </View>
@@ -137,44 +158,31 @@ export default function SettingsScreen({
 }
 
 const styles = StyleSheet.create({
-  button: {
-    alignItems: "center",
-    backgroundColor: "#17251b",
-    borderRadius: 10,
-    padding: 14,
-  },
-  buttonText: {
-    color: "#f8f4e7",
-    fontWeight: "700",
-  },
-  copy: {
-    color: "#50604d",
-    fontSize: 14,
-    lineHeight: 22,
+  buttonDisabled: {
+    opacity: 0.65,
   },
   dangerButton: {
-    backgroundColor: "#f5ded8",
-  },
-  dangerText: {
-    color: "#9b2f20",
-  },
-  eyebrow: {
-    color: "#7f8c54",
-    fontSize: 12,
-    fontWeight: "700",
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: "#fffef8",
-    borderColor: "#cbd5bf",
-    borderRadius: 10,
+    alignItems: "center",
+    backgroundColor: theme.colors.dangerSoft,
+    borderColor: theme.colors.dangerSoft,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    color: "#18201a",
-    padding: 12,
+    justifyContent: "center",
+    minHeight: theme.touch.minHeight,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+  },
+  dangerButtonText: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.body,
+    fontWeight: "700",
+  },
+  largeTextArea: {
+    minHeight: 164,
   },
   metaLabel: {
-    color: "#50604d",
-    fontSize: 14,
+    color: theme.colors.textSecondary,
+    fontSize: theme.typography.body,
   },
   metaRow: {
     alignItems: "center",
@@ -182,38 +190,19 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   metaValue: {
-    color: "#18201a",
-    fontSize: 14,
+    color: theme.colors.textPrimary,
+    fontSize: theme.typography.body,
     fontWeight: "700",
     maxWidth: "58%",
     textAlign: "right",
   },
   panel: {
-    backgroundColor: "#fbfaf3",
-    borderColor: "#d5dcc7",
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 14,
-    padding: 16,
-  },
-  panelTitle: {
-    color: "#18201a",
-    fontSize: 17,
-    fontWeight: "700",
+    gap: theme.spacing.md,
   },
   readOnlyInput: {
-    color: "#65715f",
+    color: theme.colors.textMuted,
   },
   stack: {
-    gap: 20,
-  },
-  textArea: {
-    minHeight: 160,
-  },
-  title: {
-    color: "#18201a",
-    fontSize: 28,
-    fontWeight: "800",
-    marginBottom: 8,
+    gap: theme.spacing.xl,
   },
 });

@@ -8,6 +8,7 @@ import {
 } from "../domain/accounting/naturalLanguageParser";
 import type { TransactionInput } from "../domain/accounting/transactionRules";
 import type { Account } from "../domain/models";
+import { sharedStyles, theme } from "../styles/theme";
 
 interface RecordScreenProps {
   accounts: Account[];
@@ -33,10 +34,21 @@ const transactionTypeOptions: TransactionTypeOption[] = [
   { type: "investmentBuy", label: "投资买入", defaultCategory: "投资资产", requiresAccount: true },
   { type: "investmentSell", label: "投资卖出", defaultCategory: "投资资产", requiresAccount: true },
   { type: "creditCardExpense", label: "信用卡消费", defaultCategory: "信用卡", requiresAccount: true },
-  { type: "creditCardRepayment", label: "信用卡还款", defaultCategory: "信用卡", requiresAccount: true },
+  {
+    type: "creditCardRepayment",
+    label: "信用卡还款",
+    defaultCategory: "信用卡",
+    requiresAccount: true,
+  },
 ];
 
-const examples = ["今天中午吃饭花了15", "工资到账3200", "买基金1000", "还信用卡500", "朋友还我200"];
+const examples = [
+  "今天中午吃饭花了15",
+  "工资到账3200",
+  "买基金1000",
+  "还信用卡500",
+  "朋友还我200",
+];
 
 const findOption = (type: NaturalLanguageTransactionType): TransactionTypeOption =>
   transactionTypeOptions.find((option) => option.type === type) ?? transactionTypeOptions[0];
@@ -177,14 +189,16 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
 
   return (
     <View style={styles.stack}>
-      <View>
-        <Text style={styles.eyebrow}>Record</Text>
-        <Text style={styles.title}>记一笔</Text>
-        <Text style={styles.copy}>用一句话描述这笔钱发生了什么，确认识别结果后再入账。</Text>
+      <View style={sharedStyles.pageHeader}>
+        <Text style={sharedStyles.eyebrow}>Record</Text>
+        <Text style={sharedStyles.pageTitle}>记一笔</Text>
+        <Text style={sharedStyles.pageCopy}>
+          用一句话描述这笔钱发生了什么，确认识别结果后再入账。
+        </Text>
       </View>
 
-      <View style={styles.form}>
-        <Text style={styles.sectionTitle}>一句话记账</Text>
+      <View style={[sharedStyles.card, styles.formCard]}>
+        <Text style={sharedStyles.sectionTitle}>一句话记账</Text>
         <TextInput
           multiline
           onChangeText={(value) => {
@@ -193,18 +207,18 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
           }}
           placeholder={examples.join("\n")}
           placeholderTextColor="#8a9380"
-          style={[styles.input, styles.naturalInput]}
+          style={[sharedStyles.input, sharedStyles.textArea, styles.naturalInput]}
           value={naturalText}
         />
-        <Pressable onPress={handleRecognize} style={styles.primaryButton}>
-          <Text style={styles.primaryButtonText}>智能识别</Text>
+        <Pressable onPress={handleRecognize} style={styles.accentButton}>
+          <Text style={styles.accentButtonText}>智能识别</Text>
         </Pressable>
       </View>
 
       {draft ? (
-        <View style={styles.draftCard}>
-          <Text style={styles.sectionTitle}>识别结果</Text>
-          {draft.warning ? <Text style={styles.warningText}>{draft.warning}</Text> : null}
+        <View style={[sharedStyles.card, styles.formCard]}>
+          <Text style={sharedStyles.sectionTitle}>识别结果</Text>
+          {draft.warning ? <Text style={sharedStyles.warningText}>{draft.warning}</Text> : null}
           <View style={styles.draftRow}>
             <Text style={styles.draftLabel}>类型</Text>
             <Text style={styles.draftValue}>{selectedOption.label}</Text>
@@ -229,37 +243,62 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
             <Text style={styles.draftLabel}>现金流</Text>
             <Text style={styles.draftValue}>{selectedMeta.cashFlowLabel}</Text>
           </View>
-          <View style={styles.impactBox}>
-            <Text style={styles.ruleTitle}>会计影响说明</Text>
-            <Text style={styles.copy}>{draft.warning ? "这句话可能有多种会计含义，请确认或手动修改后再入账。" : selectedMeta.impactText}</Text>
+          <View style={sharedStyles.helperBox}>
+            <Text style={sharedStyles.helperTitle}>会计影响说明</Text>
+            <Text style={sharedStyles.helperText}>
+              {draft.warning
+                ? "这句话可能有多种会计含义，请确认或手动修改后再入账。"
+                : selectedMeta.impactText}
+            </Text>
           </View>
-          <Pressable disabled={isSaving} onPress={() => void handleSubmit()} style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}>
-            <Text style={styles.saveButtonText}>{isSaving ? "入账中..." : "确认入账"}</Text>
+          <Pressable
+            disabled={isSaving}
+            onPress={() => void handleSubmit()}
+            style={[sharedStyles.primaryButton, isSaving && styles.buttonDisabled]}
+          >
+            <Text style={sharedStyles.primaryButtonText}>
+              {isSaving ? "入账中..." : "确认入账"}
+            </Text>
           </Pressable>
         </View>
       ) : null}
 
-      <View style={styles.form}>
-        <Text style={styles.sectionTitle}>手动修改 / 高级填写</Text>
-        <Text style={styles.label}>交易类型</Text>
+      <View style={[sharedStyles.card, styles.formCard]}>
+        <Text style={sharedStyles.sectionTitle}>手动修改 / 高级填写</Text>
+        <Text style={styles.fieldLabel}>交易类型</Text>
         <View style={styles.chipWrap}>
-          {transactionTypeOptions.map((option) => (
-            <Pressable
-              key={option.type}
-              onPress={() => handleTypeChange(option.type)}
-              style={[styles.chip, type === option.type && styles.chipActive]}
-            >
-              <Text style={[styles.chipText, type === option.type && styles.chipTextActive]}>{option.label}</Text>
-            </Pressable>
-          ))}
+          {transactionTypeOptions.map((option) => {
+            const isActive = type === option.type;
+
+            return (
+              <Pressable
+                key={option.type}
+                onPress={() => handleTypeChange(option.type)}
+                style={[
+                  sharedStyles.chip,
+                  styles.chip,
+                  isActive && sharedStyles.chipActiveDark,
+                ]}
+              >
+                <Text
+                  style={[
+                    sharedStyles.chipText,
+                    isActive && sharedStyles.chipTextInverse,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
-        <View style={styles.ruleBox}>
-          <Text style={styles.ruleTitle}>影响说明</Text>
-          <Text style={styles.copy}>{selectedMeta.impactText}</Text>
+        <View style={sharedStyles.helperBox}>
+          <Text style={sharedStyles.helperTitle}>影响说明</Text>
+          <Text style={sharedStyles.helperText}>{selectedMeta.impactText}</Text>
         </View>
 
-        <Text style={styles.label}>金额</Text>
+        <Text style={styles.fieldLabel}>金额</Text>
         <TextInput
           keyboardType="decimal-pad"
           onChangeText={(value) => {
@@ -268,45 +307,62 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
           }}
           placeholder="例如 1000"
           placeholderTextColor="#8a9380"
-          style={styles.input}
+          style={sharedStyles.input}
           value={amount}
         />
 
-        <Text style={styles.label}>分类</Text>
+        <Text style={styles.fieldLabel}>分类</Text>
         <TextInput
           onChangeText={(value) => {
             setCategory(value);
             setSuccessMessage("");
           }}
-          placeholder="例如 工资薪金 / 餐饮 / 基金买入"
+          placeholder="例如 工资薪金 / 餐饮 / 投资资产"
           placeholderTextColor="#8a9380"
-          style={styles.input}
+          style={sharedStyles.input}
           value={category}
         />
 
-        <Text style={styles.label}>账户</Text>
+        <Text style={styles.fieldLabel}>账户</Text>
         {activeAccounts.length > 0 ? (
           <View style={styles.chipWrap}>
-            {activeAccounts.map((account) => (
-              <Pressable
-                key={account.id}
-                onPress={() => {
-                  setAccountId(account.id);
-                  setSuccessMessage("");
-                }}
-                style={[styles.chip, accountId === account.id && styles.chipActive]}
-              >
-                <Text style={[styles.chipText, accountId === account.id && styles.chipTextActive]}>
-                  {account.name}
-                </Text>
-              </Pressable>
-            ))}
+            {activeAccounts.map((account) => {
+              const isActive = accountId === account.id;
+
+              return (
+                <Pressable
+                  key={account.id}
+                  onPress={() => {
+                    setAccountId(account.id);
+                    setSuccessMessage("");
+                  }}
+                  style={[
+                    sharedStyles.chip,
+                    styles.chip,
+                    isActive && sharedStyles.chipActiveDark,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      sharedStyles.chipText,
+                      isActive && sharedStyles.chipTextInverse,
+                    ]}
+                  >
+                    {account.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
         ) : (
-            <Text style={styles.warningText}>当前没有可用账户，请先在设置中恢复示例数据；后续版本会提供账户管理能力。</Text>
+          <View style={styles.messageBox}>
+            <Text style={sharedStyles.warningText}>
+              当前没有可用账户，请先在设置中恢复示例数据；后续版本会提供账户管理能力。
+            </Text>
+          </View>
         )}
 
-        <Text style={styles.label}>日期</Text>
+        <Text style={styles.fieldLabel}>日期</Text>
         <TextInput
           onChangeText={(value) => {
             setDate(value);
@@ -314,24 +370,34 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
           }}
           placeholder="YYYY-MM-DD"
           placeholderTextColor="#8a9380"
-          style={styles.input}
+          style={sharedStyles.input}
           value={date}
         />
 
-        <Text style={styles.label}>备注</Text>
+        <Text style={styles.fieldLabel}>备注</Text>
         <TextInput
           multiline
           onChangeText={setNote}
           placeholder="记录这笔事项的原因，可选"
           placeholderTextColor="#8a9380"
-          style={[styles.input, styles.textarea]}
+          style={[sharedStyles.input, sharedStyles.textArea]}
           value={note}
         />
 
-        {successMessage ? <Text style={styles.successText}>{successMessage}</Text> : null}
+        {successMessage ? (
+          <View style={styles.successBox}>
+            <Text style={sharedStyles.successText}>{successMessage}</Text>
+          </View>
+        ) : null}
 
-        <Pressable disabled={isSaving} onPress={() => void handleSubmit()} style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}>
-          <Text style={styles.saveButtonText}>{isSaving ? "保存中..." : "保存手动记录"}</Text>
+        <Pressable
+          disabled={isSaving}
+          onPress={() => void handleSubmit()}
+          style={[sharedStyles.primaryButton, isSaving && styles.buttonDisabled]}
+        >
+          <Text style={sharedStyles.primaryButtonText}>
+            {isSaving ? "保存中..." : "保存手动记录"}
+          </Text>
         </Pressable>
       </View>
     </View>
@@ -339,165 +405,75 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
 }
 
 const styles = StyleSheet.create({
+  accentButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.accent,
+    borderRadius: theme.radius.md,
+    justifyContent: "center",
+    minHeight: theme.touch.minHeight,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+  },
+  accentButtonText: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.typography.body,
+    fontWeight: "800",
+  },
+  buttonDisabled: {
+    opacity: 0.65,
+  },
   chip: {
-    backgroundColor: "#fffef8",
-    borderColor: "#cbd5bf",
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  chipActive: {
-    backgroundColor: "#17251b",
-    borderColor: "#17251b",
-  },
-  chipText: {
-    color: "#18201a",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  chipTextActive: {
-    color: "#f8f4e7",
+    alignItems: "center",
   },
   chipWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 16,
-  },
-  copy: {
-    color: "#50604d",
-    fontSize: 14,
-    lineHeight: 22,
-  },
-  draftCard: {
-    backgroundColor: "#fffef8",
-    borderColor: "#b9caa5",
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 12,
-    padding: 16,
+    gap: theme.spacing.sm,
   },
   draftLabel: {
-    color: "#50604d",
+    color: theme.colors.textSecondary,
     flex: 1,
-    fontSize: 14,
+    fontSize: theme.typography.body,
   },
   draftRow: {
     alignItems: "center",
-    borderBottomColor: "#e3e8d7",
+    borderBottomColor: theme.colors.border,
     borderBottomWidth: 1,
     flexDirection: "row",
-    gap: 12,
+    gap: theme.spacing.md,
     justifyContent: "space-between",
-    paddingBottom: 8,
+    paddingBottom: theme.spacing.sm,
   },
   draftValue: {
-    color: "#18201a",
+    color: theme.colors.textPrimary,
     flex: 1,
-    fontSize: 14,
+    fontSize: theme.typography.body,
     fontWeight: "700",
     textAlign: "right",
   },
-  eyebrow: {
-    color: "#7f8c54",
-    fontSize: 12,
+  fieldLabel: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.typography.label,
     fontWeight: "700",
-    marginBottom: 8,
+    marginBottom: theme.spacing.sm,
   },
-  form: {
-    backgroundColor: "#fbfaf3",
-    borderColor: "#d5dcc7",
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 16,
+  formCard: {
+    gap: theme.spacing.md,
   },
-  impactBox: {
-    backgroundColor: "#eef2e8",
-    borderRadius: 10,
-    padding: 12,
-  },
-  input: {
-    backgroundColor: "#fffef8",
-    borderColor: "#cbd5bf",
-    borderRadius: 10,
-    borderWidth: 1,
-    color: "#18201a",
-    marginBottom: 14,
-    padding: 12,
-  },
-  label: {
-    color: "#50604d",
-    fontWeight: "700",
-    marginBottom: 8,
+  messageBox: {
+    backgroundColor: theme.colors.warningSoft,
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.md,
   },
   naturalInput: {
-    minHeight: 112,
-    textAlignVertical: "top",
-  },
-  primaryButton: {
-    alignItems: "center",
-    backgroundColor: "#d7f171",
-    borderRadius: 10,
-    padding: 14,
-  },
-  primaryButtonText: {
-    color: "#17251b",
-    fontWeight: "800",
-  },
-  ruleBox: {
-    backgroundColor: "#eef2e8",
-    borderRadius: 10,
-    marginBottom: 16,
-    padding: 12,
-  },
-  ruleTitle: {
-    color: "#18201a",
-    fontWeight: "700",
-    marginBottom: 4,
-  },
-  saveButton: {
-    alignItems: "center",
-    backgroundColor: "#17251b",
-    borderRadius: 10,
-    padding: 14,
-  },
-  saveButtonDisabled: {
-    opacity: 0.65,
-  },
-  saveButtonText: {
-    color: "#f8f4e7",
-    fontWeight: "700",
-  },
-  sectionTitle: {
-    color: "#18201a",
-    fontSize: 18,
-    fontWeight: "800",
-    marginBottom: 12,
+    minHeight: 116,
   },
   stack: {
-    gap: 20,
+    gap: theme.spacing.xl,
   },
-  successText: {
-    color: "#2d6b3f",
-    fontSize: 13,
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  textarea: {
-    minHeight: 90,
-    textAlignVertical: "top",
-  },
-  title: {
-    color: "#18201a",
-    fontSize: 28,
-    fontWeight: "800",
-    marginBottom: 8,
-  },
-  warningText: {
-    color: "#8a5a22",
-    fontSize: 13,
-    lineHeight: 20,
-    marginBottom: 12,
+  successBox: {
+    backgroundColor: theme.colors.successSoft,
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.md,
   },
 });

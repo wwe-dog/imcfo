@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from "react-native";
+import { theme } from "../styles/theme";
 
 interface MetricCardProps {
   label: string;
@@ -18,26 +19,29 @@ export default function MetricCard({ label, value, hint }: MetricCardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#fbfaf3",
-    borderColor: "#d5dcc7",
-    borderRadius: 12,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
-    padding: 16,
+    minHeight: 132,
+    padding: theme.spacing.lg,
     width: "48%",
   },
   hint: {
-    color: "#65715f",
+    color: theme.colors.textMuted,
     fontSize: 12,
-    marginTop: 6,
+    lineHeight: 18,
+    marginTop: theme.spacing.sm,
   },
   label: {
-    color: "#65715f",
+    color: theme.colors.textMuted,
     fontSize: 13,
-    marginBottom: 8,
+    marginBottom: theme.spacing.sm,
   },
   value: {
-    color: "#18201a",
-    fontSize: 22,
+    color: theme.colors.textPrimary,
+    fontSize: 24,
     fontWeight: "700",
+    lineHeight: 30,
   },
 });

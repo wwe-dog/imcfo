@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from "react-native";
+import { theme } from "../styles/theme";
 
 interface ReportBlockProps {
   title: string;
@@ -40,26 +41,26 @@ export default function ReportBlock({ title, subtitle, rows, footer }: ReportBlo
 
 const styles = StyleSheet.create({
   block: {
-    backgroundColor: "#fbfaf3",
-    borderColor: "#d5dcc7",
-    borderRadius: 16,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
-    gap: 14,
-    padding: 16,
+    gap: theme.spacing.md,
+    padding: theme.spacing.lg,
   },
   footer: {
-    color: "#5e6b5a",
+    color: theme.colors.textSecondary,
     fontSize: 13,
     lineHeight: 20,
   },
   footerBox: {
-    backgroundColor: "#f3f6ec",
-    borderRadius: 12,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.md,
     gap: 4,
-    padding: 12,
+    padding: theme.spacing.md,
   },
   footerLabel: {
-    color: "#7f8c54",
+    color: theme.colors.textMuted,
     fontSize: 12,
     fontWeight: "700",
   },
@@ -67,20 +68,20 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   label: {
-    color: "#50604d",
+    color: theme.colors.textSecondary,
     flex: 1,
     fontSize: 14,
     lineHeight: 20,
-    paddingRight: 12,
+    paddingRight: theme.spacing.md,
   },
   row: {
     alignItems: "flex-start",
-    borderBottomColor: "#e3e8d7",
+    borderBottomColor: theme.colors.border,
     borderBottomWidth: 1,
     flexDirection: "row",
-    gap: 12,
+    gap: theme.spacing.md,
     justifyContent: "space-between",
-    paddingBottom: 12,
+    paddingBottom: theme.spacing.md,
     paddingTop: 2,
   },
   rowLast: {
@@ -91,17 +92,17 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   subtitle: {
-    color: "#65715f",
+    color: theme.colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
   },
   title: {
-    color: "#18201a",
+    color: theme.colors.textPrimary,
     fontSize: 18,
     fontWeight: "700",
   },
   value: {
-    color: "#18201a",
+    color: theme.colors.textPrimary,
     flexShrink: 0,
     fontSize: 14,
     fontWeight: "700",

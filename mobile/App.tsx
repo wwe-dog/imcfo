@@ -11,7 +11,12 @@ import {
   View,
 } from "react-native";
 import { useAppData } from "./src/app/useAppData";
-import type { AssetInput, LiabilityInput, TransactionInput } from "./src/domain/accounting/transactionRules";
+import { theme } from "./src/styles/theme";
+import type {
+  AssetInput,
+  LiabilityInput,
+  TransactionInput,
+} from "./src/domain/accounting/transactionRules";
 import AssetsLiabilitiesScreen from "./src/screens/AssetsLiabilitiesScreen";
 import DashboardScreen from "./src/screens/DashboardScreen";
 import RecordScreen from "./src/screens/RecordScreen";
@@ -47,7 +52,6 @@ export default function App() {
   } = useAppData();
 
   const handleExport = async () => exportData();
-
   const handleImport = async (serializedData: string) => {
     await importData(serializedData);
   };
@@ -83,7 +87,10 @@ export default function App() {
   const handleSaveAsset = async (input: AssetInput) => {
     try {
       await saveAsset(input);
-      Alert.alert(input.id ? "资产已更新" : "资产已添加", "首页、报表和资产负债表已按最新资产数据刷新。");
+      Alert.alert(
+        input.id ? "资产已更新" : "资产已添加",
+        "首页、报表和资产负债页已按最新资产数据刷新。",
+      );
     } catch {
       Alert.alert("保存失败", "无法保存这项资产。");
       throw new Error("无法保存这项资产。");
@@ -93,7 +100,7 @@ export default function App() {
   const handleDeleteAsset = async (assetId: string) => {
     try {
       await deleteAsset(assetId);
-      Alert.alert("资产已删除", "首页、报表和资产负债表已按最新资产数据刷新。");
+      Alert.alert("资产已删除", "首页、报表和资产负债页已按最新资产数据刷新。");
     } catch {
       Alert.alert("删除失败", "无法删除这项资产。");
       throw new Error("无法删除这项资产。");
@@ -103,7 +110,10 @@ export default function App() {
   const handleSaveLiability = async (input: LiabilityInput) => {
     try {
       await saveLiability(input);
-      Alert.alert(input.id ? "负债已更新" : "负债已添加", "首页、报表和资产负债表已按最新负债数据刷新。");
+      Alert.alert(
+        input.id ? "负债已更新" : "负债已添加",
+        "首页、报表和资产负债页已按最新负债数据刷新。",
+      );
     } catch {
       Alert.alert("保存失败", "无法保存这项负债。");
       throw new Error("无法保存这项负债。");
@@ -113,7 +123,7 @@ export default function App() {
   const handleDeleteLiability = async (liabilityId: string) => {
     try {
       await deleteLiability(liabilityId);
-      Alert.alert("负债已删除", "首页、报表和资产负债表已按最新负债数据刷新。");
+      Alert.alert("负债已删除", "首页、报表和资产负债页已按最新负债数据刷新。");
     } catch {
       Alert.alert("删除失败", "无法删除这项负债。");
       throw new Error("无法删除这项负债。");
@@ -124,8 +134,8 @@ export default function App() {
     if (isLoading || !data || !summary) {
       return (
         <View style={styles.loading}>
-          <ActivityIndicator color="#17251b" />
-      <Text style={styles.loadingText}>{errorMessage ?? "正在加载本地数据..."}</Text>
+          <ActivityIndicator color={theme.colors.textPrimary} />
+          <Text style={styles.loadingText}>{errorMessage ?? "正在加载本地数据..."}</Text>
         </View>
       );
     }
@@ -142,10 +152,10 @@ export default function App() {
             assets={data.assets}
             liabilities={data.liabilities}
             summary={summary}
-            onSaveAsset={handleSaveAsset}
             onDeleteAsset={handleDeleteAsset}
-            onSaveLiability={handleSaveLiability}
             onDeleteLiability={handleDeleteLiability}
+            onSaveAsset={handleSaveAsset}
+            onSaveLiability={handleSaveLiability}
           />
         );
       case "reports":
@@ -161,11 +171,11 @@ export default function App() {
         return (
           <SettingsScreen
             appVersion={data.version}
-            storageMode="本地移动存储"
+            onClear={handleClear}
             onExport={handleExport}
             onImport={handleImport}
             onReset={handleReset}
-            onClear={handleClear}
+            storageMode="本地移动存储"
           />
         );
     }
@@ -179,10 +189,16 @@ export default function App() {
         <Text style={styles.appTitle}>我为 CFO</Text>
         <Text style={styles.subtitle}>像经营公司一样经营自己</Text>
       </View>
-      <ScrollView contentContainerStyle={styles.content}>{renderScreen()}</ScrollView>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        {renderScreen()}
+      </ScrollView>
       <View style={styles.tabBar}>
         {tabs.map((tab) => {
           const isActive = activeScreen === tab.key;
+
           return (
             <Pressable
               key={tab.key}
@@ -200,74 +216,79 @@ export default function App() {
 
 const styles = StyleSheet.create({
   appTitle: {
-    color: "#18201a",
-    fontSize: 30,
+    color: theme.colors.textPrimary,
+    fontSize: theme.typography.hero,
     fontWeight: "900",
+    lineHeight: 38,
   },
   content: {
-    padding: 20,
-    paddingBottom: 110,
+    padding: theme.spacing.xl,
+    paddingBottom: 116,
   },
   eyebrow: {
-    color: "#7f8c54",
-    fontSize: 12,
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.eyebrow,
     fontWeight: "700",
-    marginBottom: 4,
+    marginBottom: theme.spacing.xs,
   },
   header: {
-    backgroundColor: "#eef2e8",
-    borderBottomColor: "#d5dcc7",
+    backgroundColor: theme.colors.headerBackground,
+    borderBottomColor: theme.colors.border,
     borderBottomWidth: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: theme.spacing.xl,
     paddingVertical: 18,
   },
   loading: {
     alignItems: "center",
-    gap: 10,
+    gap: theme.spacing.sm,
     justifyContent: "center",
     minHeight: 360,
   },
   loadingText: {
-    color: "#50604d",
+    color: theme.colors.textSecondary,
+    fontSize: theme.typography.body,
   },
   safeArea: {
-    backgroundColor: "#eef2e8",
+    backgroundColor: theme.colors.appBackground,
     flex: 1,
   },
   subtitle: {
-    color: "#50604d",
-    fontSize: 14,
-    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: theme.typography.body,
+    lineHeight: 22,
+    marginTop: theme.spacing.xs,
   },
   tabBar: {
-    backgroundColor: "#17251b",
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
+    backgroundColor: theme.colors.surfaceStrong,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     bottom: 0,
     flexDirection: "row",
-    gap: 6,
+    gap: 8,
     left: 0,
-    padding: 10,
+    paddingHorizontal: theme.spacing.md,
+    paddingTop: theme.spacing.md,
     paddingBottom: 16,
     position: "absolute",
     right: 0,
   },
   tabButton: {
     alignItems: "center",
-    borderRadius: 10,
+    borderRadius: theme.radius.md,
     flex: 1,
-    paddingHorizontal: 4,
-    paddingVertical: 10,
+    minHeight: 48,
+    justifyContent: "center",
+    paddingHorizontal: 6,
   },
   tabButtonActive: {
-    backgroundColor: "#d7f171",
+    backgroundColor: theme.colors.accent,
   },
   tabText: {
-    color: "#f8f4e7",
-    fontSize: 12,
+    color: theme.colors.textInverse,
+    fontSize: 13,
     fontWeight: "700",
   },
   tabTextActive: {
-    color: "#17251b",
+    color: theme.colors.textPrimary,
   },
 });
