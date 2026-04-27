@@ -1,117 +1,58 @@
 import { useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  parseNaturalLanguageTransaction,
+  transactionTypeMeta,
+  type NaturalLanguageTransactionType,
+  type ParsedTransactionDraft,
+} from "../domain/accounting/naturalLanguageParser";
 import type { TransactionInput } from "../domain/accounting/transactionRules";
-import type { Account, TransactionType } from "../domain/models";
+import type { Account } from "../domain/models";
 
 interface RecordScreenProps {
   accounts: Account[];
   onSave: (input: TransactionInput) => Promise<void>;
 }
 
-type RecordTransactionType = Extract<
-  TransactionType,
-  | "income"
-  | "expense"
-  | "assetIncrease"
-  | "assetDecrease"
-  | "liabilityIncrease"
-  | "liabilityDecrease"
-  | "investmentBuy"
-  | "investmentSell"
-  | "creditCardExpense"
-  | "creditCardRepayment"
->;
-
 interface TransactionTypeOption {
-  type: RecordTransactionType;
+  type: NaturalLanguageTransactionType;
   label: string;
   defaultCategory: string;
-  helperText: string;
   requiresAccount: boolean;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
 
 const transactionTypeOptions: TransactionTypeOption[] = [
-  {
-    type: "income",
-    label: "收入",
-    defaultCategory: "工资薪金",
-    helperText: "收入增加，现金增加，计入经营活动现金流入。",
-    requiresAccount: true,
-  },
-  {
-    type: "expense",
-    label: "支出",
-    defaultCategory: "餐饮",
-    helperText: "费用增加，现金减少，计入经营活动现金流出。",
-    requiresAccount: true,
-  },
-  {
-    type: "assetIncrease",
-    label: "资产增加",
-    defaultCategory: "资产增加",
-    helperText: "资产增加，暂不自动确认为收入，适合手动补录资产变化。",
-    requiresAccount: true,
-  },
-  {
-    type: "assetDecrease",
-    label: "资产减少",
-    defaultCategory: "资产减少",
-    helperText: "资产减少，暂不自动确认为费用，适合手动修正资产变化。",
-    requiresAccount: true,
-  },
-  {
-    type: "liabilityIncrease",
-    label: "负债增加",
-    defaultCategory: "借款",
-    helperText: "负债增加，通常对应现金或可用资金增加，计入筹资活动现金流。",
-    requiresAccount: true,
-  },
-  {
-    type: "liabilityDecrease",
-    label: "负债减少",
-    defaultCategory: "还款",
-    helperText: "负债减少，现金减少，计入债务偿还现金流出。",
-    requiresAccount: true,
-  },
-  {
-    type: "investmentBuy",
-    label: "投资买入",
-    defaultCategory: "基金买入",
-    helperText: "投资资产增加，现金减少，计入投资活动现金流出，不直接影响利润。",
-    requiresAccount: true,
-  },
-  {
-    type: "investmentSell",
-    label: "投资卖出",
-    defaultCategory: "基金卖出",
-    helperText: "投资资产减少，现金增加，V0.1 暂不自动计算投资收益。",
-    requiresAccount: true,
-  },
-  {
-    type: "creditCardExpense",
-    label: "信用卡消费",
-    defaultCategory: "信用卡消费",
-    helperText: "费用增加，负债增加，不产生现金流。",
-    requiresAccount: true,
-  },
-  {
-    type: "creditCardRepayment",
-    label: "信用卡还款",
-    defaultCategory: "信用卡还款",
-    helperText: "负债减少，现金减少，计入债务偿还现金流出。",
-    requiresAccount: true,
-  },
+  { type: "income", label: "收入", defaultCategory: "工资薪金", requiresAccount: true },
+  { type: "expense", label: "支出", defaultCategory: "餐饮", requiresAccount: true },
+  { type: "assetIncrease", label: "资产增加", defaultCategory: "资产增加", requiresAccount: true },
+  { type: "assetDecrease", label: "资产减少", defaultCategory: "资产减少", requiresAccount: true },
+  { type: "liabilityIncrease", label: "负债增加", defaultCategory: "借款", requiresAccount: true },
+  { type: "liabilityDecrease", label: "负债减少", defaultCategory: "还款", requiresAccount: true },
+  { type: "investmentBuy", label: "投资买入", defaultCategory: "投资资产", requiresAccount: true },
+  { type: "investmentSell", label: "投资卖出", defaultCategory: "投资资产", requiresAccount: true },
+  { type: "creditCardExpense", label: "信用卡消费", defaultCategory: "信用卡", requiresAccount: true },
+  { type: "creditCardRepayment", label: "信用卡还款", defaultCategory: "信用卡", requiresAccount: true },
 ];
 
-const findOption = (type: RecordTransactionType): TransactionTypeOption =>
+const examples = ["今天中午吃饭花了15", "工资到账3200", "买基金1000", "还信用卡500", "朋友还我200"];
+
+const findOption = (type: NaturalLanguageTransactionType): TransactionTypeOption =>
   transactionTypeOptions.find((option) => option.type === type) ?? transactionTypeOptions[0];
 
 const normalizeAmount = (value: string): number => Number(value.replace(",", "."));
 
+const formatAmount = (value: string): string => {
+  const amount = normalizeAmount(value);
+  if (!Number.isFinite(amount)) return "未填写";
+  return `${amount} 元`;
+};
+
 export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
-  const [type, setType] = useState<RecordTransactionType>("income");
+  const [naturalText, setNaturalText] = useState("");
+  const [draft, setDraft] = useState<ParsedTransactionDraft | null>(null);
+  const [type, setType] = useState<NaturalLanguageTransactionType>("income");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState(findOption("income").defaultCategory);
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
@@ -121,13 +62,57 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
   const [successMessage, setSuccessMessage] = useState("");
 
   const selectedOption = findOption(type);
+  const selectedMeta = transactionTypeMeta[type];
   const activeAccounts = useMemo(() => accounts.filter((account) => account.isActive), [accounts]);
+  const selectedAccount = activeAccounts.find((account) => account.id === accountId);
 
-  const handleTypeChange = (nextType: RecordTransactionType) => {
+  const pickAccountId = (nextType: NaturalLanguageTransactionType): string => {
+    const currentAccount = activeAccounts.find((account) => account.id === accountId);
+    const creditCardAccount = activeAccounts.find((account) => account.type === "creditCard");
+    const cashAccount = activeAccounts.find((account) => account.type !== "creditCard");
+
+    if (nextType === "creditCardExpense") {
+      return creditCardAccount?.id ?? currentAccount?.id ?? activeAccounts[0]?.id ?? "";
+    }
+
+    return cashAccount?.id ?? currentAccount?.id ?? activeAccounts[0]?.id ?? "";
+  };
+
+  const handleTypeChange = (nextType: NaturalLanguageTransactionType) => {
     const nextOption = findOption(nextType);
     setType(nextType);
     setCategory(nextOption.defaultCategory);
+    setAccountId(pickAccountId(nextType));
     setSuccessMessage("");
+  };
+
+  const applyDraftToForm = (parsedDraft: ParsedTransactionDraft) => {
+    setType(parsedDraft.type);
+    setAmount(parsedDraft.amount === null ? "" : String(parsedDraft.amount));
+    setCategory(parsedDraft.category);
+    setDate(parsedDraft.date);
+    setAccountId(pickAccountId(parsedDraft.type));
+    setNote(parsedDraft.rawText.trim());
+    setDraft(parsedDraft);
+    setSuccessMessage("");
+  };
+
+  const handleRecognize = () => {
+    const text = naturalText.trim();
+
+    if (!text) {
+      Alert.alert("请先输入一句话", "例如：今天中午吃饭花了15。");
+      return;
+    }
+
+    const parsedDraft = parseNaturalLanguageTransaction(text);
+
+    if (parsedDraft.amount === null || parsedDraft.amount <= 0) {
+      Alert.alert("没有识别到金额，请补充金额", "例如：今天中午吃饭花了15。");
+      return;
+    }
+
+    applyDraftToForm(parsedDraft);
   };
 
   const validateForm = (): number | null => {
@@ -176,10 +161,12 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
         category,
         accountId,
         date,
-        note,
+        note: note.trim() || selectedMeta.impactText,
       });
       setAmount("");
       setNote("");
+      setDraft(null);
+      setNaturalText("");
       setSuccessMessage("保存成功，金额和备注已清空，可以继续记录下一笔。");
     } catch {
       Alert.alert("保存失败", "这笔记录没有保存成功，请稍后重试。");
@@ -193,10 +180,67 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
       <View>
         <Text style={styles.eyebrow}>Record</Text>
         <Text style={styles.title}>记一笔</Text>
-        <Text style={styles.copy}>记录会写入本地数据，并通过统一状态流刷新首页和报表。</Text>
+        <Text style={styles.copy}>直接描述发生了什么，先识别成草稿，确认后再入账。</Text>
       </View>
 
       <View style={styles.form}>
+        <Text style={styles.sectionTitle}>一句话记账</Text>
+        <TextInput
+          multiline
+          onChangeText={(value) => {
+            setNaturalText(value);
+            setSuccessMessage("");
+          }}
+          placeholder={examples.join("\n")}
+          placeholderTextColor="#8a9380"
+          style={[styles.input, styles.naturalInput]}
+          value={naturalText}
+        />
+        <Pressable onPress={handleRecognize} style={styles.primaryButton}>
+          <Text style={styles.primaryButtonText}>智能识别</Text>
+        </Pressable>
+      </View>
+
+      {draft ? (
+        <View style={styles.draftCard}>
+          <Text style={styles.sectionTitle}>识别结果</Text>
+          {draft.warning ? <Text style={styles.warningText}>{draft.warning}</Text> : null}
+          <View style={styles.draftRow}>
+            <Text style={styles.draftLabel}>类型</Text>
+            <Text style={styles.draftValue}>{selectedOption.label}</Text>
+          </View>
+          <View style={styles.draftRow}>
+            <Text style={styles.draftLabel}>金额</Text>
+            <Text style={styles.draftValue}>{formatAmount(amount)}</Text>
+          </View>
+          <View style={styles.draftRow}>
+            <Text style={styles.draftLabel}>分类</Text>
+            <Text style={styles.draftValue}>{category || "未填写"}</Text>
+          </View>
+          <View style={styles.draftRow}>
+            <Text style={styles.draftLabel}>日期</Text>
+            <Text style={styles.draftValue}>{date || "未填写"}</Text>
+          </View>
+          <View style={styles.draftRow}>
+            <Text style={styles.draftLabel}>账户</Text>
+            <Text style={styles.draftValue}>{selectedAccount?.name ?? "未选择"}</Text>
+          </View>
+          <View style={styles.draftRow}>
+            <Text style={styles.draftLabel}>现金流</Text>
+            <Text style={styles.draftValue}>{selectedMeta.cashFlowLabel}</Text>
+          </View>
+          <View style={styles.impactBox}>
+            <Text style={styles.ruleTitle}>会计影响说明</Text>
+            <Text style={styles.copy}>{draft.warning ? "这句话可能有多种会计含义，请确认后再入账。" : selectedMeta.impactText}</Text>
+          </View>
+          <Pressable disabled={isSaving} onPress={() => void handleSubmit()} style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}>
+            <Text style={styles.saveButtonText}>{isSaving ? "入账中..." : "确认入账"}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      <View style={styles.form}>
+        <Text style={styles.sectionTitle}>手动修改 / 高级填写</Text>
         <Text style={styles.label}>交易类型</Text>
         <View style={styles.chipWrap}>
           {transactionTypeOptions.map((option) => (
@@ -212,7 +256,7 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
 
         <View style={styles.ruleBox}>
           <Text style={styles.ruleTitle}>影响说明</Text>
-          <Text style={styles.copy}>{selectedOption.helperText}</Text>
+          <Text style={styles.copy}>{selectedMeta.impactText}</Text>
         </View>
 
         <Text style={styles.label}>金额</Text>
@@ -287,7 +331,7 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
         {successMessage ? <Text style={styles.successText}>{successMessage}</Text> : null}
 
         <Pressable disabled={isSaving} onPress={() => void handleSubmit()} style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}>
-          <Text style={styles.saveButtonText}>{isSaving ? "保存中..." : "保存记录"}</Text>
+          <Text style={styles.saveButtonText}>{isSaving ? "保存中..." : "保存手动记录"}</Text>
         </Pressable>
       </View>
     </View>
@@ -326,6 +370,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
   },
+  draftCard: {
+    backgroundColor: "#fffef8",
+    borderColor: "#b9caa5",
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 12,
+    padding: 16,
+  },
+  draftLabel: {
+    color: "#50604d",
+    flex: 1,
+    fontSize: 14,
+  },
+  draftRow: {
+    alignItems: "center",
+    borderBottomColor: "#e3e8d7",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+    paddingBottom: 8,
+  },
+  draftValue: {
+    color: "#18201a",
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "right",
+  },
   eyebrow: {
     color: "#7f8c54",
     fontSize: 12,
@@ -338,6 +411,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     padding: 16,
+  },
+  impactBox: {
+    backgroundColor: "#eef2e8",
+    borderRadius: 10,
+    padding: 12,
   },
   input: {
     backgroundColor: "#fffef8",
@@ -352,6 +430,20 @@ const styles = StyleSheet.create({
     color: "#50604d",
     fontWeight: "700",
     marginBottom: 8,
+  },
+  naturalInput: {
+    minHeight: 112,
+    textAlignVertical: "top",
+  },
+  primaryButton: {
+    alignItems: "center",
+    backgroundColor: "#d7f171",
+    borderRadius: 10,
+    padding: 14,
+  },
+  primaryButtonText: {
+    color: "#17251b",
+    fontWeight: "800",
   },
   ruleBox: {
     backgroundColor: "#eef2e8",
@@ -377,6 +469,12 @@ const styles = StyleSheet.create({
     color: "#f8f4e7",
     fontWeight: "700",
   },
+  sectionTitle: {
+    color: "#18201a",
+    fontSize: 18,
+    fontWeight: "800",
+    marginBottom: 12,
+  },
   stack: {
     gap: 20,
   },
@@ -400,6 +498,6 @@ const styles = StyleSheet.create({
     color: "#8a5a22",
     fontSize: 13,
     lineHeight: 20,
-    marginBottom: 16,
+    marginBottom: 12,
   },
 });

@@ -73,7 +73,6 @@ export default function App() {
   const handleSaveTransaction = async (input: TransactionInput) => {
     try {
       await saveTransaction(input);
-      setActiveScreen("dashboard");
       Alert.alert("保存成功", "这笔记录已写入本地数据，首页和报表已刷新。");
     } catch {
       Alert.alert("保存失败", "无法保存这笔记录。");
