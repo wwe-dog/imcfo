@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { APP_VERSION, seedData, type AppData } from "./seedData";
+import { APP_VERSION, createEmptyAppData, seedData, type AppData } from "./seedData";
 import type { StorageAdapter } from "./storageAdapter";
 
 const STORAGE_KEYS = {
@@ -13,7 +13,7 @@ const STORAGE_KEYS = {
   currentPeriod: "imcfo.currentPeriod",
 } as const;
 
-const cloneData = (data: AppData): AppData => JSON.parse(JSON.stringify(data)) as AppData;
+const cloneValue = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
 const readJson = async <T,>(key: string, fallback: T): Promise<T> => {
   const raw = await AsyncStorage.getItem(key);
@@ -25,6 +25,23 @@ const readJson = async <T,>(key: string, fallback: T): Promise<T> => {
     return fallback;
   }
 };
+
+const normalizeAppData = (input: Partial<AppData> | null | undefined): AppData => ({
+  version: input?.version || APP_VERSION,
+  accounts: Array.isArray(input?.accounts) ? input.accounts : [],
+  transactions: Array.isArray(input?.transactions) ? input.transactions : [],
+  assets: Array.isArray(input?.assets) ? input.assets : [],
+  liabilities: Array.isArray(input?.liabilities) ? input.liabilities : [],
+  journalEntries: Array.isArray(input?.journalEntries) ? input.journalEntries : [],
+  settings:
+    input?.settings && typeof input.settings === "object"
+      ? { ...seedData.settings, ...input.settings }
+      : cloneValue(seedData.settings),
+  currentPeriod:
+    input?.currentPeriod && typeof input.currentPeriod === "object"
+      ? { ...seedData.currentPeriod, ...input.currentPeriod }
+      : cloneValue(seedData.currentPeriod),
+});
 
 export const asyncStorageAdapter: StorageAdapter = {
   async saveData(data) {
@@ -43,12 +60,12 @@ export const asyncStorageAdapter: StorageAdapter = {
   async loadData() {
     const version = await AsyncStorage.getItem(STORAGE_KEYS.version);
     if (!version) {
-      const initialData = cloneData(seedData);
+      const initialData = cloneValue(seedData);
       await this.saveData(initialData);
       return initialData;
     }
 
-    return {
+    return normalizeAppData({
       version: version || APP_VERSION,
       accounts: await readJson(STORAGE_KEYS.accounts, seedData.accounts),
       transactions: await readJson(STORAGE_KEYS.transactions, seedData.transactions),
@@ -57,13 +74,19 @@ export const asyncStorageAdapter: StorageAdapter = {
       journalEntries: await readJson(STORAGE_KEYS.journalEntries, seedData.journalEntries),
       settings: await readJson(STORAGE_KEYS.settings, seedData.settings),
       currentPeriod: await readJson(STORAGE_KEYS.currentPeriod, seedData.currentPeriod),
-    };
+    });
   },
 
   async resetData() {
-    const freshData = cloneData(seedData);
+    const freshData = cloneValue(seedData);
     await this.saveData(freshData);
     return freshData;
+  },
+
+  async clearData() {
+    const emptyData = createEmptyAppData();
+    await this.saveData(emptyData);
+    return emptyData;
   },
 
   async exportData() {
@@ -72,11 +95,8 @@ export const asyncStorageAdapter: StorageAdapter = {
   },
 
   async importData(serializedData) {
-    const parsed = JSON.parse(serializedData) as AppData;
-    const importedData: AppData = {
-      ...parsed,
-      version: parsed.version || APP_VERSION,
-    };
+    const parsed = JSON.parse(serializedData) as Partial<AppData>;
+    const importedData = normalizeAppData(parsed);
     await this.saveData(importedData);
     return importedData;
   },

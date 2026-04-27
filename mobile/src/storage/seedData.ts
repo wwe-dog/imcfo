@@ -179,3 +179,18 @@ export const seedData: AppData = {
     label: "2026 年 4 月",
   },
 };
+
+export const createEmptyAppData = (): AppData => ({
+  version: APP_VERSION,
+  accounts: [],
+  transactions: [],
+  assets: [],
+  liabilities: [],
+  journalEntries: [],
+  settings: {
+    ...seedData.settings,
+  },
+  currentPeriod: {
+    ...seedData.currentPeriod,
+  },
+});

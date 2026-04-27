@@ -32,7 +32,9 @@ interface UseAppDataResult {
   deleteLiability: (liabilityId: string) => Promise<AppData>;
   replaceData: (updater: (current: AppData) => AppData) => Promise<AppData>;
   resetDemoData: () => Promise<AppData>;
+  clearAllData: () => Promise<AppData>;
   exportData: () => Promise<string>;
+  importData: (serializedData: string) => Promise<AppData>;
 }
 
 const DEFAULT_ERROR_MESSAGE = "无法读取本地数据。";
@@ -141,6 +143,22 @@ export function useAppData(storage: StorageAdapter = asyncStorageAdapter): UseAp
     }
   }, [storage]);
 
+  const clearAllData = useCallback(async () => {
+    setStatus("saving");
+    setErrorMessage(null);
+
+    try {
+      const emptyData = await storage.clearData();
+      setData(emptyData);
+      setStatus("ready");
+      return emptyData;
+    } catch {
+      setStatus("error");
+      setErrorMessage("清空本地数据失败。");
+      throw new Error("清空本地数据失败。");
+    }
+  }, [storage]);
+
   const exportData = useCallback(async () => {
     try {
       return await storage.exportData();
@@ -150,6 +168,25 @@ export function useAppData(storage: StorageAdapter = asyncStorageAdapter): UseAp
       throw new Error("导出本地数据失败。");
     }
   }, [storage]);
+
+  const importData = useCallback(
+    async (serializedData: string) => {
+      setStatus("saving");
+      setErrorMessage(null);
+
+      try {
+        const importedData = await storage.importData(serializedData);
+        setData(importedData);
+        setStatus("ready");
+        return importedData;
+      } catch {
+        setStatus("error");
+        setErrorMessage("导入本地数据失败，请检查 JSON 格式。");
+        throw new Error("导入本地数据失败，请检查 JSON 格式。");
+      }
+    },
+    [storage],
+  );
 
   const summary = useMemo(() => {
     if (!data) return null;
@@ -171,6 +208,8 @@ export function useAppData(storage: StorageAdapter = asyncStorageAdapter): UseAp
     deleteLiability,
     replaceData,
     resetDemoData,
+    clearAllData,
     exportData,
+    importData,
   };
 }

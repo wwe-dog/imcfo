@@ -41,24 +41,32 @@ export default function App() {
     saveLiability,
     deleteLiability,
     resetDemoData,
+    clearAllData,
     exportData,
+    importData,
   } = useAppData();
 
-  const handleExport = async () => {
-    try {
-      const exportedData = await exportData();
-      Alert.alert("导出数据", `当前导出 JSON 长度：${exportedData.length} 字符。`);
-    } catch {
-      Alert.alert("导出失败", "无法导出本地数据。");
-    }
+  const handleExport = async () => exportData();
+
+  const handleImport = async (serializedData: string) => {
+    await importData(serializedData);
   };
 
   const handleReset = async () => {
     try {
       await resetDemoData();
-      Alert.alert("重置成功", "已恢复为本地示例数据。");
+      Alert.alert("恢复成功", "已恢复为本地示例数据，首页和报表已刷新。");
     } catch {
-      Alert.alert("重置失败", "无法重置本地数据。");
+      Alert.alert("恢复失败", "无法恢复示例数据。");
+    }
+  };
+
+  const handleClear = async () => {
+    try {
+      await clearAllData();
+      Alert.alert("清空成功", "本地数据已清空，首页和报表已按空数据刷新。");
+    } catch {
+      Alert.alert("清空失败", "无法清空本地数据。");
     }
   };
 
@@ -151,7 +159,16 @@ export default function App() {
           />
         );
       case "settings":
-        return <SettingsScreen onExport={handleExport} onReset={handleReset} />;
+        return (
+          <SettingsScreen
+            appVersion={data.version}
+            storageMode="本地移动存储（AsyncStorage）"
+            onExport={handleExport}
+            onImport={handleImport}
+            onReset={handleReset}
+            onClear={handleClear}
+          />
+        );
     }
   };
 

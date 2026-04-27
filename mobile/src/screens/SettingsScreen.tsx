@@ -1,15 +1,71 @@
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useState } from "react";
 
 interface SettingsScreenProps {
-  onExport: () => Promise<void>;
+  appVersion: string;
+  storageMode: string;
+  onExport: () => Promise<string>;
+  onImport: (serializedData: string) => Promise<void>;
   onReset: () => Promise<void>;
+  onClear: () => Promise<void>;
 }
 
-export default function SettingsScreen({ onExport, onReset }: SettingsScreenProps) {
+export default function SettingsScreen({
+  appVersion,
+  storageMode,
+  onExport,
+  onImport,
+  onReset,
+  onClear,
+}: SettingsScreenProps) {
+  const [exportedJson, setExportedJson] = useState("");
+  const [importJson, setImportJson] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const serializedData = await onExport();
+      setExportedJson(serializedData);
+      Alert.alert("导出成功", "完整数据 JSON 已显示在下方导出区域。");
+    } catch {
+      Alert.alert("导出失败", "无法导出本地数据。");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!importJson.trim()) {
+      Alert.alert("缺少导入内容", "请先粘贴完整的 JSON 数据。");
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      await onImport(importJson);
+      setExportedJson(importJson);
+      setImportJson("");
+      Alert.alert("导入成功", "本地数据已被新 JSON 替换，首页和报表会按新数据刷新。");
+    } catch {
+      Alert.alert("导入失败", "JSON 无法通过校验，或数据替换失败。");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const confirmReset = () => {
-    Alert.alert("确认清空数据", "这会恢复为本地示例数据。", [
+    Alert.alert("确认恢复示例数据", "这会覆盖当前本地数据，并恢复为示例数据。", [
       { text: "取消", style: "cancel" },
-      { text: "确认", style: "destructive", onPress: () => void onReset() },
+      { text: "确认恢复", style: "destructive", onPress: () => void onReset() },
+    ]);
+  };
+
+  const confirmClear = () => {
+    Alert.alert("确认清空本地数据", "这会删除当前本地数据，并保留一个空的数据壳。", [
+      { text: "取消", style: "cancel" },
+      { text: "确认清空", style: "destructive", onPress: () => void onClear() },
     ]);
   };
 
@@ -18,16 +74,62 @@ export default function SettingsScreen({ onExport, onReset }: SettingsScreenProp
       <View>
         <Text style={styles.eyebrow}>Settings</Text>
         <Text style={styles.title}>设置</Text>
-        <Text style={styles.copy}>V0.1 只处理基础配置和本地数据管理。</Text>
+        <Text style={styles.copy}>V0.1 先聚焦本地数据管理，不接入云端、账号或外部同步。</Text>
       </View>
+
       <View style={styles.panel}>
-        <Text style={styles.panelTitle}>本地数据</Text>
-        <Text style={styles.copy}>当前数据保存在本机 AsyncStorage 中，屏幕不会直接访问存储。</Text>
-        <Pressable onPress={() => void onExport()} style={styles.button}>
-          <Text style={styles.buttonText}>导出数据</Text>
+        <Text style={styles.panelTitle}>当前数据状态</Text>
+        <View style={styles.metaRow}>
+          <Text style={styles.metaLabel}>数据版本</Text>
+          <Text style={styles.metaValue}>{appVersion}</Text>
+        </View>
+        <View style={styles.metaRow}>
+          <Text style={styles.metaLabel}>存储方式</Text>
+          <Text style={styles.metaValue}>{storageMode}</Text>
+        </View>
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>导出本地数据</Text>
+        <Text style={styles.copy}>导出会生成完整的 App 数据 JSON，便于你手动备份或复制检查。</Text>
+        <Pressable onPress={() => void handleExport()} style={styles.button} disabled={isExporting}>
+          <Text style={styles.buttonText}>{isExporting ? "正在导出..." : "导出本地数据"}</Text>
         </Pressable>
-        <Pressable onPress={confirmReset} style={[styles.button, styles.dangerButton]}>
-          <Text style={[styles.buttonText, styles.dangerText]}>清空并恢复示例数据</Text>
+        <TextInput
+          multiline
+          editable={false}
+          placeholder="导出的完整 JSON 会显示在这里"
+          placeholderTextColor="#8a9380"
+          style={[styles.input, styles.textArea, styles.readOnlyInput]}
+          value={exportedJson}
+        />
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>导入本地数据</Text>
+        <Text style={styles.copy}>请粘贴完整 JSON。导入后会直接替换当前本地数据。</Text>
+        <TextInput
+          multiline
+          placeholder="把完整 JSON 粘贴到这里"
+          placeholderTextColor="#8a9380"
+          style={[styles.input, styles.textArea]}
+          value={importJson}
+          onChangeText={setImportJson}
+          textAlignVertical="top"
+        />
+        <Pressable onPress={() => void handleImport()} style={styles.button} disabled={isImporting}>
+          <Text style={styles.buttonText}>{isImporting ? "正在导入..." : "导入本地数据"}</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>重置与清空</Text>
+        <Text style={styles.copy}>恢复示例数据会覆盖当前数据；清空数据会保留空白数据结构，适合重新开始。</Text>
+        <Pressable onPress={confirmReset} style={styles.button}>
+          <Text style={styles.buttonText}>恢复示例数据</Text>
+        </Pressable>
+        <Pressable onPress={confirmClear} style={[styles.button, styles.dangerButton]}>
+          <Text style={[styles.buttonText, styles.dangerText]}>清空所有本地数据</Text>
         </Pressable>
       </View>
     </View>
@@ -62,6 +164,30 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: 8,
   },
+  input: {
+    backgroundColor: "#fffef8",
+    borderColor: "#cbd5bf",
+    borderRadius: 10,
+    borderWidth: 1,
+    color: "#18201a",
+    padding: 12,
+  },
+  metaLabel: {
+    color: "#50604d",
+    fontSize: 14,
+  },
+  metaRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  metaValue: {
+    color: "#18201a",
+    fontSize: 14,
+    fontWeight: "700",
+    maxWidth: "58%",
+    textAlign: "right",
+  },
   panel: {
     backgroundColor: "#fbfaf3",
     borderColor: "#d5dcc7",
@@ -75,8 +201,14 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "700",
   },
+  readOnlyInput: {
+    color: "#65715f",
+  },
   stack: {
     gap: 20,
+  },
+  textArea: {
+    minHeight: 160,
   },
   title: {
     color: "#18201a",
