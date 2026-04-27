@@ -15,14 +15,16 @@ interface ReportsScreenProps {
 }
 
 const getCashFlowDirection = (cashNetChange: number): string => {
-  if (cashNetChange > 0) return "本期现金主要呈净流入";
-  if (cashNetChange < 0) return "本期现金主要呈净流出";
-  return "本期现金总体持平";
+  if (cashNetChange > 0) return "本期现金以净流入为主。";
+  if (cashNetChange < 0) return "本期现金以净流出为主。";
+  return "本期现金整体保持平衡。";
 };
 
 const getBalanceHint = (totalAssets: number, totalLiabilities: number, ownerEquity: number): string => {
   const isBalanced = Math.abs(totalAssets - (totalLiabilities + ownerEquity)) < 0.01;
-  return isBalanced ? "平衡成立：资产 = 负债 + 所有者权益" : "平衡异常：请检查底层数据";
+  return isBalanced
+    ? "资产 = 负债 + 所有者权益"
+    : "当前数据未平衡，请检查资产或负债录入。";
 };
 
 export default function ReportsScreen({
@@ -38,12 +40,50 @@ export default function ReportsScreen({
   const incomeStatement = useMemo(() => buildIncomeStatementSummary(transactions), [transactions]);
   const cashFlowStatement = useMemo(() => buildCashFlowStatementSummary(transactions), [transactions]);
 
+  const balanceRows = isSimple
+    ? [
+        { label: "总资产", value: formatCurrency(balanceSheet.totalAssets) },
+        { label: "总负债", value: formatCurrency(balanceSheet.totalLiabilities) },
+        { label: "所有者权益，也就是个人净资产", value: formatCurrency(balanceSheet.ownerEquity) },
+      ]
+    : [
+        { label: "资产", value: formatCurrency(balanceSheet.totalAssets) },
+        { label: "负债", value: formatCurrency(balanceSheet.totalLiabilities) },
+        { label: "所有者权益", value: formatCurrency(balanceSheet.ownerEquity) },
+      ];
+
+  const incomeRows = isSimple
+    ? [
+        { label: "本期收入", value: formatCurrency(incomeStatement.totalIncome) },
+        { label: "本期费用", value: formatCurrency(incomeStatement.totalExpenses) },
+        { label: "本期利润", value: formatCurrency(incomeStatement.profit) },
+      ]
+    : [
+        { label: "收入", value: formatCurrency(incomeStatement.totalIncome) },
+        { label: "费用", value: formatCurrency(incomeStatement.totalExpenses) },
+        { label: "利润", value: formatCurrency(incomeStatement.profit) },
+      ];
+
+  const cashFlowRows = isSimple
+    ? [
+        { label: "现金净变化", value: formatCurrency(cashFlowStatement.cashNetChange) },
+        { label: "主要现金流方向", value: getCashFlowDirection(cashFlowStatement.cashNetChange) },
+      ]
+    : [
+        { label: "经营活动现金流", value: formatCurrency(cashFlowStatement.operatingCashFlow) },
+        { label: "投资活动现金流", value: formatCurrency(cashFlowStatement.investingCashFlow) },
+        { label: "筹资活动现金流", value: formatCurrency(cashFlowStatement.financingCashFlow) },
+        { label: "现金净变化", value: formatCurrency(cashFlowStatement.cashNetChange) },
+      ];
+
   return (
     <View style={styles.stack}>
-      <View>
-        <Text style={styles.eyebrow}>Reports</Text>
-        <Text style={styles.title}>三大报表</Text>
-        <Text style={styles.copy}>{period.label}，简易版和专业版共用同一套数据和同一套计算逻辑。</Text>
+      <View style={styles.hero}>
+        <Text style={styles.eyebrow}>报表</Text>
+        <Text style={styles.title}>三大报表总览</Text>
+        <Text style={styles.copy}>
+          {period.label}。简易版和专业版使用同一套数据与同一套计算逻辑，只是展示语言不同。
+        </Text>
       </View>
 
       <View style={styles.segmented}>
@@ -61,73 +101,55 @@ export default function ReportsScreen({
         </Pressable>
       </View>
 
+      <Text style={styles.modeHint}>
+        {isSimple
+          ? "简易版用更直白的语言帮你先看懂个人财务状态。"
+          : "专业版保留财务报表表达，便于核对底层会计含义。"}
+      </Text>
+
       <ReportBlock
+        title="资产负债表"
+        subtitle={
+          isSimple
+            ? "先看清你现在一共拥有多少、欠了多少，以及真正属于自己的净资产。"
+            : "按专业口径展示资产、负债和所有者权益之间的平衡关系。"
+        }
+        rows={balanceRows}
         footer={
           isSimple
-            ? "这里回答：我现在拥有多少、欠了多少、真正属于我的钱是多少。"
+            ? "这张表回答：我现在真正属于自己的钱还有多少。"
             : getBalanceHint(
                 balanceSheet.totalAssets,
                 balanceSheet.totalLiabilities,
                 balanceSheet.ownerEquity,
               )
         }
-        rows={
-          isSimple
-            ? [
-                { label: "总资产", value: formatCurrency(balanceSheet.totalAssets) },
-                { label: "总负债", value: formatCurrency(balanceSheet.totalLiabilities) },
-                { label: "所有者权益，也就是个人净资产", value: formatCurrency(balanceSheet.ownerEquity) },
-              ]
-            : [
-                { label: "资产", value: formatCurrency(balanceSheet.totalAssets) },
-                { label: "负债", value: formatCurrency(balanceSheet.totalLiabilities) },
-                { label: "所有者权益", value: formatCurrency(balanceSheet.ownerEquity) },
-              ]
-        }
-        subtitle={isSimple ? "看清你现在真正拥有和欠下的规模。" : "专业口径下核对资产、负债和权益是否平衡。"}
-        title="资产负债表"
       />
 
       <ReportBlock
-        footer={isSimple ? "这里回答：这个期间是赚了还是亏了。" : "公式提示：利润 = 收入 - 费用"}
-        rows={
-          isSimple
-            ? [
-                { label: "本期收入", value: formatCurrency(incomeStatement.totalIncome) },
-                { label: "本期费用", value: formatCurrency(incomeStatement.totalExpenses) },
-                { label: "本期利润", value: formatCurrency(incomeStatement.profit) },
-              ]
-            : [
-                { label: "收入", value: formatCurrency(incomeStatement.totalIncome) },
-                { label: "费用", value: formatCurrency(incomeStatement.totalExpenses) },
-                { label: "利润", value: formatCurrency(incomeStatement.profit) },
-              ]
-        }
-        subtitle={isSimple ? "看清本期赚了多少、花了多少、最后剩下多少。" : "专业口径下直接展示收入、费用和利润关系。"}
         title="利润表"
+        subtitle={
+          isSimple
+            ? "先看本期赚了多少、花了多少，最后剩下多少利润。"
+            : "按专业口径直接展示收入、费用和利润的形成关系。"
+        }
+        rows={incomeRows}
+        footer={isSimple ? "这张表回答：本期到底是盈利还是亏损。" : "利润 = 收入 - 费用"}
       />
 
       <ReportBlock
+        title="现金流量表"
+        subtitle={
+          isSimple
+            ? "先看现金最终是增加还是减少，再判断本期现金压力。"
+            : "把现金变化拆成经营、投资、筹资三类，方便复盘。"
+        }
+        rows={cashFlowRows}
         footer={
           isSimple
-            ? getCashFlowDirection(cashFlowStatement.cashNetChange)
-            : "专业口径下区分经营、投资、筹资三类现金流。"
+            ? "这张表回答：现金主要是流进来了，还是流出去了。"
+            : "现金净变化 = 经营活动现金流 + 投资活动现金流 + 筹资活动现金流"
         }
-        rows={
-          isSimple
-            ? [
-                { label: "现金净变化", value: formatCurrency(cashFlowStatement.cashNetChange) },
-                { label: "主要现金流方向", value: getCashFlowDirection(cashFlowStatement.cashNetChange) },
-              ]
-            : [
-                { label: "经营活动现金流", value: formatCurrency(cashFlowStatement.operatingCashFlow) },
-                { label: "投资活动现金流", value: formatCurrency(cashFlowStatement.investingCashFlow) },
-                { label: "筹资活动现金流", value: formatCurrency(cashFlowStatement.financingCashFlow) },
-                { label: "现金净变化", value: formatCurrency(cashFlowStatement.cashNetChange) },
-              ]
-        }
-        subtitle={isSimple ? "先看本期现金整体是增加还是减少。" : "把现金变动拆成三条主线，便于复盘。"}
-        title="现金流量表"
       />
     </View>
   );
@@ -145,6 +167,15 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: 8,
   },
+  hero: {
+    gap: 4,
+  },
+  modeHint: {
+    color: "#65715f",
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: -4,
+  },
   segmented: {
     flexDirection: "row",
     gap: 10,
@@ -156,14 +187,16 @@ const styles = StyleSheet.create({
   segmentButton: {
     backgroundColor: "#fbfaf3",
     borderColor: "#c7d2b7",
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
+    flex: 1,
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   segmentText: {
     color: "#18201a",
     fontWeight: "700",
+    textAlign: "center",
   },
   segmentTextActive: {
     color: "#f8f4e7",
