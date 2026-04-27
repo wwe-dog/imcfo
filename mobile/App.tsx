@@ -1,5 +1,5 @@
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -10,21 +10,13 @@ import {
   Text,
   View,
 } from "react-native";
-import { buildDashboardSummary } from "./src/domain/accounting/calculations";
-import {
-  applyTransactionToFinancialState,
-  createTransactionFromInput,
-  type AssetInput,
-  type LiabilityInput,
-  type TransactionInput,
-} from "./src/domain/accounting/transactionRules";
+import { useAppData } from "./src/app/useAppData";
+import type { AssetInput, LiabilityInput, TransactionInput } from "./src/domain/accounting/transactionRules";
 import AssetsLiabilitiesScreen from "./src/screens/AssetsLiabilitiesScreen";
 import DashboardScreen from "./src/screens/DashboardScreen";
 import RecordScreen from "./src/screens/RecordScreen";
 import ReportsScreen from "./src/screens/ReportsScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
-import { asyncStorageAdapter } from "./src/storage/asyncStorageAdapter";
-import type { AppData } from "./src/storage/seedData";
 
 type ScreenKey = "dashboard" | "record" | "assets" | "reports" | "settings";
 
@@ -38,39 +30,35 @@ const tabs: Array<{ key: ScreenKey; label: string }> = [
 
 export default function App() {
   const [activeScreen, setActiveScreen] = useState<ScreenKey>("dashboard");
-  const [data, setData] = useState<AppData | null>(null);
-
-  useEffect(() => {
-    asyncStorageAdapter
-      .loadData()
-      .then(setData)
-      .catch(() => Alert.alert("加载失败", "无法读取本地示例数据。"));
-  }, []);
-
-  const summary = useMemo(() => {
-    if (!data) return null;
-    return buildDashboardSummary(data.currentPeriod, data.assets, data.liabilities, data.transactions);
-  }, [data]);
+  const { data, summary, errorMessage, isLoading, saveTransaction, resetDemoData, exportData } = useAppData();
 
   const handleExport = async () => {
-    const exportedData = await asyncStorageAdapter.exportData();
-    Alert.alert("导出数据", `当前导出 JSON 长度：${exportedData.length} 字符。`);
+    try {
+      const exportedData = await exportData();
+      Alert.alert("导出数据", `当前导出 JSON 长度：${exportedData.length} 字符。`);
+    } catch {
+      Alert.alert("导出失败", "无法导出本地数据。");
+    }
   };
 
   const handleReset = async () => {
-    const freshData = await asyncStorageAdapter.resetData();
-    setData(freshData);
+    try {
+      await resetDemoData();
+      Alert.alert("重置成功", "已恢复为本地示例数据。");
+    } catch {
+      Alert.alert("重置失败", "无法重置本地数据。");
+    }
   };
 
   const handleSaveTransaction = async (input: TransactionInput) => {
-    if (!data) return;
-
-    const transaction = createTransactionFromInput(input);
-    const nextData = applyTransactionToFinancialState(data, transaction);
-    await asyncStorageAdapter.saveData(nextData);
-    setData(nextData);
-    setActiveScreen("dashboard");
-    Alert.alert("保存成功", "这笔记录已写入本地数据，首页和报表已刷新。");
+    try {
+      await saveTransaction(input);
+      setActiveScreen("dashboard");
+      Alert.alert("保存成功", "这笔记录已写入本地数据，首页和报表已刷新。");
+    } catch {
+      Alert.alert("保存失败", "无法保存这笔记录。");
+      throw new Error("无法保存这笔记录。");
+    }
   };
 
   const handleSaveAsset = async (_input: AssetInput) => {
@@ -90,11 +78,11 @@ export default function App() {
   };
 
   const renderScreen = () => {
-    if (!data || !summary) {
+    if (isLoading || !data || !summary) {
       return (
         <View style={styles.loading}>
           <ActivityIndicator color="#17251b" />
-          <Text style={styles.loadingText}>正在加载本地数据</Text>
+          <Text style={styles.loadingText}>{errorMessage ?? "正在加载本地数据"}</Text>
         </View>
       );
     }
