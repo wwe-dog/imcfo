@@ -32,6 +32,13 @@ It is not a normal bookkeeping app. It is a personal operating system based on c
 - Keep changes small and scoped to the task.
 - Report final results in Chinese.
 
+## Context Snapshot Rules
+
+- Use the `imcfo-context-snapshot` skill whenever a session resumes from a summary, model switch, compacted context, or handoff.
+- Before continuing project work after compaction, read `docs/10-current-project-context.md` and verify it against current Git state.
+- After substantial project work, refresh and commit `docs/10-current-project-context.md` when feasible so the next session can recover from Git instead of relying only on chat history.
+- If the skill cannot be triggered automatically by Codex internals, treat these rules as the project-level fallback trigger.
+
 ## Project Agents
 
 - `product-architect`: product direction, MVP scope, feature priority, user language, page structure, and product drift prevention.
