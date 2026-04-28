@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import type { Asset, Liability, ReportSummary, Transaction } from "../domain/models";
 import { sharedStyles, theme } from "../styles/theme";
 import { formatCurrency } from "../utils/formatters";
@@ -257,19 +257,19 @@ const buildCompositionItems = <T extends { category: string }>(
 export default function DashboardScreen({ assets, liabilities, summary, transactions }: DashboardScreenProps) {
   const [selectedView, setSelectedView] = useState<DashboardView>("balance");
   const [periodLabel, setPeriodLabel] = useState<PeriodLabel>("月线");
+  const [isPeriodSelectorVisible, setIsPeriodSelectorVisible] = useState(false);
 
-  const openPeriodSelector = () => {
-    Alert.alert(
-      "选择时间周期",
-      "收支趋势会按所选周期重新汇总，净资产趋势为本期收入费用推算。",
-      [
-        ...periodOptions.map((label) => ({
-          text: label,
-          onPress: () => setPeriodLabel(label),
-        })),
-        { text: "取消", style: "cancel" as const },
-      ],
-    );
+  const handleOpenPeriodSelector = () => {
+    setIsPeriodSelectorVisible(true);
+  };
+
+  const handleClosePeriodSelector = () => {
+    setIsPeriodSelectorVisible(false);
+  };
+
+  const handleSelectPeriod = (label: PeriodLabel) => {
+    setPeriodLabel(label);
+    setIsPeriodSelectorVisible(false);
   };
 
   return (
@@ -299,12 +299,55 @@ export default function DashboardScreen({ assets, liabilities, summary, transact
         />
       ) : (
         <CashFlowCard
-          onOpenPeriodSelector={openPeriodSelector}
+          onOpenPeriodSelector={handleOpenPeriodSelector}
           periodLabel={periodLabel}
           summary={summary}
           transactions={transactions}
         />
       )}
+
+      {isPeriodSelectorVisible ? (
+        <Modal
+          animationType="fade"
+          onRequestClose={handleClosePeriodSelector}
+          transparent
+          visible={isPeriodSelectorVisible}
+        >
+          <View style={styles.periodModalRoot}>
+            <Pressable
+              accessibilityLabel="关闭时间周期选择器"
+              onPress={handleClosePeriodSelector}
+              style={styles.periodModalBackdrop}
+            />
+            <View style={[sharedStyles.card, styles.periodModalCard]}>
+              <View style={styles.periodModalHeader}>
+                <Text style={styles.periodModalTitle}>选择时间周期</Text>
+                <Text style={styles.periodModalSubtitle}>收支趋势会按所选周期重新汇总。</Text>
+              </View>
+
+              <View style={styles.periodOptionList}>
+                {periodOptions.map((label) => {
+                  const isSelected = periodLabel === label;
+
+                  return (
+                    <Pressable
+                      key={label}
+                      onPress={() => handleSelectPeriod(label)}
+                      style={[styles.periodOptionButton, isSelected && styles.periodOptionButtonActive]}
+                    >
+                      <Text style={[styles.periodOptionText, isSelected && styles.periodOptionTextActive]}>{label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <Pressable onPress={handleClosePeriodSelector} style={sharedStyles.secondaryButton}>
+                <Text style={sharedStyles.secondaryButtonText}>取消</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+      ) : null}
     </View>
   );
 }
@@ -664,6 +707,59 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: 12,
     fontWeight: "600",
+  },
+  periodModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(24, 16, 44, 0.18)",
+  },
+  periodModalCard: {
+    gap: theme.spacing.md,
+    width: "100%",
+  },
+  periodModalHeader: {
+    gap: 6,
+  },
+  periodModalRoot: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+    padding: theme.spacing.container,
+  },
+  periodModalSubtitle: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  periodModalTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 18,
+    fontWeight: "800",
+    letterSpacing: -0.3,
+  },
+  periodOptionButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    minHeight: 48,
+    paddingHorizontal: theme.spacing.md,
+    justifyContent: "center",
+  },
+  periodOptionButtonActive: {
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.primary,
+  },
+  periodOptionList: {
+    gap: theme.spacing.sm,
+  },
+  periodOptionText: {
+    color: theme.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  periodOptionTextActive: {
+    color: theme.colors.primaryDeep,
   },
   sectionLabel: {
     color: theme.colors.textPrimary,
