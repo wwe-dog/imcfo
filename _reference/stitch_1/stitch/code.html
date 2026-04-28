@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+
+<html lang="zh"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ZenFinance - 个人中心</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-lowest": "#ffffff",
+                        "surface-tint": "#5a4ac7",
+                        "on-tertiary": "#ffffff",
+                        "inverse-on-surface": "#f3effa",
+                        "surface-container-low": "#f6f2fd",
+                        "on-primary-fixed": "#170065",
+                        "tertiary": "#7c5400",
+                        "on-primary-container": "#fffbff",
+                        "secondary-fixed-dim": "#c7bfff",
+                        "on-secondary-fixed": "#180065",
+                        "error": "#ba1a1a",
+                        "primary-fixed-dim": "#c7bfff",
+                        "surface-bright": "#fcf8ff",
+                        "on-tertiary-fixed": "#281800",
+                        "on-tertiary-fixed-variant": "#614000",
+                        "on-surface-variant": "#474553",
+                        "on-secondary-container": "#392a8b",
+                        "surface-variant": "#e5e1ec",
+                        "on-error-container": "#93000a",
+                        "on-tertiary-container": "#fffbff",
+                        "on-background": "#1c1b22",
+                        "secondary-fixed": "#e5deff",
+                        "primary": "#5848c5",
+                        "primary-container": "#7162e0",
+                        "error-container": "#ffdad6",
+                        "primary-fixed": "#e4dfff",
+                        "secondary-container": "#a599ff",
+                        "background": "#fcf8ff",
+                        "surface-dim": "#dcd8e3",
+                        "surface-container-highest": "#e5e1ec",
+                        "surface": "#fcf8ff",
+                        "on-secondary-fixed-variant": "#443797",
+                        "inverse-primary": "#c7bfff",
+                        "outline-variant": "#c8c4d6",
+                        "tertiary-container": "#9c6b00",
+                        "tertiary-fixed-dim": "#feba44",
+                        "on-surface": "#1c1b22",
+                        "on-primary": "#ffffff",
+                        "secondary": "#5c50b1",
+                        "outline": "#787585",
+                        "on-secondary": "#ffffff",
+                        "surface-container-high": "#ebe6f1",
+                        "inverse-surface": "#312f38",
+                        "on-error": "#ffffff",
+                        "on-primary-fixed-variant": "#422faf",
+                        "tertiary-fixed": "#ffddae",
+                        "surface-container": "#f1ecf7"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "container-padding": "20px",
+                        "xs": "4px",
+                        "sm": "8px",
+                        "md": "16px",
+                        "unit": "4px",
+                        "gutter": "16px",
+                        "lg": "24px",
+                        "xl": "40px",
+                        "xxl": "64px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Manrope"],
+                        "body-sm": ["Manrope"],
+                        "display-amount": ["Manrope"],
+                        "body-lg": ["Manrope"],
+                        "headline-lg": ["Manrope"],
+                        "label-caps": ["Manrope"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "500" }],
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "display-amount": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "300" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen font-body-lg">
+<!-- TopAppBar -->
+<header class="bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl font-manrope antialiased tracking-tight fixed top-0 w-full z-50 border-b border-[#F1F1F4] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)] flex justify-between items-center px-5 h-16 hidden md:flex">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden">
+<img alt="User profile photo" class="w-full h-full object-cover" data-alt="close up portrait of a young woman with a calm expression, soft natural lighting, minimalist background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCbhmW71HPgCngA-iU16L3cxLqQjtCjyHbFKT5tErigmp8G8iMNPRq6rw7S-Y6WU1qmjWJxW6NXCbXEl_NrACNxAwDkYEGtmyHEVNfio672w7lDmV-d69xJkATbqJcAgQEBQge8AIWLJvKS-Y8HpQvKL6uK8_HPuDvC2by3tgSaelX_kXJqAGxpIJw65s4MXEd6oW6PKYjEAIY4cH3xOiEaU6eGD21WxHW_zAV_w5Am4B8dPBQHgfHAOU3UuXHq1nzBo_DLAK8eEEw"/>
+</div>
+<span class="text-lg font-semibold text-slate-900 dark:text-slate-50">ZenFinance</span>
+</div>
+<nav class="flex gap-6">
+<a class="text-slate-400 dark:text-slate-500 hover:opacity-80 transition-opacity" href="#">Home</a>
+<a class="text-slate-400 dark:text-slate-500 hover:opacity-80 transition-opacity" href="#">Manage</a>
+<a class="text-slate-400 dark:text-slate-500 hover:opacity-80 transition-opacity" href="#">Reports</a>
+<a class="text-[#8A7CFB] font-bold hover:opacity-80 transition-opacity" href="#">Me</a>
+</nav>
+<button class="hover:opacity-80 transition-opacity active:scale-95 transition-transform duration-200">
+<span class="material-symbols-outlined text-slate-400" data-icon="notifications">notifications</span>
+</button>
+</header>
+<!-- Main Content Canvas -->
+<main class="pt-16 md:pt-24 pb-24 px-container-padding max-w-2xl mx-auto space-y-xl">
+<!-- Profile Header -->
+<section class="flex flex-col items-center pt-xl pb-lg">
+<div class="w-24 h-24 rounded-full bg-surface-container-high mb-md overflow-hidden border border-outline-variant/30">
+<img alt="Profile" class="w-full h-full object-cover" data-alt="close up portrait of a young woman with a calm expression, soft natural lighting, minimalist background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC2MA_xEy2YsLBx54MlSy5Sc9WcH5QsALWoclmd1o3A_qUauKcnRpGrgZJkFzptGhvKXF_w39XdWFAjXJD6youmB5lA8s7YKrWrNvDY-zoHFPbM8NsUhTVQWMCdcZWe2RsUEmSjkVInPrXy5l6X-NturVWm2s2DUpx4AZiutx1aGgQ16EMIfzHKsvYRY7pLv0qAnImWZsFXkE7qJQIzfCQocL2ZsW-OFjwQfcGuaAk5lvIHP8E7ElW-1woY5_BUApI2yJuQTaB_SFI"/>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface mb-xs">李明</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant">liming@zenfinance.app</p>
+</section>
+<!-- Options List -->
+<section class="bg-surface-container-lowest rounded-xl border border-[#F1F1F4] overflow-hidden">
+<a class="flex items-center justify-between p-md border-b border-[#F1F1F4] hover:bg-surface-container-low transition-colors group" href="#">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="person_outline">person_outline</span>
+</div>
+<span class="font-body-lg text-body-lg text-on-surface">个人中心与设置</span>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors" data-icon="chevron_right">chevron_right</span>
+</a>
+<a class="flex items-center justify-between p-md border-b border-[#F1F1F4] hover:bg-surface-container-low transition-colors group" href="#">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="data_usage">data_usage</span>
+</div>
+<div class="flex flex-col">
+<span class="font-body-lg text-body-lg text-on-surface">数据管理</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">导入 / 导出 / 清理</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors" data-icon="chevron_right">chevron_right</span>
+</a>
+<a class="flex items-center justify-between p-md hover:bg-surface-container-low transition-colors group" href="#">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</div>
+<div class="flex flex-col">
+<span class="font-body-lg text-body-lg text-on-surface">通用设置</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">语言 / 主题</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors" data-icon="chevron_right">chevron_right</span>
+</a>
+</section>
+<!-- Logout Action (Bento Style) -->
+<section class="pt-md">
+<button class="w-full bg-surface-container-lowest border border-error-container text-error rounded-xl p-md flex items-center justify-center gap-sm font-headline-md text-headline-md hover:bg-error-container/20 transition-colors">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+                退出登录
+            </button>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl font-manrope text-[10px] font-medium tracking-wide fixed bottom-0 w-full z-50 border-t border-[#F1F1F4] dark:border-slate-800 flex justify-around items-center px-4 h-20 pb-safe md:hidden">
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 active:scale-90 transition-transform duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="home_max">home_max</span>
+            Home
+        </a>
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 active:scale-90 transition-transform duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="add_circle">add_circle</span>
+            Manage
+        </a>
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 active:scale-90 transition-transform duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="insert_chart">insert_chart</span>
+            Reports
+        </a>
+<a class="flex flex-col items-center justify-center text-[#8A7CFB] relative after:content-[''] after:absolute after:-bottom-1 after:w-1 after:h-1 after:bg-[#8A7CFB] after:rounded-full active:scale-90 transition-transform duration-200 hover:text-slate-600 dark:hover:text-slate-300" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="person" data-weight="fill" style="font-variation-settings: 'FILL' 1;">person</span>
+            Me
+        </a>
+</nav>
+</body></html>
