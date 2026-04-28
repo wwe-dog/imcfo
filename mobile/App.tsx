@@ -4,12 +4,12 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppData } from "./src/app/useAppData";
 import type {
   AssetInput,
@@ -33,7 +33,16 @@ const tabs: Array<{ key: Exclude<ScreenKey, "assets">; label: string }> = [
 ];
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AppShell />
+    </SafeAreaProvider>
+  );
+}
+
+function AppShell() {
   const [activeScreen, setActiveScreen] = useState<ScreenKey>("dashboard");
+  const insets = useSafeAreaInsets();
   const {
     data,
     summary,
@@ -194,7 +203,7 @@ export default function App() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
       <StatusBar style="dark" />
       {activeScreen !== "dashboard" ? (
         <View style={styles.header}>
@@ -202,10 +211,13 @@ export default function App() {
           <Text style={styles.subtitle}>像经营公司一样经营自己</Text>
         </View>
       ) : null}
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: 120 + insets.bottom }]}
+        showsVerticalScrollIndicator={false}
+      >
         {renderScreen()}
       </ScrollView>
-      <View style={styles.tabBarShell}>
+      <View style={[styles.tabBarShell, { paddingBottom: Math.max(insets.bottom, 14) }]}>
         <View style={styles.tabBar}>
           {tabs.map((tab) => {
             const isActive = activeScreen === tab.key;
