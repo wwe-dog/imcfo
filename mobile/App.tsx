@@ -59,7 +59,7 @@ export default function App() {
   const handleReset = async () => {
     try {
       await resetDemoData();
-      Alert.alert("恢复成功", "已恢复为本地示例数据，首页和报表已刷新。");
+      Alert.alert("恢复成功", "已恢复为本地示例数据，首页和报表已同步刷新。");
     } catch {
       Alert.alert("恢复失败", "无法恢复示例数据。");
     }

@@ -15,7 +15,7 @@ export default function ReportBlock({ title, subtitle, rows, footer }: ReportBlo
   return (
     <View style={[sharedStyles.card, styles.block]}>
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerCopy}>
           <Text style={styles.title}>{title}</Text>
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
@@ -52,6 +52,10 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     flexDirection: "row",
     justifyContent: "space-between",
+  },
+  headerCopy: {
+    flex: 1,
+    paddingRight: theme.spacing.md,
   },
   label: {
     color: theme.colors.textSecondary,
@@ -103,7 +107,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     marginTop: theme.spacing.xs,
-    maxWidth: 220,
   },
   title: {
     color: theme.colors.textPrimary,

@@ -82,23 +82,23 @@ export default function SettingsScreen({
 
       <View style={[sharedStyles.card, styles.listCard]}>
         <Pressable style={styles.listRow}>
-          <View>
+          <View style={styles.listCopy}>
+            <Text style={styles.listTitle}>个人中心与设置</Text>
+            <Text style={styles.listSubtitle}>资料概览与本地配置</Text>
+          </View>
+          <Text style={styles.listArrow}>›</Text>
+        </Pressable>
+        <Pressable style={[styles.listRow, styles.listRowBorder]}>
+          <View style={styles.listCopy}>
             <Text style={styles.listTitle}>数据管理</Text>
             <Text style={styles.listSubtitle}>导入 / 导出 / 清理</Text>
           </View>
           <Text style={styles.listArrow}>›</Text>
         </Pressable>
         <Pressable style={[styles.listRow, styles.listRowBorder]}>
-          <View>
-            <Text style={styles.listTitle}>存储方式</Text>
-            <Text style={styles.listSubtitle}>{storageMode}</Text>
-          </View>
-          <Text style={styles.listArrow}>›</Text>
-        </Pressable>
-        <Pressable style={[styles.listRow, styles.listRowBorder]}>
-          <View>
-            <Text style={styles.listTitle}>版本信息</Text>
-            <Text style={styles.listSubtitle}>当前数据版本 {appVersion}</Text>
+          <View style={styles.listCopy}>
+            <Text style={styles.listTitle}>通用设置</Text>
+            <Text style={styles.listSubtitle}>{storageMode} · 数据版本 {appVersion}</Text>
           </View>
           <Text style={styles.listArrow}>›</Text>
         </Pressable>
@@ -170,13 +170,13 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.borderStrong,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
-    height: 88,
+    height: 92,
     justifyContent: "center",
-    width: 88,
+    width: 92,
   },
   avatarText: {
     color: theme.colors.primaryDeep,
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: "700",
   },
   buttonDisabled: {
@@ -208,6 +208,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingVertical: 0,
   },
+  listCopy: {
+    flex: 1,
+  },
   listRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -235,14 +238,15 @@ const styles = StyleSheet.create({
   },
   profileName: {
     color: theme.colors.textPrimary,
-    fontSize: 26,
-    fontWeight: "700",
+    fontSize: 28,
+    fontWeight: "800",
     letterSpacing: -0.6,
   },
   profileSection: {
     alignItems: "center",
     gap: theme.spacing.sm,
     paddingTop: theme.spacing.sm,
+    paddingVertical: theme.spacing.lg,
   },
   profileSubtitle: {
     color: theme.colors.textMuted,

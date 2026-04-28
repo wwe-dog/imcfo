@@ -199,7 +199,7 @@ const detectType = (
 
   return {
     type: "expense",
-    warning: "暂未明确识别交易类型，已按日常支出生成草稿，请确认或手动修改后再入账。",
+    warning: "暂时没有明确识别交易类型，已按日常支出生成草稿，请手动确认。",
   };
 };
 
@@ -213,7 +213,7 @@ const detectCategory = (text: string, type: NaturalLanguageTransactionType): str
   if (/工资/.test(text)) return "工资薪金";
   if (/基金|股票|理财/.test(text)) return "投资资产";
   if (/信用卡/.test(text)) return "信用卡";
-  if (/朋友还我|别人还我/.test(text)) return "待确认收入/应收款";
+  if (/朋友还我|别人还我/.test(text)) return "待确认收入 / 应收款";
 
   return transactionTypeMeta[type].defaultCategory;
 };

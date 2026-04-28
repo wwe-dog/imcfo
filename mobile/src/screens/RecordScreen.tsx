@@ -1,13 +1,5 @@
 import { useMemo, useState } from "react";
-import {
-  Alert,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Alert, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   parseNaturalLanguageTransaction,
   transactionTypeMeta,
