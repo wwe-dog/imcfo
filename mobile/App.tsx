@@ -140,7 +140,14 @@ export default function App() {
 
     switch (activeScreen) {
       case "dashboard":
-        return <DashboardScreen summary={summary} />;
+        return (
+          <DashboardScreen
+            assets={data.assets}
+            liabilities={data.liabilities}
+            summary={summary}
+            transactions={data.transactions}
+          />
+        );
       case "record":
         return (
           <RecordScreen
