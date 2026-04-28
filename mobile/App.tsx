@@ -11,7 +11,6 @@ import {
   View,
 } from "react-native";
 import { useAppData } from "./src/app/useAppData";
-import { theme } from "./src/styles/theme";
 import type {
   AssetInput,
   LiabilityInput,
@@ -22,15 +21,15 @@ import DashboardScreen from "./src/screens/DashboardScreen";
 import RecordScreen from "./src/screens/RecordScreen";
 import ReportsScreen from "./src/screens/ReportsScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
+import { theme } from "./src/styles/theme";
 
 type ScreenKey = "dashboard" | "record" | "assets" | "reports" | "settings";
 
-const tabs: Array<{ key: ScreenKey; label: string }> = [
+const tabs: Array<{ key: Exclude<ScreenKey, "assets">; label: string }> = [
   { key: "dashboard", label: "首页" },
-  { key: "record", label: "记一笔" },
-  { key: "assets", label: "资产负债" },
+  { key: "record", label: "管理" },
   { key: "reports", label: "报表" },
-  { key: "settings", label: "设置" },
+  { key: "settings", label: "我的" },
 ];
 
 export default function App() {
@@ -52,6 +51,7 @@ export default function App() {
   } = useAppData();
 
   const handleExport = async () => exportData();
+
   const handleImport = async (serializedData: string) => {
     await importData(serializedData);
   };
@@ -77,9 +77,7 @@ export default function App() {
   const handleSaveTransaction = async (input: TransactionInput) => {
     try {
       await saveTransaction(input);
-      Alert.alert("保存成功", "这笔记录已写入本地数据，首页和报表已刷新。");
     } catch {
-      Alert.alert("保存失败", "无法保存这笔记录。");
       throw new Error("无法保存这笔记录。");
     }
   };
@@ -144,7 +142,14 @@ export default function App() {
       case "dashboard":
         return <DashboardScreen summary={summary} />;
       case "record":
-        return <RecordScreen accounts={data.accounts} onSave={handleSaveTransaction} />;
+        return (
+          <RecordScreen
+            accounts={data.accounts}
+            onOpenAssets={() => setActiveScreen("assets")}
+            onOpenReports={() => setActiveScreen("reports")}
+            onSave={handleSaveTransaction}
+          />
+        );
       case "assets":
         return (
           <AssetsLiabilitiesScreen
@@ -189,10 +194,7 @@ export default function App() {
         <Text style={styles.appTitle}>我为 CFO</Text>
         <Text style={styles.subtitle}>像经营公司一样经营自己</Text>
       </View>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {renderScreen()}
       </ScrollView>
       <View style={styles.tabBar}>
@@ -266,9 +268,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     left: 0,
+    paddingBottom: 16,
     paddingHorizontal: theme.spacing.md,
     paddingTop: theme.spacing.md,
-    paddingBottom: 16,
     position: "absolute",
     right: 0,
   },
@@ -276,8 +278,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: theme.radius.md,
     flex: 1,
-    minHeight: 48,
     justifyContent: "center",
+    minHeight: 48,
     paddingHorizontal: 6,
   },
   tabButtonActive: {

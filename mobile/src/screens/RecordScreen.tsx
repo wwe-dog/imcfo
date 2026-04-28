@@ -1,5 +1,13 @@
 import { useMemo, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Alert,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import {
   parseNaturalLanguageTransaction,
   transactionTypeMeta,
@@ -13,6 +21,8 @@ import { sharedStyles, theme } from "../styles/theme";
 interface RecordScreenProps {
   accounts: Account[];
   onSave: (input: TransactionInput) => Promise<void>;
+  onOpenReports: () => void;
+  onOpenAssets: () => void;
 }
 
 interface TransactionTypeOption {
@@ -21,6 +31,8 @@ interface TransactionTypeOption {
   defaultCategory: string;
   requiresAccount: boolean;
 }
+
+type ModalState = "draft" | "success";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -61,7 +73,12 @@ const formatAmount = (value: string): string => {
   return `${amount} 元`;
 };
 
-export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
+export default function RecordScreen({
+  accounts,
+  onSave,
+  onOpenReports,
+  onOpenAssets,
+}: RecordScreenProps) {
   const [naturalText, setNaturalText] = useState("");
   const [draft, setDraft] = useState<ParsedTransactionDraft | null>(null);
   const [type, setType] = useState<NaturalLanguageTransactionType>("income");
@@ -72,6 +89,8 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
   const [note, setNote] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [modalState, setModalState] = useState<ModalState>("draft");
 
   const selectedOption = findOption(type);
   const selectedMeta = transactionTypeMeta[type];
@@ -88,6 +107,23 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
     }
 
     return cashAccount?.id ?? currentAccount?.id ?? activeAccounts[0]?.id ?? "";
+  };
+
+  const clearEntryFields = () => {
+    setAmount("");
+    setNote("");
+    setDraft(null);
+    setNaturalText("");
+    setSuccessMessage("");
+  };
+
+  const openMoreMenu = () => {
+    Alert.alert("更多", "请选择要进入的管理项。", [
+      { text: "账户管理", onPress: () => Alert.alert("提示", "该功能将在后续版本中完善。") },
+      { text: "资产负债管理", onPress: onOpenAssets },
+      { text: "交易记录", onPress: () => Alert.alert("提示", "该功能将在后续版本中完善。") },
+      { text: "取消", style: "cancel" },
+    ]);
   };
 
   const handleTypeChange = (nextType: NaturalLanguageTransactionType) => {
@@ -125,6 +161,8 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
     }
 
     applyDraftToForm(parsedDraft);
+    setModalState("draft");
+    setIsModalVisible(true);
   };
 
   const validateForm = (): number | null => {
@@ -175,10 +213,7 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
         date,
         note: note.trim() || selectedMeta.impactText,
       });
-      setAmount("");
-      setNote("");
-      setDraft(null);
-      setNaturalText("");
+      setModalState("success");
       setSuccessMessage("已保存，金额和备注已清空，可以继续记录下一笔。");
     } catch {
       Alert.alert("保存失败", "这笔记录没有保存成功，请稍后重试。");
@@ -187,14 +222,44 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
     }
   };
 
+  const handleContinue = () => {
+    clearEntryFields();
+    setIsModalVisible(false);
+  };
+
+  const handleCloseModal = () => {
+    if (isSaving) return;
+    setIsModalVisible(false);
+    if (modalState === "success") {
+      clearEntryFields();
+    }
+  };
+
+  const handleGoReports = () => {
+    setIsModalVisible(false);
+    clearEntryFields();
+    onOpenReports();
+  };
+
+  const handleManageAssets = () => {
+    Alert.alert("提示", "账户管理功能将在后续版本中完善。你也可以先使用资产负债管理。");
+  };
+
   return (
     <View style={styles.stack}>
       <View style={sharedStyles.pageHeader}>
-        <Text style={sharedStyles.eyebrow}>Record</Text>
-        <Text style={sharedStyles.pageTitle}>记一笔</Text>
-        <Text style={sharedStyles.pageCopy}>
-          用一句话描述这笔钱发生了什么，确认识别结果后再入账。
-        </Text>
+        <View style={styles.headerRow}>
+          <View style={styles.headerCopy}>
+            <Text style={sharedStyles.eyebrow}>Manage</Text>
+            <Text style={sharedStyles.pageTitle}>管理</Text>
+            <Text style={sharedStyles.pageCopy}>
+              用一句话描述这笔钱发生了什么，系统识别后再确认入账。
+            </Text>
+          </View>
+          <Pressable onPress={openMoreMenu} style={styles.moreButton}>
+            <Text style={styles.moreButtonText}>更多</Text>
+          </Pressable>
+        </View>
       </View>
 
       <View style={[sharedStyles.card, styles.formCard]}>
@@ -215,54 +280,6 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
         </Pressable>
       </View>
 
-      {draft ? (
-        <View style={[sharedStyles.card, styles.formCard]}>
-          <Text style={sharedStyles.sectionTitle}>识别结果</Text>
-          {draft.warning ? <Text style={sharedStyles.warningText}>{draft.warning}</Text> : null}
-          <View style={styles.draftRow}>
-            <Text style={styles.draftLabel}>类型</Text>
-            <Text style={styles.draftValue}>{selectedOption.label}</Text>
-          </View>
-          <View style={styles.draftRow}>
-            <Text style={styles.draftLabel}>金额</Text>
-            <Text style={styles.draftValue}>{formatAmount(amount)}</Text>
-          </View>
-          <View style={styles.draftRow}>
-            <Text style={styles.draftLabel}>分类</Text>
-            <Text style={styles.draftValue}>{category || "未填写"}</Text>
-          </View>
-          <View style={styles.draftRow}>
-            <Text style={styles.draftLabel}>日期</Text>
-            <Text style={styles.draftValue}>{date || "未填写"}</Text>
-          </View>
-          <View style={styles.draftRow}>
-            <Text style={styles.draftLabel}>账户</Text>
-            <Text style={styles.draftValue}>{selectedAccount?.name ?? "未选择"}</Text>
-          </View>
-          <View style={styles.draftRow}>
-            <Text style={styles.draftLabel}>现金流</Text>
-            <Text style={styles.draftValue}>{selectedMeta.cashFlowLabel}</Text>
-          </View>
-          <View style={sharedStyles.helperBox}>
-            <Text style={sharedStyles.helperTitle}>会计影响说明</Text>
-            <Text style={sharedStyles.helperText}>
-              {draft.warning
-                ? "这句话可能有多种会计含义，请确认或手动修改后再入账。"
-                : selectedMeta.impactText}
-            </Text>
-          </View>
-          <Pressable
-            disabled={isSaving}
-            onPress={() => void handleSubmit()}
-            style={[sharedStyles.primaryButton, isSaving && styles.buttonDisabled]}
-          >
-            <Text style={sharedStyles.primaryButtonText}>
-              {isSaving ? "入账中..." : "确认入账"}
-            </Text>
-          </Pressable>
-        </View>
-      ) : null}
-
       <View style={[sharedStyles.card, styles.formCard]}>
         <Text style={sharedStyles.sectionTitle}>手动修改 / 高级填写</Text>
         <Text style={styles.fieldLabel}>交易类型</Text>
@@ -274,18 +291,9 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
               <Pressable
                 key={option.type}
                 onPress={() => handleTypeChange(option.type)}
-                style={[
-                  sharedStyles.chip,
-                  styles.chip,
-                  isActive && sharedStyles.chipActiveDark,
-                ]}
+                style={[sharedStyles.chip, styles.chip, isActive && sharedStyles.chipActiveDark]}
               >
-                <Text
-                  style={[
-                    sharedStyles.chipText,
-                    isActive && sharedStyles.chipTextInverse,
-                  ]}
-                >
+                <Text style={[sharedStyles.chipText, isActive && sharedStyles.chipTextInverse]}>
                   {option.label}
                 </Text>
               </Pressable>
@@ -336,18 +344,9 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
                     setAccountId(account.id);
                     setSuccessMessage("");
                   }}
-                  style={[
-                    sharedStyles.chip,
-                    styles.chip,
-                    isActive && sharedStyles.chipActiveDark,
-                  ]}
+                  style={[sharedStyles.chip, styles.chip, isActive && sharedStyles.chipActiveDark]}
                 >
-                  <Text
-                    style={[
-                      sharedStyles.chipText,
-                      isActive && sharedStyles.chipTextInverse,
-                    ]}
-                  >
+                  <Text style={[sharedStyles.chipText, isActive && sharedStyles.chipTextInverse]}>
                     {account.name}
                   </Text>
                 </Pressable>
@@ -400,6 +399,102 @@ export default function RecordScreen({ accounts, onSave }: RecordScreenProps) {
           </Text>
         </Pressable>
       </View>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={handleCloseModal}
+        transparent
+        visible={isModalVisible}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            {modalState === "draft" ? (
+              <>
+                <Text style={sharedStyles.sectionTitle}>识别结果</Text>
+                <Text style={sharedStyles.pageCopy}>
+                  系统根据你的描述生成了这笔记录，请确认后再入账。
+                </Text>
+                {draft?.warning ? <Text style={sharedStyles.warningText}>{draft.warning}</Text> : null}
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>类型</Text>
+                  <Text style={styles.modalValue}>{selectedOption.label}</Text>
+                </View>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>金额</Text>
+                  <Text style={styles.modalValue}>{formatAmount(amount)}</Text>
+                </View>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>分类</Text>
+                  <Text style={styles.modalValue}>{category || "未填写"}</Text>
+                </View>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>日期</Text>
+                  <Text style={styles.modalValue}>{date || "未填写"}</Text>
+                </View>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>账户</Text>
+                  <Text style={styles.modalValue}>{selectedAccount?.name ?? "未选择"}</Text>
+                </View>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>现金流</Text>
+                  <Text style={styles.modalValue}>{selectedMeta.cashFlowLabel}</Text>
+                </View>
+                <View style={sharedStyles.helperBox}>
+                  <Text style={sharedStyles.helperTitle}>会计影响说明</Text>
+                  <Text style={sharedStyles.helperText}>
+                    {draft?.warning
+                      ? "这句话可能有多种会计含义，请确认或手动修改后再入账。"
+                      : selectedMeta.impactText}
+                  </Text>
+                </View>
+                <View style={styles.modalActionRow}>
+                  <Pressable
+                    disabled={isSaving}
+                    onPress={handleCloseModal}
+                    style={[sharedStyles.secondaryButton, isSaving && styles.buttonDisabled]}
+                  >
+                    <Text style={sharedStyles.secondaryButtonText}>手动修改</Text>
+                  </Pressable>
+                  <Pressable
+                    disabled={isSaving}
+                    onPress={() => void handleSubmit()}
+                    style={[sharedStyles.primaryButton, isSaving && styles.buttonDisabled]}
+                  >
+                    <Text style={sharedStyles.primaryButtonText}>
+                      {isSaving ? "入账中..." : "确认入账"}
+                    </Text>
+                  </Pressable>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={sharedStyles.sectionTitle}>入账成功</Text>
+                <Text style={sharedStyles.pageCopy}>
+                  这笔记录已保存，首页和报表数据已同步更新。
+                </Text>
+                <View style={sharedStyles.helperBox}>
+                  <Text style={sharedStyles.helperTitle}>本次影响</Text>
+                  <Text style={sharedStyles.helperText}>{selectedMeta.impactText}</Text>
+                </View>
+                <View style={styles.modalButtonStack}>
+                  <Pressable onPress={handleContinue} style={sharedStyles.primaryButton}>
+                    <Text style={sharedStyles.primaryButtonText}>继续记一笔</Text>
+                  </Pressable>
+                  <Pressable onPress={handleGoReports} style={sharedStyles.secondaryButton}>
+                    <Text style={sharedStyles.secondaryButtonText}>去报表看看</Text>
+                  </Pressable>
+                  <Pressable onPress={handleManageAssets} style={sharedStyles.secondaryButton}>
+                    <Text style={sharedStyles.secondaryButtonText}>管理账户 / 资产负债</Text>
+                  </Pressable>
+                  <Pressable onPress={handleCloseModal} style={styles.ghostButton}>
+                    <Text style={styles.ghostButtonText}>关闭</Text>
+                  </Pressable>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -430,27 +525,6 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: theme.spacing.sm,
   },
-  draftLabel: {
-    color: theme.colors.textSecondary,
-    flex: 1,
-    fontSize: theme.typography.body,
-  },
-  draftRow: {
-    alignItems: "center",
-    borderBottomColor: theme.colors.border,
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    gap: theme.spacing.md,
-    justifyContent: "space-between",
-    paddingBottom: theme.spacing.sm,
-  },
-  draftValue: {
-    color: theme.colors.textPrimary,
-    flex: 1,
-    fontSize: theme.typography.body,
-    fontWeight: "700",
-    textAlign: "right",
-  },
   fieldLabel: {
     color: theme.colors.textSecondary,
     fontSize: theme.typography.label,
@@ -460,10 +534,90 @@ const styles = StyleSheet.create({
   formCard: {
     gap: theme.spacing.md,
   },
+  ghostButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: theme.touch.minHeight,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+  },
+  ghostButtonText: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.typography.body,
+    fontWeight: "700",
+  },
+  headerCopy: {
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
+  headerRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: theme.spacing.md,
+    justifyContent: "space-between",
+  },
   messageBox: {
     backgroundColor: theme.colors.warningSoft,
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
+  },
+  modalActionRow: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+  },
+  modalButtonStack: {
+    gap: theme.spacing.sm,
+  },
+  modalCard: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    gap: theme.spacing.md,
+    padding: theme.spacing.lg,
+  },
+  modalLabel: {
+    color: theme.colors.textSecondary,
+    flex: 1,
+    fontSize: theme.typography.body,
+  },
+  modalOverlay: {
+    backgroundColor: "rgba(0, 0, 0, 0.36)",
+    flex: 1,
+    justifyContent: "center",
+    padding: theme.spacing.xl,
+  },
+  modalRow: {
+    alignItems: "center",
+    borderBottomColor: theme.colors.border,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: theme.spacing.md,
+    justifyContent: "space-between",
+    paddingBottom: theme.spacing.sm,
+  },
+  modalValue: {
+    color: theme.colors.textPrimary,
+    flex: 1,
+    fontSize: theme.typography.body,
+    fontWeight: "700",
+    textAlign: "right",
+  },
+  moreButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 40,
+    minWidth: 64,
+    paddingHorizontal: theme.spacing.md,
+  },
+  moreButtonText: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.typography.label,
+    fontWeight: "700",
   },
   naturalInput: {
     minHeight: 116,
