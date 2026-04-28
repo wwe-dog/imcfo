@@ -18,7 +18,7 @@ interface AssetsLiabilitiesScreenProps {
 
 const assetCategoryOptions: Array<{ value: Asset["category"]; label: string }> = [
   { value: "cash", label: "现金" },
-  { value: "bankDeposit", label: "银行存款" },
+  { value: "bankDeposit", label: "银行卡" },
   { value: "paymentAccount", label: "支付账户" },
   { value: "investment", label: "投资资产" },
   { value: "receivable", label: "应收款" },
@@ -28,7 +28,7 @@ const assetCategoryOptions: Array<{ value: Asset["category"]; label: string }> =
 
 const liabilityCategoryOptions: Array<{ value: Liability["category"]; label: string }> = [
   { value: "creditCard", label: "信用卡" },
-  { value: "huabei", label: "花呗白条" },
+  { value: "huabei", label: "花呗 / 白条" },
   { value: "loan", label: "贷款" },
   { value: "borrowing", label: "借款" },
   { value: "payable", label: "应付款" },
@@ -208,7 +208,9 @@ export default function AssetsLiabilitiesScreen({
       <View style={sharedStyles.pageHeader}>
         <Text style={sharedStyles.eyebrow}>Assets & Liabilities</Text>
         <Text style={styles.title}>资产负债管理</Text>
-        <Text style={sharedStyles.pageCopy}>在这里维护你的资产和负债底稿，用于生成个人资产负债表。</Text>
+        <Text style={sharedStyles.pageCopy}>
+          在这里维护你的资产和负债底稿，用于生成个人资产负债表。
+        </Text>
       </View>
 
       <View style={styles.summaryPanel}>
@@ -221,7 +223,7 @@ export default function AssetsLiabilitiesScreen({
           <Text style={styles.summaryValue}>{formatCurrency(summary.totalLiabilities)}</Text>
         </View>
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>净资产</Text>
+          <Text style={styles.summaryLabel}>所有者权益（个人净资产）</Text>
           <Text style={styles.summaryValue}>{formatCurrency(summary.ownerEquity)}</Text>
         </View>
       </View>

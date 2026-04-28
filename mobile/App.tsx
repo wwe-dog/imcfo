@@ -204,7 +204,7 @@ export default function App() {
               <Pressable
                 key={tab.key}
                 onPress={() => setActiveScreen(tab.key)}
-                style={styles.tabButton}
+                style={[styles.tabButton, isActive && styles.tabButtonActive]}
               >
                 <Text style={[styles.tabText, isActive && styles.tabTextActive]}>{tab.label}</Text>
                 <View style={[styles.tabDot, isActive && styles.tabDotActive]} />
@@ -279,10 +279,15 @@ const styles = StyleSheet.create({
   },
   tabButton: {
     alignItems: "center",
+    borderRadius: theme.radius.md,
     gap: 6,
     justifyContent: "center",
     minHeight: 52,
     minWidth: 64,
+    paddingHorizontal: 10,
+  },
+  tabButtonActive: {
+    backgroundColor: theme.colors.primarySoft,
   },
   tabDot: {
     backgroundColor: "transparent",

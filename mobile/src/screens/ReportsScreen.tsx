@@ -175,18 +175,19 @@ export default function ReportsScreen({
         </View>
 
         <View style={styles.modeRow}>
-          <Text style={styles.modeLabel}>简易模式</Text>
+          <Text style={styles.modeLabel}>简易版</Text>
           <View style={styles.modeSwitchTrack}>
             <Pressable
               onPress={() => setMode("simple")}
-              style={[styles.modeSwitchThumb, isSimple && styles.modeSwitchThumbLeft]}
+              style={[styles.modeSwitchThumb, isSimple ? styles.modeSwitchThumbLeft : styles.modeSwitchThumbRight]}
             />
+            <Pressable onPress={() => setMode("simple")} style={styles.modeSwitchHitArea} />
             <Pressable
               onPress={() => setMode("professional")}
               style={[styles.modeSwitchHitArea, styles.modeSwitchRightHitArea]}
             />
           </View>
-          <Text style={styles.modeLabel}>专业模式</Text>
+          <Text style={styles.modeLabel}>专业版</Text>
         </View>
 
         <Text style={styles.modeHint}>
@@ -236,13 +237,15 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radius.pill,
     height: 28,
-    left: 2,
     position: "absolute",
     top: 2,
     width: 28,
   },
   modeSwitchThumbLeft: {
     left: 2,
+  },
+  modeSwitchThumbRight: {
+    left: 34,
   },
   modeSwitchTrack: {
     backgroundColor: theme.colors.surfaceMuted,

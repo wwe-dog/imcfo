@@ -46,12 +46,7 @@ const transactionTypeOptions: TransactionTypeOption[] = [
   { type: "investmentBuy", label: "投资买入", defaultCategory: "投资资产", requiresAccount: true },
   { type: "investmentSell", label: "投资卖出", defaultCategory: "投资资产", requiresAccount: true },
   { type: "creditCardExpense", label: "信用卡消费", defaultCategory: "信用卡", requiresAccount: true },
-  {
-    type: "creditCardRepayment",
-    label: "信用卡还款",
-    defaultCategory: "信用卡",
-    requiresAccount: true,
-  },
+  { type: "creditCardRepayment", label: "信用卡还款", defaultCategory: "信用卡", requiresAccount: true },
 ];
 
 const examples = [
@@ -120,7 +115,7 @@ export default function RecordScreen({
   };
 
   const openMoreMenu = () => {
-    Alert.alert("更多", "请选择要进入的管理项。", [
+    Alert.alert("更多", "请选择要进入的管理页。", [
       { text: "账户管理", onPress: () => Alert.alert("提示", "该功能将在后续版本中完善。") },
       { text: "资产负债管理", onPress: onOpenAssets },
       { text: "交易记录", onPress: () => Alert.alert("提示", "该功能将在后续版本中完善。") },
@@ -371,7 +366,7 @@ export default function RecordScreen({
         ) : (
           <View style={styles.messageBox}>
             <Text style={sharedStyles.warningText}>
-              当前没有可用账户，请先在我的页恢复示例数据；后续版本会提供账户管理能力。
+              当前没有可用账户，请先在“我的”页恢复示例数据；后续版本会提供账户管理能力。
             </Text>
           </View>
         )}
@@ -540,6 +535,11 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.65,
   },
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
   fieldLabel: {
     color: theme.colors.textSecondary,
     fontSize: theme.typography.label,
@@ -659,10 +659,5 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.successSoft,
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
-  },
-  chipWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: theme.spacing.sm,
   },
 });

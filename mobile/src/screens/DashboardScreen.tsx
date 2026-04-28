@@ -18,9 +18,9 @@ const metricTones = [
 ];
 
 export default function DashboardScreen({ summary }: DashboardScreenProps) {
-  const insight = `本期利润为${summary.profit >= 0 ? "正" : "负"}，净现金变动为 ${formatCurrency(
+  const insight = `本期利润为${summary.profit >= 0 ? "正" : "负"}，净现金变动为${formatCurrency(
     summary.cashNetChange,
-  )}，资产负债率为 ${formatRatio(summary.assetLiabilityRatio)}。`;
+  )}，资产负债率为${formatRatio(summary.assetLiabilityRatio)}。`;
 
   return (
     <View style={styles.stack}>
@@ -34,12 +34,12 @@ export default function DashboardScreen({ summary }: DashboardScreenProps) {
         <MetricCard accentColor={metricTones[1]} label="负债" value={formatCurrency(summary.totalLiabilities)} />
         <MetricCard
           accentColor={metricTones[2]}
-          hint="个人净资产"
+          hint="所有者权益（个人净资产）"
           label="净资产"
           value={formatCurrency(summary.ownerEquity)}
         />
         <MetricCard accentColor={metricTones[3]} label="收入" value={formatCurrency(summary.totalIncome)} />
-        <MetricCard accentColor={metricTones[4]} label="支出" value={formatCurrency(summary.totalExpenses)} />
+        <MetricCard accentColor={metricTones[4]} label="费用" value={formatCurrency(summary.totalExpenses)} />
         <MetricCard accentColor={metricTones[5]} label="利润" value={formatCurrency(summary.profit)} />
       </View>
 
