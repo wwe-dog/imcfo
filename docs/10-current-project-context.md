@@ -4,8 +4,8 @@
 
 更新时间：2026-04-28  
 当前主分支：`main`  
-快照原因：完成首页双视图仪表盘改造后，按上下文压缩工作流刷新。  
-当前最新功能提交：`e52d037 feat: redesign home dashboard switcher`
+快照原因：完成首页图表数据接入后，按上下文压缩工作流刷新。  
+当前最新功能提交：`2f09479 feat: connect home dashboard charts to app data`
 
 ## 1. 项目定位与关键决策
 
@@ -77,6 +77,8 @@ V0.1 只服务普通自然人，先跑通最小个人经营闭环：
 
 - 首页已改为紧凑双视图仪表盘：`资产负债结构` 与 `收支现金流`。
 - 首页默认显示 `资产负债结构`，不再显示旧的六卡片长列表、月度分析、品牌大标题。
+- 首页资产/负债构成已接入当前本地资产与负债分类汇总，不再使用示例构成。
+- 首页收支趋势已接入当前交易数据，并支持按周线、月线、季度线、年线切换聚合展示。
 - 管理页支持自然语言记账、识别结果 modal、确认入账、成功 modal。
 - 管理页保留手动修改 / 高级填写。
 - 资产负债页支持资产和负债新增、编辑、删除。
@@ -95,10 +97,11 @@ V0.1 只服务普通自然人，先跑通最小个人经营闭环：
 `mobile/src/screens/DashboardScreen.tsx`
 
 - 首页当前实现双视图切换：
-- `资产负债结构`：展示资产、负债、净资产，附资产构成、负债构成、净资产趋势预览。
-- `收支现金流`：展示收入、支出、净流入，附收支趋势预览。
-- 周线、月线、季度线、年线选择目前只切换标签，不做历史聚合。
-- 当前图表为轻量 React Native View 占位预览，不依赖图表库。
+- `资产负债结构`：展示资产、负债、净资产，资产构成和负债构成来自当前分类汇总。
+- `收支现金流`：展示收入、支出、净流入，收支趋势来自交易数据按周期聚合。
+- 周线、月线、季度线、年线会切换收支趋势聚合维度。
+- 净资产趋势目前为本期收入费用对当前净资产的轻量推算，不是持久化历史快照。
+- 当前图表为轻量 React Native View 实现，不依赖图表库。
 
 `mobile/src/app/useAppData.ts`
 
@@ -152,12 +155,13 @@ V0.1 只服务普通自然人，先跑通最小个人经营闭环：
 
 近期提交：
 
+- `2f09479 feat: connect home dashboard charts to app data`
+- `287ca83 docs: refresh current project context snapshot`
 - `e52d037 feat: redesign home dashboard switcher`
 - `d42d6ce docs: strengthen context snapshot workflow`
 - `3a40a46 feat: refactor management page recognition modal flow`
 - `4b40e32 style: complete stitch mobile UI cleanup`
 - `d1eeaec style: finish stitch mobile UI alignment`
-- `9f0ea51 style: align mobile UI with stitch reference`
 
 ## 6. 待办事项与风险
 
@@ -173,7 +177,7 @@ V0.1 只服务普通自然人，先跑通最小个人经营闭环：
 - Settings 导入做更严格 schema 校验。
 - 增加数据版本迁移机制。
 - 增加默认分类模板。
-- 首页趋势图后续接入真实历史周期聚合。
+- 首页净资产趋势后续接入真实历史资产负债快照。
 
 风险：
 
