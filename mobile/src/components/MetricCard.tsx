@@ -1,16 +1,27 @@
 import { StyleSheet, Text, View } from "react-native";
-import { theme } from "../styles/theme";
+import { sharedStyles, theme } from "../styles/theme";
 
 interface MetricCardProps {
   label: string;
   value: string;
   hint?: string;
+  accentColor?: string;
 }
 
-export default function MetricCard({ label, value, hint }: MetricCardProps) {
+export default function MetricCard({
+  label,
+  value,
+  hint,
+  accentColor = theme.colors.primary,
+}: MetricCardProps) {
   return (
-    <View style={styles.card}>
-      <Text style={styles.label}>{label}</Text>
+    <View style={[sharedStyles.card, styles.card, { borderColor: accentColor }]}>
+      <View style={styles.headerRow}>
+        <Text style={styles.label}>{label}</Text>
+        <View style={[styles.accentBadge, { borderColor: accentColor }]}>
+          <View style={[styles.accentDot, { backgroundColor: accentColor }]} />
+        </View>
+      </View>
       <Text style={styles.value}>{value}</Text>
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
     </View>
@@ -18,30 +29,44 @@ export default function MetricCard({ label, value, hint }: MetricCardProps) {
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
+  accentBadge: {
+    alignItems: "center",
+    borderRadius: theme.radius.pill,
     borderWidth: 1,
-    minHeight: 132,
-    padding: theme.spacing.lg,
+    height: 28,
+    justifyContent: "center",
+    width: 28,
+  },
+  accentDot: {
+    borderRadius: theme.radius.pill,
+    height: 8,
+    width: 8,
+  },
+  card: {
+    gap: theme.spacing.sm,
+    minHeight: 160,
     width: "48%",
+  },
+  headerRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   hint: {
     color: theme.colors.textMuted,
-    fontSize: 12,
+    fontSize: 13,
     lineHeight: 18,
-    marginTop: theme.spacing.sm,
   },
   label: {
-    color: theme.colors.textMuted,
-    fontSize: 13,
-    marginBottom: theme.spacing.sm,
+    color: theme.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "500",
   },
   value: {
     color: theme.colors.textPrimary,
-    fontSize: 24,
-    fontWeight: "700",
-    lineHeight: 30,
+    fontSize: 32,
+    fontWeight: "800",
+    letterSpacing: -1,
+    lineHeight: 40,
   },
 });

@@ -175,14 +175,14 @@ export default function AssetsLiabilitiesScreen({
     Alert.alert("删除资产", `确认删除“${asset.name}”吗？`, [
       { text: "取消", style: "cancel" },
       {
+        text: "删除",
+        style: "destructive",
         onPress: () => {
           void onDeleteAsset(asset.id);
           if (assetForm.id === asset.id) {
             resetAssetForm();
           }
         },
-        style: "destructive",
-        text: "删除",
       },
     ]);
   };
@@ -191,14 +191,14 @@ export default function AssetsLiabilitiesScreen({
     Alert.alert("删除负债", `确认删除“${liability.name}”吗？`, [
       { text: "取消", style: "cancel" },
       {
+        text: "删除",
+        style: "destructive",
         onPress: () => {
           void onDeleteLiability(liability.id);
           if (liabilityForm.id === liability.id) {
             resetLiabilityForm();
           }
         },
-        style: "destructive",
-        text: "删除",
       },
     ]);
   };
@@ -207,10 +207,8 @@ export default function AssetsLiabilitiesScreen({
     <View style={styles.stack}>
       <View style={sharedStyles.pageHeader}>
         <Text style={sharedStyles.eyebrow}>Assets & Liabilities</Text>
-        <Text style={sharedStyles.pageTitle}>资产负债</Text>
-        <Text style={sharedStyles.pageCopy}>
-          先录入你拥有什么、欠了什么，用于生成个人资产负债表。
-        </Text>
+        <Text style={styles.title}>资产负债管理</Text>
+        <Text style={sharedStyles.pageCopy}>在这里维护你的资产和负债底稿，用于生成个人资产负债表。</Text>
       </View>
 
       <View style={styles.summaryPanel}>
@@ -223,7 +221,7 @@ export default function AssetsLiabilitiesScreen({
           <Text style={styles.summaryValue}>{formatCurrency(summary.totalLiabilities)}</Text>
         </View>
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>所有者权益（个人净资产）</Text>
+          <Text style={styles.summaryLabel}>净资产</Text>
           <Text style={styles.summaryValue}>{formatCurrency(summary.ownerEquity)}</Text>
         </View>
       </View>
@@ -233,7 +231,7 @@ export default function AssetsLiabilitiesScreen({
         <TextInput
           onChangeText={(value) => setAssetForm((current) => ({ ...current, name: value }))}
           placeholder="资产名称，例如：工资卡余额"
-          placeholderTextColor="#8a9380"
+          placeholderTextColor={theme.colors.textMuted}
           style={sharedStyles.input}
           value={assetForm.name}
         />
@@ -244,11 +242,7 @@ export default function AssetsLiabilitiesScreen({
               <Pressable
                 key={option.value}
                 onPress={() => setAssetForm((current) => ({ ...current, category: option.value }))}
-                style={[
-                  sharedStyles.chip,
-                  styles.chip,
-                  isActive && sharedStyles.chipActiveLight,
-                ]}
+                style={[sharedStyles.chip, isActive && sharedStyles.chipActiveLight]}
               >
                 <Text style={sharedStyles.chipText}>{option.label}</Text>
               </Pressable>
@@ -259,7 +253,7 @@ export default function AssetsLiabilitiesScreen({
           keyboardType="decimal-pad"
           onChangeText={(value) => setAssetForm((current) => ({ ...current, amount: value }))}
           placeholder="当前金额或当前价值"
-          placeholderTextColor="#8a9380"
+          placeholderTextColor={theme.colors.textMuted}
           style={sharedStyles.input}
           value={assetForm.amount}
         />
@@ -267,11 +261,7 @@ export default function AssetsLiabilitiesScreen({
         <View style={styles.chipGroup}>
           <Pressable
             onPress={() => setAssetForm((current) => ({ ...current, accountId: undefined }))}
-            style={[
-              sharedStyles.chip,
-              styles.chip,
-              !assetForm.accountId && sharedStyles.chipActiveLight,
-            ]}
+            style={[sharedStyles.chip, !assetForm.accountId && sharedStyles.chipActiveLight]}
           >
             <Text style={sharedStyles.chipText}>不关联</Text>
           </Pressable>
@@ -281,11 +271,7 @@ export default function AssetsLiabilitiesScreen({
               <Pressable
                 key={account.id}
                 onPress={() => setAssetForm((current) => ({ ...current, accountId: account.id }))}
-                style={[
-                  sharedStyles.chip,
-                  styles.chip,
-                  isActive && sharedStyles.chipActiveLight,
-                ]}
+                style={[sharedStyles.chip, isActive && sharedStyles.chipActiveLight]}
               >
                 <Text style={sharedStyles.chipText}>{account.name}</Text>
               </Pressable>
@@ -296,7 +282,7 @@ export default function AssetsLiabilitiesScreen({
           multiline
           onChangeText={(value) => setAssetForm((current) => ({ ...current, note: value }))}
           placeholder="备注（可选）"
-          placeholderTextColor="#8a9380"
+          placeholderTextColor={theme.colors.textMuted}
           style={[sharedStyles.input, sharedStyles.textArea]}
           value={assetForm.note}
         />
@@ -304,7 +290,7 @@ export default function AssetsLiabilitiesScreen({
           <Pressable
             disabled={isSavingAsset}
             onPress={() => void handleSubmitAsset()}
-            style={[sharedStyles.primaryButton, styles.primaryAction, isSavingAsset && styles.buttonDisabled]}
+            style={[sharedStyles.primaryButton, styles.actionMain, isSavingAsset && styles.buttonDisabled]}
           >
             <Text style={sharedStyles.primaryButtonText}>
               {assetForm.id ? "保存资产修改" : "添加资产"}
@@ -327,17 +313,15 @@ export default function AssetsLiabilitiesScreen({
               <View style={styles.itemText}>
                 <Text style={styles.itemTitle}>{asset.name}</Text>
                 <Text style={styles.itemMeta}>
-                  {assetCategoryOptions.find((option) => option.value === asset.category)?.label ??
-                    asset.category}
+                  {assetCategoryOptions.find((option) => option.value === asset.category)?.label ?? asset.category}
                 </Text>
               </View>
-              <Text style={styles.value}>{formatCurrency(asset.currentValue)}</Text>
+              <Text style={styles.itemValue}>{formatCurrency(asset.currentValue)}</Text>
             </View>
             {asset.note ? <Text style={styles.itemNote}>{asset.note}</Text> : null}
             {asset.accountId ? (
               <Text style={styles.itemMeta}>
-                关联账户：
-                {activeAccounts.find((account) => account.id === asset.accountId)?.name ?? "已删除账户"}
+                关联账户：{activeAccounts.find((account) => account.id === asset.accountId)?.name ?? "已删除账户"}
               </Text>
             ) : null}
             <View style={styles.inlineActions}>
@@ -357,7 +341,7 @@ export default function AssetsLiabilitiesScreen({
         <TextInput
           onChangeText={(value) => setLiabilityForm((current) => ({ ...current, name: value }))}
           placeholder="负债名称，例如：信用卡应还款"
-          placeholderTextColor="#8a9380"
+          placeholderTextColor={theme.colors.textMuted}
           style={sharedStyles.input}
           value={liabilityForm.name}
         />
@@ -368,11 +352,7 @@ export default function AssetsLiabilitiesScreen({
               <Pressable
                 key={option.value}
                 onPress={() => setLiabilityForm((current) => ({ ...current, category: option.value }))}
-                style={[
-                  sharedStyles.chip,
-                  styles.chip,
-                  isActive && sharedStyles.chipActiveLight,
-                ]}
+                style={[sharedStyles.chip, isActive && sharedStyles.chipActiveLight]}
               >
                 <Text style={sharedStyles.chipText}>{option.label}</Text>
               </Pressable>
@@ -383,14 +363,14 @@ export default function AssetsLiabilitiesScreen({
           keyboardType="decimal-pad"
           onChangeText={(value) => setLiabilityForm((current) => ({ ...current, amount: value }))}
           placeholder="负债金额"
-          placeholderTextColor="#8a9380"
+          placeholderTextColor={theme.colors.textMuted}
           style={sharedStyles.input}
           value={liabilityForm.amount}
         />
         <TextInput
           onChangeText={(value) => setLiabilityForm((current) => ({ ...current, dueDate: value }))}
           placeholder="到期日（可选，YYYY-MM-DD）"
-          placeholderTextColor="#8a9380"
+          placeholderTextColor={theme.colors.textMuted}
           style={sharedStyles.input}
           value={liabilityForm.dueDate}
         />
@@ -398,7 +378,7 @@ export default function AssetsLiabilitiesScreen({
           multiline
           onChangeText={(value) => setLiabilityForm((current) => ({ ...current, note: value }))}
           placeholder="备注（可选）"
-          placeholderTextColor="#8a9380"
+          placeholderTextColor={theme.colors.textMuted}
           style={[sharedStyles.input, sharedStyles.textArea]}
           value={liabilityForm.note}
         />
@@ -406,11 +386,7 @@ export default function AssetsLiabilitiesScreen({
           <Pressable
             disabled={isSavingLiability}
             onPress={() => void handleSubmitLiability()}
-            style={[
-              sharedStyles.primaryButton,
-              styles.primaryAction,
-              isSavingLiability && styles.buttonDisabled,
-            ]}
+            style={[sharedStyles.primaryButton, styles.actionMain, isSavingLiability && styles.buttonDisabled]}
           >
             <Text style={sharedStyles.primaryButtonText}>
               {liabilityForm.id ? "保存负债修改" : "添加负债"}
@@ -439,20 +415,15 @@ export default function AssetsLiabilitiesScreen({
                     liability.category}
                 </Text>
               </View>
-              <Text style={styles.value}>{formatCurrency(liability.amount)}</Text>
+              <Text style={styles.itemValue}>{formatCurrency(liability.amount)}</Text>
             </View>
-            {liability.dueDate ? (
-              <Text style={styles.itemMeta}>到期日：{liability.dueDate}</Text>
-            ) : null}
+            {liability.dueDate ? <Text style={styles.itemMeta}>到期日：{liability.dueDate}</Text> : null}
             {liability.note ? <Text style={styles.itemNote}>{liability.note}</Text> : null}
             <View style={styles.inlineActions}>
               <Pressable onPress={() => handleEditLiability(liability)} style={styles.inlineButton}>
                 <Text style={styles.inlineButtonText}>编辑</Text>
               </Pressable>
-              <Pressable
-                onPress={() => confirmDeleteLiability(liability)}
-                style={styles.inlineDangerButton}
-              >
+              <Pressable onPress={() => confirmDeleteLiability(liability)} style={styles.inlineDangerButton}>
                 <Text style={styles.inlineDangerButtonText}>删除</Text>
               </Pressable>
             </View>
@@ -464,15 +435,15 @@ export default function AssetsLiabilitiesScreen({
 }
 
 const styles = StyleSheet.create({
+  actionMain: {
+    flex: 1,
+  },
   actionRow: {
     flexDirection: "row",
     gap: theme.spacing.sm,
   },
   buttonDisabled: {
     opacity: 0.65,
-  },
-  chip: {
-    alignItems: "center",
   },
   chipGroup: {
     flexDirection: "row",
@@ -481,7 +452,7 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     color: theme.colors.textSecondary,
-    fontSize: theme.typography.label,
+    fontSize: 14,
     fontWeight: "700",
     marginBottom: theme.spacing.sm,
   },
@@ -492,30 +463,32 @@ const styles = StyleSheet.create({
   },
   inlineButton: {
     alignItems: "center",
-    backgroundColor: theme.colors.surfaceMuted,
+    backgroundColor: theme.colors.surfaceSoft,
     borderRadius: theme.radius.md,
+    justifyContent: "center",
+    minHeight: 40,
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: 9,
   },
   inlineButtonText: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.typography.label,
+    color: theme.colors.primaryDeep,
+    fontSize: 14,
     fontWeight: "700",
   },
   inlineDangerButton: {
     alignItems: "center",
     backgroundColor: theme.colors.dangerSoft,
     borderRadius: theme.radius.md,
+    justifyContent: "center",
+    minHeight: 40,
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: 9,
   },
   inlineDangerButtonText: {
     color: theme.colors.danger,
-    fontSize: theme.typography.label,
+    fontSize: 14,
     fontWeight: "700",
   },
   itemCard: {
-    backgroundColor: theme.colors.inputBackground,
+    backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.md,
     borderWidth: 1,
@@ -529,13 +502,13 @@ const styles = StyleSheet.create({
   },
   itemMeta: {
     color: theme.colors.textMuted,
-    fontSize: 12,
+    fontSize: 13,
     lineHeight: 18,
   },
   itemNote: {
     color: theme.colors.textSecondary,
-    fontSize: theme.typography.label,
-    lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 22,
     marginTop: theme.spacing.sm,
   },
   itemText: {
@@ -544,29 +517,29 @@ const styles = StyleSheet.create({
   },
   itemTitle: {
     color: theme.colors.textPrimary,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
+  },
+  itemValue: {
+    color: theme.colors.textPrimary,
+    fontSize: 16,
+    fontWeight: "800",
   },
   panel: {
     gap: theme.spacing.md,
   },
-  primaryAction: {
-    flex: 1,
-  },
   stack: {
-    gap: theme.spacing.xl,
+    gap: theme.spacing.lg,
   },
   summaryLabel: {
     color: theme.colors.textInverse,
-    flex: 1,
-    fontSize: theme.typography.label,
-    fontWeight: "700",
-    paddingRight: theme.spacing.md,
+    fontSize: 14,
+    fontWeight: "600",
   },
   summaryPanel: {
-    backgroundColor: theme.colors.surfaceStrong,
-    borderRadius: theme.radius.lg,
-    gap: theme.spacing.md,
+    backgroundColor: theme.colors.primaryDeep,
+    borderRadius: theme.radius.xl,
+    gap: theme.spacing.sm,
     padding: theme.spacing.lg,
   },
   summaryRow: {
@@ -575,14 +548,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   summaryValue: {
-    color: theme.colors.textInverse,
-    fontSize: 15,
+    color: "#FFFFFF",
+    fontSize: 16,
     fontWeight: "800",
-    textAlign: "right",
   },
-  value: {
+  title: {
     color: theme.colors.textPrimary,
-    fontSize: theme.typography.body,
-    fontWeight: "700",
+    fontSize: 30,
+    fontWeight: "800",
+    letterSpacing: -0.8,
   },
 });

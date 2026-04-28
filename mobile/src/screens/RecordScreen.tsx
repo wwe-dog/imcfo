@@ -62,6 +62,8 @@ const examples = [
   "朋友还我200",
 ];
 
+const quickCategories = ["餐饮", "购物", "交通", "娱乐", "其他"];
+
 const findOption = (type: NaturalLanguageTransactionType): TransactionTypeOption =>
   transactionTypeOptions.find((option) => option.type === type) ?? transactionTypeOptions[0];
 
@@ -81,9 +83,9 @@ export default function RecordScreen({
 }: RecordScreenProps) {
   const [naturalText, setNaturalText] = useState("");
   const [draft, setDraft] = useState<ParsedTransactionDraft | null>(null);
-  const [type, setType] = useState<NaturalLanguageTransactionType>("income");
+  const [type, setType] = useState<NaturalLanguageTransactionType>("expense");
   const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState(findOption("income").defaultCategory);
+  const [category, setCategory] = useState(findOption("expense").defaultCategory);
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [date, setDate] = useState(today());
   const [note, setNote] = useState("");
@@ -251,7 +253,7 @@ export default function RecordScreen({
         <View style={styles.headerRow}>
           <View style={styles.headerCopy}>
             <Text style={sharedStyles.eyebrow}>Manage</Text>
-            <Text style={sharedStyles.pageTitle}>管理</Text>
+            <Text style={styles.pageTitle}>管理</Text>
             <Text style={sharedStyles.pageCopy}>
               用一句话描述这笔钱发生了什么，系统识别后再确认入账。
             </Text>
@@ -264,6 +266,32 @@ export default function RecordScreen({
 
       <View style={[sharedStyles.card, styles.formCard]}>
         <Text style={sharedStyles.sectionTitle}>一句话记账</Text>
+
+        <Text style={styles.amountLabel}>金额</Text>
+        <TextInput
+          keyboardType="decimal-pad"
+          onChangeText={setAmount}
+          placeholder="¥"
+          placeholderTextColor={theme.colors.textMuted}
+          style={styles.amountInput}
+          value={amount}
+        />
+
+        <View style={styles.quickCategoryRow}>
+          {quickCategories.map((item) => {
+            const isActive = category === item;
+            return (
+              <Pressable
+                key={item}
+                onPress={() => setCategory(item)}
+                style={[sharedStyles.chip, isActive && sharedStyles.chipActiveLight, styles.quickChip]}
+              >
+                <Text style={sharedStyles.chipText}>{item}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
         <TextInput
           multiline
           onChangeText={(value) => {
@@ -271,27 +299,28 @@ export default function RecordScreen({
             setSuccessMessage("");
           }}
           placeholder={examples.join("\n")}
-          placeholderTextColor="#8a9380"
+          placeholderTextColor={theme.colors.textMuted}
           style={[sharedStyles.input, sharedStyles.textArea, styles.naturalInput]}
           value={naturalText}
         />
-        <Pressable onPress={handleRecognize} style={styles.accentButton}>
-          <Text style={styles.accentButtonText}>智能识别</Text>
+
+        <Pressable onPress={handleRecognize} style={sharedStyles.primaryButton}>
+          <Text style={sharedStyles.primaryButtonText}>智能识别</Text>
         </Pressable>
       </View>
 
       <View style={[sharedStyles.card, styles.formCard]}>
         <Text style={sharedStyles.sectionTitle}>手动修改 / 高级填写</Text>
+
         <Text style={styles.fieldLabel}>交易类型</Text>
         <View style={styles.chipWrap}>
           {transactionTypeOptions.map((option) => {
             const isActive = type === option.type;
-
             return (
               <Pressable
                 key={option.type}
                 onPress={() => handleTypeChange(option.type)}
-                style={[sharedStyles.chip, styles.chip, isActive && sharedStyles.chipActiveDark]}
+                style={[sharedStyles.chip, isActive && sharedStyles.chipActiveDark]}
               >
                 <Text style={[sharedStyles.chipText, isActive && sharedStyles.chipTextInverse]}>
                   {option.label}
@@ -306,19 +335,6 @@ export default function RecordScreen({
           <Text style={sharedStyles.helperText}>{selectedMeta.impactText}</Text>
         </View>
 
-        <Text style={styles.fieldLabel}>金额</Text>
-        <TextInput
-          keyboardType="decimal-pad"
-          onChangeText={(value) => {
-            setAmount(value);
-            setSuccessMessage("");
-          }}
-          placeholder="例如 1000"
-          placeholderTextColor="#8a9380"
-          style={sharedStyles.input}
-          value={amount}
-        />
-
         <Text style={styles.fieldLabel}>分类</Text>
         <TextInput
           onChangeText={(value) => {
@@ -326,7 +342,7 @@ export default function RecordScreen({
             setSuccessMessage("");
           }}
           placeholder="例如 工资薪金 / 餐饮 / 投资资产"
-          placeholderTextColor="#8a9380"
+          placeholderTextColor={theme.colors.textMuted}
           style={sharedStyles.input}
           value={category}
         />
@@ -336,7 +352,6 @@ export default function RecordScreen({
           <View style={styles.chipWrap}>
             {activeAccounts.map((account) => {
               const isActive = accountId === account.id;
-
               return (
                 <Pressable
                   key={account.id}
@@ -344,7 +359,7 @@ export default function RecordScreen({
                     setAccountId(account.id);
                     setSuccessMessage("");
                   }}
-                  style={[sharedStyles.chip, styles.chip, isActive && sharedStyles.chipActiveDark]}
+                  style={[sharedStyles.chip, isActive && sharedStyles.chipActiveDark]}
                 >
                   <Text style={[sharedStyles.chipText, isActive && sharedStyles.chipTextInverse]}>
                     {account.name}
@@ -356,7 +371,7 @@ export default function RecordScreen({
         ) : (
           <View style={styles.messageBox}>
             <Text style={sharedStyles.warningText}>
-              当前没有可用账户，请先在设置中恢复示例数据；后续版本会提供账户管理能力。
+              当前没有可用账户，请先在我的页恢复示例数据；后续版本会提供账户管理能力。
             </Text>
           </View>
         )}
@@ -368,7 +383,7 @@ export default function RecordScreen({
             setSuccessMessage("");
           }}
           placeholder="YYYY-MM-DD"
-          placeholderTextColor="#8a9380"
+          placeholderTextColor={theme.colors.textMuted}
           style={sharedStyles.input}
           value={date}
         />
@@ -378,7 +393,7 @@ export default function RecordScreen({
           multiline
           onChangeText={setNote}
           placeholder="记录这笔事项的原因，可选"
-          placeholderTextColor="#8a9380"
+          placeholderTextColor={theme.colors.textMuted}
           style={[sharedStyles.input, sharedStyles.textArea]}
           value={note}
         />
@@ -392,22 +407,17 @@ export default function RecordScreen({
         <Pressable
           disabled={isSaving}
           onPress={() => void handleSubmit()}
-          style={[sharedStyles.primaryButton, isSaving && styles.buttonDisabled]}
+          style={[sharedStyles.secondaryButton, isSaving && styles.buttonDisabled]}
         >
-          <Text style={sharedStyles.primaryButtonText}>
+          <Text style={sharedStyles.secondaryButtonText}>
             {isSaving ? "保存中..." : "保存手动记录"}
           </Text>
         </Pressable>
       </View>
 
-      <Modal
-        animationType="fade"
-        onRequestClose={handleCloseModal}
-        transparent
-        visible={isModalVisible}
-      >
+      <Modal animationType="fade" onRequestClose={handleCloseModal} transparent visible={isModalVisible}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+          <View style={[sharedStyles.card, styles.modalCard]}>
             {modalState === "draft" ? (
               <>
                 <Text style={sharedStyles.sectionTitle}>识别结果</Text>
@@ -415,6 +425,7 @@ export default function RecordScreen({
                   系统根据你的描述生成了这笔记录，请确认后再入账。
                 </Text>
                 {draft?.warning ? <Text style={sharedStyles.warningText}>{draft.warning}</Text> : null}
+
                 <View style={styles.modalRow}>
                   <Text style={styles.modalLabel}>类型</Text>
                   <Text style={styles.modalValue}>{selectedOption.label}</Text>
@@ -439,6 +450,7 @@ export default function RecordScreen({
                   <Text style={styles.modalLabel}>现金流</Text>
                   <Text style={styles.modalValue}>{selectedMeta.cashFlowLabel}</Text>
                 </View>
+
                 <View style={sharedStyles.helperBox}>
                   <Text style={sharedStyles.helperTitle}>会计影响说明</Text>
                   <Text style={sharedStyles.helperText}>
@@ -447,18 +459,19 @@ export default function RecordScreen({
                       : selectedMeta.impactText}
                   </Text>
                 </View>
+
                 <View style={styles.modalActionRow}>
                   <Pressable
                     disabled={isSaving}
                     onPress={handleCloseModal}
-                    style={[sharedStyles.secondaryButton, isSaving && styles.buttonDisabled]}
+                    style={[sharedStyles.secondaryButton, isSaving && styles.buttonDisabled, styles.modalAction]}
                   >
                     <Text style={sharedStyles.secondaryButtonText}>手动修改</Text>
                   </Pressable>
                   <Pressable
                     disabled={isSaving}
                     onPress={() => void handleSubmit()}
-                    style={[sharedStyles.primaryButton, isSaving && styles.buttonDisabled]}
+                    style={[sharedStyles.primaryButton, isSaving && styles.buttonDisabled, styles.modalAction]}
                   >
                     <Text style={sharedStyles.primaryButtonText}>
                       {isSaving ? "入账中..." : "确认入账"}
@@ -472,10 +485,12 @@ export default function RecordScreen({
                 <Text style={sharedStyles.pageCopy}>
                   这笔记录已保存，首页和报表数据已同步更新。
                 </Text>
+
                 <View style={sharedStyles.helperBox}>
                   <Text style={sharedStyles.helperTitle}>本次影响</Text>
                   <Text style={sharedStyles.helperText}>{selectedMeta.impactText}</Text>
                 </View>
+
                 <View style={styles.modalButtonStack}>
                   <Pressable onPress={handleContinue} style={sharedStyles.primaryButton}>
                     <Text style={sharedStyles.primaryButtonText}>继续记一笔</Text>
@@ -500,30 +515,30 @@ export default function RecordScreen({
 }
 
 const styles = StyleSheet.create({
-  accentButton: {
-    alignItems: "center",
-    backgroundColor: theme.colors.accent,
-    borderRadius: theme.radius.md,
-    justifyContent: "center",
-    minHeight: theme.touch.minHeight,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-  },
-  accentButtonText: {
+  amountInput: {
+    backgroundColor: theme.colors.surface,
+    borderBottomColor: theme.colors.primary,
+    borderBottomWidth: 2,
+    borderColor: theme.colors.primarySoft,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
     color: theme.colors.textPrimary,
-    fontSize: theme.typography.body,
-    fontWeight: "800",
+    fontSize: 36,
+    fontWeight: "300",
+    minHeight: 76,
+    paddingHorizontal: theme.spacing.md,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+  },
+  amountLabel: {
+    color: theme.colors.textPrimary,
+    fontSize: 18,
+    fontWeight: "600",
   },
   buttonDisabled: {
     opacity: 0.65,
-  },
-  chip: {
-    alignItems: "center",
-  },
-  chipWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: theme.spacing.sm,
   },
   fieldLabel: {
     color: theme.colors.textSecondary,
@@ -538,8 +553,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     minHeight: theme.touch.minHeight,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 12,
   },
   ghostButtonText: {
     color: theme.colors.textSecondary,
@@ -561,6 +576,9 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
   },
+  modalAction: {
+    flex: 1,
+  },
   modalActionRow: {
     flexDirection: "row",
     gap: theme.spacing.sm,
@@ -569,23 +587,18 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   modalCard: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
     gap: theme.spacing.md,
-    padding: theme.spacing.lg,
   },
   modalLabel: {
     color: theme.colors.textSecondary,
     flex: 1,
-    fontSize: theme.typography.body,
+    fontSize: 14,
   },
   modalOverlay: {
-    backgroundColor: "rgba(0, 0, 0, 0.36)",
+    backgroundColor: "rgba(24, 16, 44, 0.18)",
     flex: 1,
     justifyContent: "center",
-    padding: theme.spacing.xl,
+    padding: theme.spacing.container,
   },
   modalRow: {
     alignItems: "center",
@@ -599,35 +612,57 @@ const styles = StyleSheet.create({
   modalValue: {
     color: theme.colors.textPrimary,
     flex: 1,
-    fontSize: theme.typography.body,
+    fontSize: 14,
     fontWeight: "700",
     textAlign: "right",
   },
   moreButton: {
     alignItems: "center",
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.borderStrong,
+    borderRadius: theme.radius.pill,
     borderWidth: 1,
     justifyContent: "center",
-    minHeight: 40,
+    minHeight: 38,
     minWidth: 64,
-    paddingHorizontal: theme.spacing.md,
+    paddingHorizontal: 14,
   },
   moreButtonText: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.typography.label,
-    fontWeight: "700",
+    color: theme.colors.primaryDeep,
+    fontSize: 14,
+    fontWeight: "600",
   },
   naturalInput: {
-    minHeight: 116,
+    borderColor: theme.colors.primaryDeep,
+    minHeight: 150,
+  },
+  pageTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 32,
+    fontWeight: "800",
+    letterSpacing: -0.8,
+  },
+  quickCategoryRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+    justifyContent: "space-between",
+  },
+  quickChip: {
+    flex: 1,
+    minWidth: "18%",
   },
   stack: {
-    gap: theme.spacing.xl,
+    gap: theme.spacing.lg,
   },
   successBox: {
     backgroundColor: theme.colors.successSoft,
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
+  },
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
   },
 });

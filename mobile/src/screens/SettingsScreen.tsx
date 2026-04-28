@@ -72,31 +72,41 @@ export default function SettingsScreen({
 
   return (
     <View style={styles.stack}>
-      <View style={sharedStyles.pageHeader}>
-        <Text style={sharedStyles.eyebrow}>Settings</Text>
-        <Text style={sharedStyles.pageTitle}>设置</Text>
-        <Text style={sharedStyles.pageCopy}>
-          V0.1 只管理本地数据，不接入云端、账号或外部同步。
-        </Text>
+      <View style={styles.profileSection}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>我</Text>
+        </View>
+        <Text style={styles.profileName}>我的</Text>
+        <Text style={styles.profileSubtitle}>个人经营资料与本地数据管理</Text>
       </View>
 
-      <View style={[sharedStyles.card, styles.panel]}>
-        <Text style={sharedStyles.sectionTitle}>当前数据状态</Text>
-        <View style={styles.metaRow}>
-          <Text style={styles.metaLabel}>数据版本</Text>
-          <Text style={styles.metaValue}>{appVersion}</Text>
-        </View>
-        <View style={styles.metaRow}>
-          <Text style={styles.metaLabel}>存储方式</Text>
-          <Text style={styles.metaValue}>{storageMode}</Text>
-        </View>
+      <View style={[sharedStyles.card, styles.listCard]}>
+        <Pressable style={styles.listRow}>
+          <View>
+            <Text style={styles.listTitle}>数据管理</Text>
+            <Text style={styles.listSubtitle}>导入 / 导出 / 清理</Text>
+          </View>
+          <Text style={styles.listArrow}>›</Text>
+        </Pressable>
+        <Pressable style={[styles.listRow, styles.listRowBorder]}>
+          <View>
+            <Text style={styles.listTitle}>存储方式</Text>
+            <Text style={styles.listSubtitle}>{storageMode}</Text>
+          </View>
+          <Text style={styles.listArrow}>›</Text>
+        </Pressable>
+        <Pressable style={[styles.listRow, styles.listRowBorder]}>
+          <View>
+            <Text style={styles.listTitle}>版本信息</Text>
+            <Text style={styles.listSubtitle}>当前数据版本 {appVersion}</Text>
+          </View>
+          <Text style={styles.listArrow}>›</Text>
+        </Pressable>
       </View>
 
       <View style={[sharedStyles.card, styles.panel]}>
         <Text style={sharedStyles.sectionTitle}>导出本地数据</Text>
-        <Text style={sharedStyles.pageCopy}>
-          导出会生成完整的应用数据 JSON，便于手动备份或复制留存。
-        </Text>
+        <Text style={sharedStyles.pageCopy}>导出会生成完整 JSON，便于你手动备份或迁移。</Text>
         <Pressable
           disabled={isExporting}
           onPress={() => void handleExport()}
@@ -110,7 +120,7 @@ export default function SettingsScreen({
           editable={false}
           multiline
           placeholder="导出的完整 JSON 会显示在这里"
-          placeholderTextColor="#8a9380"
+          placeholderTextColor={theme.colors.textMuted}
           style={[sharedStyles.input, sharedStyles.textArea, styles.readOnlyInput, styles.largeTextArea]}
           value={exportedJson}
         />
@@ -118,14 +128,12 @@ export default function SettingsScreen({
 
       <View style={[sharedStyles.card, styles.panel]}>
         <Text style={sharedStyles.sectionTitle}>导入本地数据</Text>
-        <Text style={sharedStyles.pageCopy}>
-          请粘贴完整 JSON。导入后会替换当前本地数据，请先确认内容来源可靠。
-        </Text>
+        <Text style={sharedStyles.pageCopy}>请粘贴完整 JSON。导入后会替换当前本地数据。</Text>
         <TextInput
           multiline
           onChangeText={setImportJson}
           placeholder="把完整 JSON 粘贴到这里"
-          placeholderTextColor="#8a9380"
+          placeholderTextColor={theme.colors.textMuted}
           style={[sharedStyles.input, sharedStyles.textArea, styles.largeTextArea]}
           textAlignVertical="top"
           value={importJson}
@@ -133,9 +141,9 @@ export default function SettingsScreen({
         <Pressable
           disabled={isImporting}
           onPress={() => void handleImport()}
-          style={[sharedStyles.primaryButton, isImporting && styles.buttonDisabled]}
+          style={[sharedStyles.secondaryButton, isImporting && styles.buttonDisabled]}
         >
-          <Text style={sharedStyles.primaryButtonText}>
+          <Text style={sharedStyles.secondaryButtonText}>
             {isImporting ? "正在导入..." : "导入本地数据"}
           </Text>
         </Pressable>
@@ -143,11 +151,9 @@ export default function SettingsScreen({
 
       <View style={[sharedStyles.card, styles.panel]}>
         <Text style={sharedStyles.sectionTitle}>重置与清空</Text>
-        <Text style={sharedStyles.pageCopy}>
-          恢复示例数据会覆盖当前数据；清空数据会保留空白数据结构，适合重新开始。
-        </Text>
-        <Pressable onPress={confirmReset} style={sharedStyles.primaryButton}>
-          <Text style={sharedStyles.primaryButtonText}>恢复示例数据</Text>
+        <Text style={sharedStyles.pageCopy}>恢复示例数据会覆盖当前数据；清空会保留空白数据结构。</Text>
+        <Pressable onPress={confirmReset} style={sharedStyles.secondaryButton}>
+          <Text style={sharedStyles.secondaryButtonText}>恢复示例数据</Text>
         </Pressable>
         <Pressable onPress={confirmClear} style={styles.dangerButton}>
           <Text style={styles.dangerButtonText}>清空所有本地数据</Text>
@@ -158,19 +164,32 @@ export default function SettingsScreen({
 }
 
 const styles = StyleSheet.create({
+  avatar: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.borderStrong,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    height: 88,
+    justifyContent: "center",
+    width: 88,
+  },
+  avatarText: {
+    color: theme.colors.primaryDeep,
+    fontSize: 28,
+    fontWeight: "700",
+  },
   buttonDisabled: {
     opacity: 0.65,
   },
   dangerButton: {
     alignItems: "center",
     backgroundColor: theme.colors.dangerSoft,
-    borderColor: theme.colors.dangerSoft,
     borderRadius: theme.radius.md,
-    borderWidth: 1,
     justifyContent: "center",
     minHeight: theme.touch.minHeight,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 12,
   },
   dangerButtonText: {
     color: theme.colors.danger,
@@ -180,29 +199,59 @@ const styles = StyleSheet.create({
   largeTextArea: {
     minHeight: 164,
   },
-  metaLabel: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.typography.body,
+  listArrow: {
+    color: theme.colors.textMuted,
+    fontSize: 24,
+    lineHeight: 24,
   },
-  metaRow: {
+  listCard: {
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  listRow: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
   },
-  metaValue: {
+  listRowBorder: {
+    borderTopColor: theme.colors.border,
+    borderTopWidth: 1,
+  },
+  listSubtitle: {
+    color: theme.colors.textMuted,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 2,
+  },
+  listTitle: {
     color: theme.colors.textPrimary,
-    fontSize: theme.typography.body,
-    fontWeight: "700",
-    maxWidth: "58%",
-    textAlign: "right",
+    fontSize: 16,
+    fontWeight: "600",
   },
   panel: {
     gap: theme.spacing.md,
+  },
+  profileName: {
+    color: theme.colors.textPrimary,
+    fontSize: 26,
+    fontWeight: "700",
+    letterSpacing: -0.6,
+  },
+  profileSection: {
+    alignItems: "center",
+    gap: theme.spacing.sm,
+    paddingTop: theme.spacing.sm,
+  },
+  profileSubtitle: {
+    color: theme.colors.textMuted,
+    fontSize: 14,
   },
   readOnlyInput: {
     color: theme.colors.textMuted,
   },
   stack: {
-    gap: theme.spacing.xl,
+    gap: theme.spacing.lg,
   },
 });

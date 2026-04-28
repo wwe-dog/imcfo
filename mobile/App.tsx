@@ -132,7 +132,7 @@ export default function App() {
     if (isLoading || !data || !summary) {
       return (
         <View style={styles.loading}>
-          <ActivityIndicator color={theme.colors.textPrimary} />
+          <ActivityIndicator color={theme.colors.primaryDeep} />
           <Text style={styles.loadingText}>{errorMessage ?? "正在加载本地数据..."}</Text>
         </View>
       );
@@ -190,55 +190,50 @@ export default function App() {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
       <View style={styles.header}>
-        <Text style={styles.eyebrow}>个人经营系统</Text>
-        <Text style={styles.appTitle}>我为 CFO</Text>
+        <Text style={styles.brand}>我为 CFO</Text>
         <Text style={styles.subtitle}>像经营公司一样经营自己</Text>
       </View>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {renderScreen()}
       </ScrollView>
-      <View style={styles.tabBar}>
-        {tabs.map((tab) => {
-          const isActive = activeScreen === tab.key;
-
-          return (
-            <Pressable
-              key={tab.key}
-              onPress={() => setActiveScreen(tab.key)}
-              style={[styles.tabButton, isActive && styles.tabButtonActive]}
-            >
-              <Text style={[styles.tabText, isActive && styles.tabTextActive]}>{tab.label}</Text>
-            </Pressable>
-          );
-        })}
+      <View style={styles.tabBarShell}>
+        <View style={styles.tabBar}>
+          {tabs.map((tab) => {
+            const isActive = activeScreen === tab.key;
+            return (
+              <Pressable
+                key={tab.key}
+                onPress={() => setActiveScreen(tab.key)}
+                style={styles.tabButton}
+              >
+                <Text style={[styles.tabText, isActive && styles.tabTextActive]}>{tab.label}</Text>
+                <View style={[styles.tabDot, isActive && styles.tabDotActive]} />
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  appTitle: {
+  brand: {
     color: theme.colors.textPrimary,
-    fontSize: theme.typography.hero,
-    fontWeight: "900",
-    lineHeight: 38,
+    fontSize: 24,
+    fontWeight: "700",
+    letterSpacing: -0.6,
   },
   content: {
-    padding: theme.spacing.xl,
-    paddingBottom: 116,
-  },
-  eyebrow: {
-    color: theme.colors.textMuted,
-    fontSize: theme.typography.eyebrow,
-    fontWeight: "700",
-    marginBottom: theme.spacing.xs,
+    padding: theme.spacing.container,
+    paddingBottom: 120,
   },
   header: {
-    backgroundColor: theme.colors.headerBackground,
+    backgroundColor: "rgba(255,255,255,0.82)",
     borderBottomColor: theme.colors.border,
     borderBottomWidth: 1,
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: 18,
+    paddingHorizontal: theme.spacing.container,
+    paddingVertical: 16,
   },
   loading: {
     alignItems: "center",
@@ -248,49 +243,63 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: theme.colors.textSecondary,
-    fontSize: theme.typography.body,
+    fontSize: 15,
   },
   safeArea: {
-    backgroundColor: theme.colors.appBackground,
+    backgroundColor: theme.colors.background,
     flex: 1,
   },
   subtitle: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.typography.body,
-    lineHeight: 22,
-    marginTop: theme.spacing.xs,
+    color: theme.colors.textMuted,
+    fontSize: 14,
+    marginTop: 2,
   },
   tabBar: {
-    backgroundColor: theme.colors.surfaceStrong,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    bottom: 0,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
     flexDirection: "row",
-    gap: 8,
+    justifyContent: "space-around",
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 10,
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 24,
+    elevation: 3,
+  },
+  tabBarShell: {
+    bottom: 0,
     left: 0,
-    paddingBottom: 16,
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: theme.spacing.md,
+    paddingBottom: 14,
+    paddingHorizontal: theme.spacing.container,
     position: "absolute",
     right: 0,
   },
   tabButton: {
     alignItems: "center",
-    borderRadius: theme.radius.md,
-    flex: 1,
+    gap: 6,
     justifyContent: "center",
-    minHeight: 48,
-    paddingHorizontal: 6,
+    minHeight: 52,
+    minWidth: 64,
   },
-  tabButtonActive: {
-    backgroundColor: theme.colors.accent,
+  tabDot: {
+    backgroundColor: "transparent",
+    borderRadius: theme.radius.pill,
+    height: 6,
+    width: 6,
+  },
+  tabDotActive: {
+    backgroundColor: theme.colors.primary,
   },
   tabText: {
-    color: theme.colors.textInverse,
+    color: theme.colors.textMuted,
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   tabTextActive: {
-    color: theme.colors.textPrimary,
+    color: theme.colors.primaryDeep,
+    fontWeight: "700",
   },
 });

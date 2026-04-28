@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from "react-native";
-import { theme } from "../styles/theme";
+import { sharedStyles, theme } from "../styles/theme";
 
 interface ReportBlockProps {
   title: string;
@@ -13,26 +13,31 @@ interface ReportBlockProps {
 
 export default function ReportBlock({ title, subtitle, rows, footer }: ReportBlockProps) {
   return (
-    <View style={styles.block}>
+    <View style={[sharedStyles.card, styles.block]}>
       <View style={styles.header}>
-        <Text style={styles.title}>{title}</Text>
-        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+        <View>
+          <Text style={styles.title}>{title}</Text>
+          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+        </View>
+        <View style={styles.sparkline}>
+          <View style={styles.sparklineLine} />
+          <View style={styles.sparklineDot} />
+        </View>
       </View>
+
       <View style={styles.rows}>
         {rows.map((row, index) => (
-          <View
-            key={`${title}-${row.label}`}
-            style={[styles.row, index === rows.length - 1 && styles.rowLast]}
-          >
+          <View key={`${title}-${row.label}`} style={[styles.row, index === rows.length - 1 && styles.rowLast]}>
             <Text style={styles.label}>{row.label}</Text>
             <Text style={styles.value}>{row.value}</Text>
           </View>
         ))}
       </View>
+
       {footer ? (
-        <View style={styles.footerBox}>
-          <Text style={styles.footerLabel}>说明</Text>
-          <Text style={styles.footer}>{footer}</Text>
+        <View style={sharedStyles.helperBox}>
+          <Text style={sharedStyles.helperTitle}>说明</Text>
+          <Text style={sharedStyles.helperText}>{footer}</Text>
         </View>
       ) : null}
     </View>
@@ -41,31 +46,12 @@ export default function ReportBlock({ title, subtitle, rows, footer }: ReportBlo
 
 const styles = StyleSheet.create({
   block: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
     gap: theme.spacing.md,
-    padding: theme.spacing.lg,
-  },
-  footer: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  footerBox: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.md,
-    gap: 4,
-    padding: theme.spacing.md,
-  },
-  footerLabel: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    fontWeight: "700",
   },
   header: {
-    gap: 4,
+    alignItems: "flex-start",
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   label: {
     color: theme.colors.textSecondary,
@@ -75,38 +61,62 @@ const styles = StyleSheet.create({
     paddingRight: theme.spacing.md,
   },
   row: {
-    alignItems: "flex-start",
+    alignItems: "center",
     borderBottomColor: theme.colors.border,
     borderBottomWidth: 1,
     flexDirection: "row",
     gap: theme.spacing.md,
     justifyContent: "space-between",
-    paddingBottom: theme.spacing.md,
-    paddingTop: 2,
+    paddingBottom: theme.spacing.sm,
   },
   rowLast: {
     borderBottomWidth: 0,
     paddingBottom: 0,
   },
   rows: {
-    gap: 10,
+    gap: theme.spacing.sm,
+  },
+  sparkline: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    minHeight: 28,
+    width: 76,
+  },
+  sparklineDot: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.pill,
+    height: 8,
+    marginTop: -3,
+    width: 8,
+  },
+  sparklineLine: {
+    alignSelf: "stretch",
+    borderTopColor: theme.colors.primaryDeep,
+    borderTopWidth: 2,
+    borderTopLeftRadius: theme.radius.pill,
+    borderTopRightRadius: theme.radius.pill,
+    opacity: 0.45,
+    transform: [{ rotate: "-8deg" }],
   },
   subtitle: {
     color: theme.colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
+    marginTop: theme.spacing.xs,
+    maxWidth: 220,
   },
   title: {
     color: theme.colors.textPrimary,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "700",
+    letterSpacing: -0.3,
   },
   value: {
     color: theme.colors.textPrimary,
     flexShrink: 0,
     fontSize: 14,
     fontWeight: "700",
-    maxWidth: "46%",
+    maxWidth: "48%",
     textAlign: "right",
   },
 });

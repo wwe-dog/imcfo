@@ -35,10 +35,7 @@ const getBalanceHint = (
   ownerEquity: number,
 ): string => {
   const isBalanced = Math.abs(totalAssets - (totalLiabilities + ownerEquity)) < 0.01;
-
-  return isBalanced
-    ? "资产 = 负债 + 所有者权益"
-    : "当前数据未平衡，请检查资产和负债录入。";
+  return isBalanced ? "资产 = 负债 + 所有者权益" : "当前数据未平衡，请检查资产和负债录入。";
 };
 
 export default function ReportsScreen({
@@ -51,14 +48,8 @@ export default function ReportsScreen({
   const [mode, setMode] = useState<ReportMode>("simple");
   const isSimple = mode === "simple";
 
-  const balanceSheet = useMemo(
-    () => buildBalanceSheetSummary(assets, liabilities),
-    [assets, liabilities],
-  );
-  const incomeStatement = useMemo(
-    () => buildIncomeStatementSummary(transactions),
-    [transactions],
-  );
+  const balanceSheet = useMemo(() => buildBalanceSheetSummary(assets, liabilities), [assets, liabilities]);
+  const incomeStatement = useMemo(() => buildIncomeStatementSummary(transactions), [transactions]);
   const cashFlowStatement = useMemo(
     () => buildCashFlowStatementSummary(transactions),
     [transactions],
@@ -68,14 +59,11 @@ export default function ReportsScreen({
     if (selectedReport === "balanceSheet") {
       return (
         <ReportBlock
-          footer={
+          title="资产负债表"
+          subtitle={
             isSimple
-              ? "这张表回答：我现在真正属于自己的钱还有多少。"
-              : getBalanceHint(
-                  balanceSheet.totalAssets,
-                  balanceSheet.totalLiabilities,
-                  balanceSheet.ownerEquity,
-                )
+              ? "先看清你现在一共拥有多少、欠了多少，以及真正属于自己的净资产。"
+              : "按专业口径展示资产、负债和所有者权益之间的平衡关系。"
           }
           rows={
             isSimple
@@ -93,12 +81,15 @@ export default function ReportsScreen({
                   { label: "所有者权益", value: formatCurrency(balanceSheet.ownerEquity) },
                 ]
           }
-          subtitle={
+          footer={
             isSimple
-              ? "先看清你现在一共拥有多少、欠了多少，以及真正属于自己的净资产。"
-              : "按专业口径展示资产、负债和所有者权益之间的平衡关系。"
+              ? "这张表回答：我现在真正属于自己的钱还有多少。"
+              : getBalanceHint(
+                  balanceSheet.totalAssets,
+                  balanceSheet.totalLiabilities,
+                  balanceSheet.ownerEquity,
+                )
           }
-          title="资产负债表"
         />
       );
     }
@@ -106,7 +97,12 @@ export default function ReportsScreen({
     if (selectedReport === "incomeStatement") {
       return (
         <ReportBlock
-          footer={isSimple ? "这张表回答：本期到底是盈利还是亏损。" : "利润 = 收入 - 费用"}
+          title="利润表"
+          subtitle={
+            isSimple
+              ? "先看本期赚了多少、花了多少，最后剩下多少利润。"
+              : "按专业口径直接展示收入、费用和利润的关系。"
+          }
           rows={
             isSimple
               ? [
@@ -120,127 +116,80 @@ export default function ReportsScreen({
                   { label: "利润", value: formatCurrency(incomeStatement.profit) },
                 ]
           }
-          subtitle={
-            isSimple
-              ? "先看本期赚了多少、花了多少，最后剩下多少利润。"
-              : "按专业口径直接展示收入、费用和利润的关系。"
-          }
-          title="利润表"
+          footer={isSimple ? "这张表回答：本期到底是盈利还是亏损。" : "利润 = 收入 - 费用"}
         />
       );
     }
 
     return (
       <ReportBlock
-        footer={
-          isSimple
-            ? "这张表回答：现金主要是流进来了，还是流出去了。"
-            : "现金净变化 = 经营活动现金流 + 投资活动现金流 + 筹资活动现金流"
-        }
-        rows={
-          isSimple
-            ? [
-                { label: "现金净变化", value: formatCurrency(cashFlowStatement.cashNetChange) },
-                {
-                  label: "主要现金流方向",
-                  value: getCashFlowDirection(cashFlowStatement.cashNetChange),
-                },
-              ]
-            : [
-                {
-                  label: "经营活动现金流",
-                  value: formatCurrency(cashFlowStatement.operatingCashFlow),
-                },
-                {
-                  label: "投资活动现金流",
-                  value: formatCurrency(cashFlowStatement.investingCashFlow),
-                },
-                {
-                  label: "筹资活动现金流",
-                  value: formatCurrency(cashFlowStatement.financingCashFlow),
-                },
-                { label: "现金净变化", value: formatCurrency(cashFlowStatement.cashNetChange) },
-              ]
-        }
+        title="现金流量表"
         subtitle={
           isSimple
             ? "先看现金最终是增加还是减少，再判断本期现金压力。"
             : "按专业口径区分经营、投资、筹资三类现金流。"
         }
-        title="现金流量表"
+        rows={
+          isSimple
+            ? [
+                { label: "现金净变化", value: formatCurrency(cashFlowStatement.cashNetChange) },
+                { label: "主要现金流方向", value: getCashFlowDirection(cashFlowStatement.cashNetChange) },
+              ]
+            : [
+                { label: "经营活动现金流", value: formatCurrency(cashFlowStatement.operatingCashFlow) },
+                { label: "投资活动现金流", value: formatCurrency(cashFlowStatement.investingCashFlow) },
+                { label: "筹资活动现金流", value: formatCurrency(cashFlowStatement.financingCashFlow) },
+                { label: "现金净变化", value: formatCurrency(cashFlowStatement.cashNetChange) },
+              ]
+        }
+        footer={
+          isSimple
+            ? "这张表回答：现金主要是流进来了，还是流出去了。"
+            : "现金净变化 = 经营活动现金流 + 投资活动现金流 + 筹资活动现金流"
+        }
       />
     );
   };
 
   return (
     <View style={styles.stack}>
-      <View style={sharedStyles.pageHeader}>
-        <Text style={sharedStyles.eyebrow}>报表</Text>
-        <Text style={sharedStyles.pageTitle}>三大报表总览</Text>
-        <Text style={sharedStyles.pageCopy}>
-          {period.label}。简易版和专业版共用同一套数据与计算逻辑，只切换展示语言与说明方式。
-        </Text>
+      <View style={sharedStyles.pageHeaderCentered}>
+        <Text style={styles.title}>财务报表详情</Text>
+        <Text style={sharedStyles.pageCopy}>{period.label}</Text>
       </View>
 
-      <View style={styles.reportSwitcher}>
-        {reportTabs.map((tab) => {
-          const isActive = selectedReport === tab.key;
+      <View style={[sharedStyles.card, styles.controlCard]}>
+        <View style={styles.reportSwitcher}>
+          {reportTabs.map((tab) => {
+            const isActive = selectedReport === tab.key;
+            return (
+              <Pressable
+                key={tab.key}
+                onPress={() => setSelectedReport(tab.key)}
+                style={[sharedStyles.chip, styles.reportButton, isActive && sharedStyles.chipActiveLight]}
+              >
+                <Text style={sharedStyles.chipText}>{tab.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
 
-          return (
+        <View style={styles.modeRow}>
+          <Text style={styles.modeLabel}>简易模式</Text>
+          <View style={styles.modeSwitchTrack}>
             <Pressable
-              key={tab.key}
-              onPress={() => setSelectedReport(tab.key)}
-              style={[
-                sharedStyles.chip,
-                styles.reportButton,
-                isActive && sharedStyles.chipActiveLight,
-              ]}
-            >
-              <Text style={sharedStyles.chipText}>{tab.label}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
+              onPress={() => setMode("simple")}
+              style={[styles.modeSwitchThumb, isSimple && styles.modeSwitchThumbLeft]}
+            />
+            <Pressable
+              onPress={() => setMode("professional")}
+              style={[styles.modeSwitchHitArea, styles.modeSwitchRightHitArea]}
+            />
+          </View>
+          <Text style={styles.modeLabel}>专业模式</Text>
+        </View>
 
-      <View style={styles.segmented}>
-        <Pressable
-          onPress={() => setMode("simple")}
-          style={[
-            sharedStyles.chip,
-            styles.segmentButton,
-            isSimple && sharedStyles.chipActiveDark,
-          ]}
-        >
-          <Text
-            style={[
-              sharedStyles.chipText,
-              isSimple && sharedStyles.chipTextInverse,
-            ]}
-          >
-            简易版
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setMode("professional")}
-          style={[
-            sharedStyles.chip,
-            styles.segmentButton,
-            !isSimple && sharedStyles.chipActiveDark,
-          ]}
-        >
-          <Text
-            style={[
-              sharedStyles.chipText,
-              !isSimple && sharedStyles.chipTextInverse,
-            ]}
-          >
-            专业版
-          </Text>
-        </Pressable>
-      </View>
-
-      <View style={sharedStyles.helperBox}>
-        <Text style={sharedStyles.helperText}>
+        <Text style={styles.modeHint}>
           {isSimple
             ? "简易版用更直白的语言，先帮你看懂当前个人财务状态。"
             : "专业版保留财务报表表达，便于核对底层会计含义。"}
@@ -253,26 +202,72 @@ export default function ReportsScreen({
 }
 
 const styles = StyleSheet.create({
-  reportButton: {
+  controlCard: {
+    gap: theme.spacing.md,
+  },
+  modeHint: {
+    color: theme.colors.textMuted,
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: "center",
+  },
+  modeLabel: {
+    color: theme.colors.textSecondary,
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  modeRow: {
     alignItems: "center",
-    flex: 1,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
     justifyContent: "center",
-    minWidth: 0,
+  },
+  modeSwitchHitArea: {
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    top: 0,
+    width: "50%",
+  },
+  modeSwitchRightHitArea: {
+    left: "50%",
+  },
+  modeSwitchThumb: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.pill,
+    height: 28,
+    left: 2,
+    position: "absolute",
+    top: 2,
+    width: 28,
+  },
+  modeSwitchThumbLeft: {
+    left: 2,
+  },
+  modeSwitchTrack: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.borderStrong,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    height: 32,
+    position: "relative",
+    width: 64,
+  },
+  reportButton: {
+    flex: 1,
   },
   reportSwitcher: {
     flexDirection: "row",
     gap: theme.spacing.sm,
   },
-  segmented: {
-    flexDirection: "row",
-    gap: theme.spacing.sm,
-  },
-  segmentButton: {
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "center",
-  },
   stack: {
     gap: theme.spacing.lg,
+  },
+  title: {
+    color: theme.colors.primaryDeep,
+    fontSize: 30,
+    fontWeight: "400",
+    letterSpacing: -0.8,
+    textAlign: "center",
   },
 });
