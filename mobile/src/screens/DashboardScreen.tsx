@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import DonutChart from "../components/charts/DonutChart";
+import LineChart from "../components/charts/LineChart";
 import type { Asset, Liability, ReportSummary, Transaction } from "../domain/models";
 import { sharedStyles, theme } from "../styles/theme";
 import { formatCurrency } from "../utils/formatters";
@@ -244,11 +246,7 @@ const buildCompositionItems = <T extends { category: string }>(
     }))
     .sort((left, right) => right.value - left.value);
 
-  const visibleItems = sortedItems.slice(0, 3);
-  const restValue = sortedItems.slice(3).reduce((sum, item) => sum + item.value, 0);
-  const mergedItems = restValue > 0 ? [...visibleItems, { label: "其他", value: restValue }] : visibleItems;
-
-  return mergedItems.map((item, index) => ({
+  return sortedItems.map((item, index) => ({
     ...item,
     color: chartColors[index % chartColors.length],
   }));
@@ -381,14 +379,14 @@ function BalanceStructureCard({
       </View>
 
       <View style={styles.chartGrid}>
-        <CompositionPreview
-          emptyText="暂无资产"
+        <CompositionChartCard
+          emptyText="暂无资产构成数据"
           items={assetComposition}
           label="资产构成"
           primaryText={formatCompactCurrency(summary.totalAssets)}
         />
-        <CompositionPreview
-          emptyText="暂无负债"
+        <CompositionChartCard
+          emptyText="暂无负债构成数据"
           items={liabilityComposition}
           label="负债构成"
           primaryText={formatCompactCurrency(summary.totalLiabilities)}
@@ -398,9 +396,9 @@ function BalanceStructureCard({
       <View style={styles.trendSection}>
         <View style={styles.trendHeader}>
           <Text style={styles.sectionLabel}>净资产趋势</Text>
-          <Text style={styles.dataTag}>本期推算</Text>
+          <Text style={styles.dataTag}>本期趋势</Text>
         </View>
-        <EquityTrendPreview points={equityTrend} />
+        <LineChart emptyText="暂无净资产趋势数据" points={equityTrend} />
       </View>
     </View>
   );
@@ -462,41 +460,19 @@ function MetricPill({ label, tone = "default", value }: MetricPillProps) {
   );
 }
 
-interface CompositionPreviewProps {
+interface CompositionChartCardProps {
   emptyText: string;
   items: CompositionItem[];
   label: string;
   primaryText: string;
 }
 
-function CompositionPreview({ emptyText, items, label, primaryText }: CompositionPreviewProps) {
-  const totalValue = items.reduce((sum, item) => sum + item.value, 0);
-
+function CompositionChartCard({ emptyText, items, label, primaryText }: CompositionChartCardProps) {
   return (
     <View style={styles.chartCard}>
       <Text style={styles.sectionLabel}>{label}</Text>
       <Text style={styles.chartValue}>{primaryText}</Text>
-      <View style={styles.compositionBar}>
-        {items.length > 0 ? (
-          items.map((item) => <View key={item.label} style={[styles.compositionSegment, { backgroundColor: item.color, flex: item.value }]} />)
-        ) : (
-          <View style={styles.compositionEmptyBar} />
-        )}
-      </View>
-      <View style={styles.compositionLegend}>
-        {items.length > 0 ? (
-          items.map((item) => (
-            <View key={item.label} style={styles.legendRow}>
-              <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-              <Text style={styles.legendText} numberOfLines={1}>
-                {item.label} {totalValue > 0 ? `${Math.round((item.value / totalValue) * 100)}%` : ""}
-              </Text>
-            </View>
-          ))
-        ) : (
-          <Text style={styles.emptyChartText}>{emptyText}</Text>
-        )}
-      </View>
+      <DonutChart data={items} emptyText={emptyText} size={92} strokeWidth={15} />
     </View>
   );
 }
@@ -526,34 +502,6 @@ function CashFlowTrendPreview({ buckets }: CashFlowTrendPreviewProps) {
               />
             </View>
             <Text style={styles.trendLabel}>{bucket.label}</Text>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-interface EquityTrendPreviewProps {
-  points: EquityTrendPoint[];
-}
-
-function EquityTrendPreview({ points }: EquityTrendPreviewProps) {
-  const values = points.map((point) => point.value);
-  const minValue = Math.min(...values, 0);
-  const maxValue = Math.max(...values, 1);
-  const range = Math.max(maxValue - minValue, 1);
-
-  return (
-    <View style={styles.trendChart}>
-      {points.map((point) => {
-        const barHeight = Math.max(12, ((point.value - minValue) / range) * 74);
-
-        return (
-          <View key={point.label} style={styles.trendColumn}>
-            <View style={styles.trendBarTrack}>
-              <View style={[styles.trendBar, styles.trendBarPositive, { height: barHeight }]} />
-            </View>
-            <Text style={styles.trendLabel}>{point.label}</Text>
           </View>
         );
       })}
@@ -598,23 +546,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: -0.3,
   },
-  compositionBar: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.pill,
-    flexDirection: "row",
-    height: 14,
-    overflow: "hidden",
-  },
-  compositionEmptyBar: {
-    backgroundColor: theme.colors.border,
-    flex: 1,
-  },
-  compositionLegend: {
-    gap: 6,
-  },
-  compositionSegment: {
-    minWidth: 4,
-  },
   dataTag: {
     backgroundColor: theme.colors.successSoft,
     borderRadius: theme.radius.pill,
@@ -624,27 +555,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     paddingHorizontal: 9,
     paddingVertical: 4,
-  },
-  emptyChartText: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  legendDot: {
-    borderRadius: theme.radius.pill,
-    height: 8,
-    width: 8,
-  },
-  legendRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 6,
-  },
-  legendText: {
-    color: theme.colors.textSecondary,
-    flex: 1,
-    fontSize: 12,
-    lineHeight: 16,
   },
   mainCard: {
     gap: theme.spacing.md,
