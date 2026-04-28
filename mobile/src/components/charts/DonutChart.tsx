@@ -12,6 +12,7 @@ export interface DonutChartItem {
 interface DonutChartProps {
   data: DonutChartItem[];
   emptyText: string;
+  onChartPress?: () => void;
   size?: number;
   strokeWidth?: number;
 }
@@ -75,6 +76,7 @@ const getCallout = (item: VisibleDonutItem, centerX: number, centerY: number, ra
 export default function DonutChart({
   data,
   emptyText,
+  onChartPress,
   size = 112,
   strokeWidth = 18,
 }: DonutChartProps) {
@@ -211,7 +213,10 @@ export default function DonutChart({
                     cx={center}
                     cy={center}
                     fill="transparent"
-                    onPress={() => setSelectedLabel((current) => (current === item.label ? null : item.label))}
+                    onPress={() => {
+                      setSelectedLabel((current) => (current === item.label ? null : item.label));
+                      onChartPress?.();
+                    }}
                     r={radius}
                     stroke={item.color}
                     strokeDasharray={`${dashLength} ${circumference - dashLength}`}

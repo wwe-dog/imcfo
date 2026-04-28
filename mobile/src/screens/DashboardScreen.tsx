@@ -15,11 +15,25 @@ interface DashboardScreenProps {
 
 type DashboardView = "cashFlow" | "balance";
 type PeriodLabel = "周线" | "月线" | "季度线" | "年线";
+type DashboardRoute =
+  | { name: "dashboard" }
+  | { name: "assetCompositionDetail" }
+  | { name: "liabilityCompositionDetail" }
+  | { category: Asset["category"]; name: "assetCategoryDetail" }
+  | { category: Liability["category"]; name: "liabilityCategoryDetail" };
 
 interface CompositionItem {
+  key: string;
   label: string;
   value: number;
   color: string;
+}
+
+interface DetailTableRow {
+  key: string;
+  label: string;
+  percent: number;
+  value: number;
 }
 
 interface TrendBucket {
@@ -73,6 +87,15 @@ const formatCompactCurrency = (value: number): string => {
 
   return formatCurrency(value);
 };
+
+const formatPercent = (value: number): string => {
+  if (!Number.isFinite(value)) return "0%";
+  return `${Math.round(value * 100)}%`;
+};
+
+const getAssetValue = (asset: Asset): number => asset.currentValue || asset.amount || 0;
+
+const getLiabilityValue = (liability: Liability): number => liability.amount || 0;
 
 const isCashInflow = (transaction: Transaction): boolean =>
   transaction.type === "income" ||
@@ -228,19 +251,22 @@ const buildEquityTrend = (
 const buildCompositionItems = <T extends { category: string }>(
   records: T[],
   getValue: (record: T) => number,
+  fallbackCategory: string,
   labels: Record<string, string>,
 ): CompositionItem[] => {
   const grouped = records.reduce<Record<string, number>>((result, record) => {
     const value = getValue(record);
+    const category = record.category || fallbackCategory;
     if (value <= 0) return result;
     return {
       ...result,
-      [record.category]: (result[record.category] ?? 0) + value,
+      [category]: (result[category] ?? 0) + value,
     };
   }, {});
 
   const sortedItems = Object.entries(grouped)
     .map(([category, value]) => ({
+      key: category,
       label: labels[category] ?? category,
       value,
     }))
@@ -252,10 +278,51 @@ const buildCompositionItems = <T extends { category: string }>(
   }));
 };
 
+const buildDetailRows = (items: CompositionItem[], totalValue: number): DetailTableRow[] =>
+  items.map((item) => ({
+    key: item.key,
+    label: item.label,
+    percent: totalValue > 0 ? item.value / totalValue : 0,
+    value: item.value,
+  }));
+
+const buildAssetItemRows = (assets: Asset[], category: Asset["category"], categoryTotal: number): DetailTableRow[] =>
+  assets
+    .filter((asset) => asset.category === category && getAssetValue(asset) > 0)
+    .map((asset) => {
+      const value = getAssetValue(asset);
+      return {
+        key: asset.id,
+        label: asset.name || "未命名资产",
+        percent: categoryTotal > 0 ? value / categoryTotal : 0,
+        value,
+      };
+    })
+    .sort((left, right) => right.value - left.value);
+
+const buildLiabilityItemRows = (
+  liabilities: Liability[],
+  category: Liability["category"],
+  categoryTotal: number,
+): DetailTableRow[] =>
+  liabilities
+    .filter((liability) => liability.category === category && getLiabilityValue(liability) > 0)
+    .map((liability) => {
+      const value = getLiabilityValue(liability);
+      return {
+        key: liability.id,
+        label: liability.name || "未命名负债",
+        percent: categoryTotal > 0 ? value / categoryTotal : 0,
+        value,
+      };
+    })
+    .sort((left, right) => right.value - left.value);
+
 export default function DashboardScreen({ assets, liabilities, summary, transactions }: DashboardScreenProps) {
   const [selectedView, setSelectedView] = useState<DashboardView>("balance");
   const [periodLabel, setPeriodLabel] = useState<PeriodLabel>("月线");
   const [isPeriodSelectorVisible, setIsPeriodSelectorVisible] = useState(false);
+  const [route, setRoute] = useState<DashboardRoute>({ name: "dashboard" });
 
   const handleOpenPeriodSelector = () => {
     setIsPeriodSelectorVisible(true);
@@ -269,6 +336,50 @@ export default function DashboardScreen({ assets, liabilities, summary, transact
     setPeriodLabel(label);
     setIsPeriodSelectorVisible(false);
   };
+
+  if (route.name === "assetCompositionDetail") {
+    return (
+      <AssetCompositionDetailScreen
+        assets={assets}
+        onBack={() => setRoute({ name: "dashboard" })}
+        onOpenCategory={(category) => setRoute({ category, name: "assetCategoryDetail" })}
+        totalAssets={summary.totalAssets}
+      />
+    );
+  }
+
+  if (route.name === "liabilityCompositionDetail") {
+    return (
+      <LiabilityCompositionDetailScreen
+        liabilities={liabilities}
+        onBack={() => setRoute({ name: "dashboard" })}
+        onOpenCategory={(category) => setRoute({ category, name: "liabilityCategoryDetail" })}
+        totalLiabilities={summary.totalLiabilities}
+      />
+    );
+  }
+
+  if (route.name === "assetCategoryDetail") {
+    return (
+      <AssetCategoryDetailScreen
+        assets={assets}
+        category={route.category}
+        onBack={() => setRoute({ name: "assetCompositionDetail" })}
+        totalAssets={summary.totalAssets}
+      />
+    );
+  }
+
+  if (route.name === "liabilityCategoryDetail") {
+    return (
+      <LiabilityCategoryDetailScreen
+        category={route.category}
+        liabilities={liabilities}
+        onBack={() => setRoute({ name: "liabilityCompositionDetail" })}
+        totalLiabilities={summary.totalLiabilities}
+      />
+    );
+  }
 
   return (
     <View style={styles.stack}>
@@ -291,6 +402,8 @@ export default function DashboardScreen({ assets, liabilities, summary, transact
         <BalanceStructureCard
           assets={assets}
           liabilities={liabilities}
+          onOpenAssetDetail={() => setRoute({ name: "assetCompositionDetail" })}
+          onOpenLiabilityDetail={() => setRoute({ name: "liabilityCompositionDetail" })}
           periodLabel={periodLabel}
           summary={summary}
           transactions={transactions}
@@ -351,18 +464,22 @@ export default function DashboardScreen({ assets, liabilities, summary, transact
 }
 
 interface BalanceStructureCardProps extends DashboardScreenProps {
+  onOpenAssetDetail: () => void;
+  onOpenLiabilityDetail: () => void;
   periodLabel: PeriodLabel;
 }
 
 function BalanceStructureCard({
   assets,
   liabilities,
+  onOpenAssetDetail,
+  onOpenLiabilityDetail,
   periodLabel,
   summary,
   transactions,
 }: BalanceStructureCardProps) {
-  const assetComposition = buildCompositionItems(assets, (asset) => asset.currentValue, assetCategoryLabels);
-  const liabilityComposition = buildCompositionItems(liabilities, (liability) => liability.amount, liabilityCategoryLabels);
+  const assetComposition = buildCompositionItems(assets, getAssetValue, "other", assetCategoryLabels);
+  const liabilityComposition = buildCompositionItems(liabilities, getLiabilityValue, "other", liabilityCategoryLabels);
   const equityTrend = buildEquityTrend(transactions, periodLabel, summary.ownerEquity);
 
   return (
@@ -373,8 +490,13 @@ function BalanceStructureCard({
       </View>
 
       <View style={styles.metricRow}>
-        <MetricPill label="资产" value={formatCompactCurrency(summary.totalAssets)} />
-        <MetricPill label="负债" tone="muted" value={formatCompactCurrency(summary.totalLiabilities)} />
+        <MetricPill label="资产" onPress={onOpenAssetDetail} value={formatCompactCurrency(summary.totalAssets)} />
+        <MetricPill
+          label="负债"
+          onPress={onOpenLiabilityDetail}
+          tone="muted"
+          value={formatCompactCurrency(summary.totalLiabilities)}
+        />
         <MetricPill label="净资产" tone="strong" value={formatCompactCurrency(summary.ownerEquity)} />
       </View>
 
@@ -383,12 +505,14 @@ function BalanceStructureCard({
           emptyText="暂无资产构成数据"
           items={assetComposition}
           label="资产构成"
+          onPress={onOpenAssetDetail}
           primaryText={formatCompactCurrency(summary.totalAssets)}
         />
         <CompositionChartCard
           emptyText="暂无负债构成数据"
           items={liabilityComposition}
           label="负债构成"
+          onPress={onOpenLiabilityDetail}
           primaryText={formatCompactCurrency(summary.totalLiabilities)}
         />
       </View>
@@ -400,6 +524,262 @@ function BalanceStructureCard({
         </View>
         <LineChart emptyText="暂无净资产趋势数据" points={equityTrend} />
       </View>
+    </View>
+  );
+}
+
+interface AssetCompositionDetailScreenProps {
+  assets: Asset[];
+  onBack: () => void;
+  onOpenCategory: (category: Asset["category"]) => void;
+  totalAssets: number;
+}
+
+function AssetCompositionDetailScreen({
+  assets,
+  onBack,
+  onOpenCategory,
+  totalAssets,
+}: AssetCompositionDetailScreenProps) {
+  const items = buildCompositionItems(assets, getAssetValue, "other", assetCategoryLabels);
+  const rows = buildDetailRows(items, totalAssets);
+
+  return (
+    <View style={styles.detailStack}>
+      <DetailHeader onBack={onBack} rightText="截至今日" title="资产构成详情" />
+      <SummaryStrip label="总资产" value={formatCompactCurrency(totalAssets)} />
+      <DetailChartCard emptyText="暂无资产构成数据" items={items} title="资产构成" />
+      <DetailTable
+        description="你可以先在管理页添加资产，用于生成资产构成。"
+        emptyText="暂无资产数据"
+        nameHeader="种类"
+        onRowPress={(row) => onOpenCategory(row.key as Asset["category"])}
+        rows={rows}
+        title="资产详情"
+        valueHeader="金额"
+      />
+    </View>
+  );
+}
+
+interface AssetCategoryDetailScreenProps {
+  assets: Asset[];
+  category: Asset["category"];
+  onBack: () => void;
+  totalAssets: number;
+}
+
+function AssetCategoryDetailScreen({ assets, category, onBack, totalAssets }: AssetCategoryDetailScreenProps) {
+  const categoryName = assetCategoryLabels[category] ?? "其他资产";
+  const categoryAssets = assets.filter((asset) => asset.category === category && getAssetValue(asset) > 0);
+  const categoryTotal = categoryAssets.reduce((sum, asset) => sum + getAssetValue(asset), 0);
+  const itemComposition = categoryAssets.map((asset, index) => ({
+    color: chartColors[index % chartColors.length],
+    key: asset.id,
+    label: asset.name || "未命名资产",
+    value: getAssetValue(asset),
+  }));
+  const rows = buildAssetItemRows(assets, category, categoryTotal);
+
+  return (
+    <View style={styles.detailStack}>
+      <DetailHeader onBack={onBack} rightText="截至今日" title={`${categoryName}资产明细`} />
+      <SummaryStrip
+        helperText={`占总资产 ${formatPercent(totalAssets > 0 ? categoryTotal / totalAssets : 0)}`}
+        label={`${categoryName}合计`}
+        value={formatCompactCurrency(categoryTotal)}
+      />
+      <DetailChartCard emptyText="暂无明细数据" items={itemComposition} title={`${categoryName}构成`} />
+      <DetailTable
+        description="暂无明细数据"
+        emptyText="暂无明细数据"
+        nameHeader="名称"
+        rows={rows}
+        title={`${categoryName}详情`}
+        valueHeader="金额"
+      />
+    </View>
+  );
+}
+
+interface LiabilityCompositionDetailScreenProps {
+  liabilities: Liability[];
+  onBack: () => void;
+  onOpenCategory: (category: Liability["category"]) => void;
+  totalLiabilities: number;
+}
+
+function LiabilityCompositionDetailScreen({
+  liabilities,
+  onBack,
+  onOpenCategory,
+  totalLiabilities,
+}: LiabilityCompositionDetailScreenProps) {
+  const items = buildCompositionItems(liabilities, getLiabilityValue, "other", liabilityCategoryLabels);
+  const rows = buildDetailRows(items, totalLiabilities);
+
+  return (
+    <View style={styles.detailStack}>
+      <DetailHeader onBack={onBack} rightText="截至今日" title="负债构成详情" />
+      <SummaryStrip label="总负债" value={formatCompactCurrency(totalLiabilities)} />
+      <DetailChartCard emptyText="暂无负债构成数据" items={items} title="负债构成" />
+      <DetailTable
+        description="你可以先在管理页添加负债，用于生成负债构成。"
+        emptyText="暂无负债数据"
+        nameHeader="种类"
+        onRowPress={(row) => onOpenCategory(row.key as Liability["category"])}
+        rows={rows}
+        title="负债详情"
+        valueHeader="金额"
+      />
+    </View>
+  );
+}
+
+interface LiabilityCategoryDetailScreenProps {
+  category: Liability["category"];
+  liabilities: Liability[];
+  onBack: () => void;
+  totalLiabilities: number;
+}
+
+function LiabilityCategoryDetailScreen({
+  category,
+  liabilities,
+  onBack,
+  totalLiabilities,
+}: LiabilityCategoryDetailScreenProps) {
+  const categoryName = liabilityCategoryLabels[category] ?? "其他负债";
+  const categoryLiabilities = liabilities.filter(
+    (liability) => liability.category === category && getLiabilityValue(liability) > 0,
+  );
+  const categoryTotal = categoryLiabilities.reduce((sum, liability) => sum + getLiabilityValue(liability), 0);
+  const itemComposition = categoryLiabilities.map((liability, index) => ({
+    color: chartColors[index % chartColors.length],
+    key: liability.id,
+    label: liability.name || "未命名负债",
+    value: getLiabilityValue(liability),
+  }));
+  const rows = buildLiabilityItemRows(liabilities, category, categoryTotal);
+
+  return (
+    <View style={styles.detailStack}>
+      <DetailHeader onBack={onBack} rightText="截至今日" title={`${categoryName}负债明细`} />
+      <SummaryStrip
+        helperText={`占总负债 ${formatPercent(totalLiabilities > 0 ? categoryTotal / totalLiabilities : 0)}`}
+        label={`${categoryName}合计`}
+        value={formatCompactCurrency(categoryTotal)}
+      />
+      <DetailChartCard emptyText="暂无明细数据" items={itemComposition} title={`${categoryName}构成`} />
+      <DetailTable
+        description="暂无明细数据"
+        emptyText="暂无明细数据"
+        nameHeader="名称"
+        rows={rows}
+        title={`${categoryName}详情`}
+        valueHeader="金额"
+      />
+    </View>
+  );
+}
+
+interface DetailHeaderProps {
+  onBack: () => void;
+  rightText: string;
+  title: string;
+}
+
+function DetailHeader({ onBack, rightText, title }: DetailHeaderProps) {
+  return (
+    <View style={styles.detailHeader}>
+      <Pressable onPress={onBack} style={styles.backButton}>
+        <Text style={styles.backButtonText}>返回</Text>
+      </Pressable>
+      <Text style={styles.detailTitle} numberOfLines={1}>
+        {title}
+      </Text>
+      <Text style={styles.detailMeta}>{rightText}</Text>
+    </View>
+  );
+}
+
+interface SummaryStripProps {
+  helperText?: string;
+  label: string;
+  value: string;
+}
+
+function SummaryStrip({ helperText, label, value }: SummaryStripProps) {
+  return (
+    <View style={[sharedStyles.card, styles.summaryStrip]}>
+      <View>
+        <Text style={styles.summaryLabel}>{label}</Text>
+        {helperText ? <Text style={styles.summaryHelper}>{helperText}</Text> : null}
+      </View>
+      <Text style={styles.summaryValue}>{value}</Text>
+    </View>
+  );
+}
+
+interface DetailChartCardProps {
+  emptyText: string;
+  items: CompositionItem[];
+  title: string;
+}
+
+function DetailChartCard({ emptyText, items, title }: DetailChartCardProps) {
+  return (
+    <View style={[sharedStyles.card, styles.detailChartCard]}>
+      <Text style={styles.sectionLabel}>{title}</Text>
+      <DonutChart data={items} emptyText={emptyText} size={128} strokeWidth={18} />
+    </View>
+  );
+}
+
+interface DetailTableProps {
+  description: string;
+  emptyText: string;
+  nameHeader: string;
+  onRowPress?: (row: DetailTableRow) => void;
+  rows: DetailTableRow[];
+  title: string;
+  valueHeader: string;
+}
+
+function DetailTable({ description, emptyText, nameHeader, onRowPress, rows, title, valueHeader }: DetailTableProps) {
+  return (
+    <View style={[sharedStyles.card, styles.tableCard]}>
+      <Text style={styles.sectionLabel}>{title}</Text>
+      <View style={styles.tableHeader}>
+        <Text style={[styles.tableHeaderText, styles.tableNameColumn]}>{nameHeader}</Text>
+        <Text style={styles.tableHeaderText}>占比</Text>
+        <Text style={[styles.tableHeaderText, styles.tableAmountColumn]}>{valueHeader}</Text>
+      </View>
+      {rows.length > 0 ? (
+        rows.map((row) => {
+          const Container = onRowPress ? Pressable : View;
+          return (
+            <Container
+              key={row.key}
+              onPress={onRowPress ? () => onRowPress(row) : undefined}
+              style={styles.tableRow}
+            >
+              <Text style={[styles.tableCellText, styles.tableNameColumn]} numberOfLines={1}>
+                {row.label}
+              </Text>
+              <Text style={styles.tableCellText}>{formatPercent(row.percent)}</Text>
+              <Text style={[styles.tableCellTextStrong, styles.tableAmountColumn]}>
+                {formatCompactCurrency(row.value)}
+              </Text>
+            </Container>
+          );
+        })
+      ) : (
+        <View style={styles.emptyStateBox}>
+          <Text style={styles.emptyStateTitle}>{emptyText}</Text>
+          <Text style={styles.emptyStateDescription}>{description}</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -443,20 +823,25 @@ function CashFlowCard({ onOpenPeriodSelector, periodLabel, summary, transactions
 
 interface MetricPillProps {
   label: string;
+  onPress?: () => void;
   value: string;
   tone?: "default" | "muted" | "strong";
 }
 
-function MetricPill({ label, tone = "default", value }: MetricPillProps) {
+function MetricPill({ label, onPress, tone = "default", value }: MetricPillProps) {
   const isStrong = tone === "strong";
+  const Container = onPress ? Pressable : View;
 
   return (
-    <View style={[styles.metricPill, tone === "muted" && styles.metricPillMuted, isStrong && styles.metricPillStrong]}>
+    <Container
+      onPress={onPress}
+      style={[styles.metricPill, tone === "muted" && styles.metricPillMuted, isStrong && styles.metricPillStrong]}
+    >
       <Text style={[styles.metricLabel, isStrong && styles.metricLabelStrong]}>{label}</Text>
       <Text style={[styles.metricValue, isStrong && styles.metricValueStrong]} numberOfLines={1}>
         {value}
       </Text>
-    </View>
+    </Container>
   );
 }
 
@@ -464,16 +849,17 @@ interface CompositionChartCardProps {
   emptyText: string;
   items: CompositionItem[];
   label: string;
+  onPress?: () => void;
   primaryText: string;
 }
 
-function CompositionChartCard({ emptyText, items, label, primaryText }: CompositionChartCardProps) {
+function CompositionChartCard({ emptyText, items, label, onPress, primaryText }: CompositionChartCardProps) {
   return (
-    <View style={styles.chartCard}>
+    <Pressable onPress={onPress} style={styles.chartCard}>
       <Text style={styles.sectionLabel}>{label}</Text>
       <Text style={styles.chartValue}>{primaryText}</Text>
-      <DonutChart data={items} emptyText={emptyText} size={92} strokeWidth={15} />
-    </View>
+      <DonutChart data={items} emptyText={emptyText} onChartPress={onPress} size={92} strokeWidth={15} />
+    </Pressable>
   );
 }
 
@@ -555,6 +941,65 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     paddingHorizontal: 9,
     paddingVertical: 4,
+  },
+  backButton: {
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  backButtonText: {
+    color: theme.colors.primaryDeep,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  detailChartCard: {
+    alignItems: "center",
+    gap: theme.spacing.sm,
+  },
+  detailHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    justifyContent: "space-between",
+  },
+  detailMeta: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: "700",
+    minWidth: 52,
+    textAlign: "right",
+  },
+  detailStack: {
+    gap: theme.spacing.md,
+  },
+  detailTitle: {
+    color: theme.colors.textPrimary,
+    flex: 1,
+    fontSize: 20,
+    fontWeight: "900",
+    letterSpacing: -0.5,
+    textAlign: "center",
+  },
+  emptyStateBox: {
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    gap: 4,
+    padding: theme.spacing.md,
+  },
+  emptyStateDescription: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  emptyStateTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 14,
+    fontWeight: "800",
   },
   mainCard: {
     gap: theme.spacing.md,
@@ -675,6 +1120,70 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     fontSize: 14,
     fontWeight: "800",
+  },
+  summaryHelper: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 3,
+  },
+  summaryLabel: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  summaryStrip: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+  },
+  summaryValue: {
+    color: theme.colors.textPrimary,
+    fontSize: 22,
+    fontWeight: "900",
+    letterSpacing: -0.6,
+  },
+  tableAmountColumn: {
+    flex: 1,
+    textAlign: "right",
+  },
+  tableCard: {
+    gap: theme.spacing.sm,
+  },
+  tableCellText: {
+    color: theme.colors.textSecondary,
+    flex: 0.7,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  tableCellTextStrong: {
+    color: theme.colors.textPrimary,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  tableHeader: {
+    borderBottomColor: theme.colors.border,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    paddingBottom: 8,
+  },
+  tableHeaderText: {
+    color: theme.colors.textMuted,
+    flex: 0.7,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  tableNameColumn: {
+    flex: 1.4,
+  },
+  tableRow: {
+    alignItems: "center",
+    borderBottomColor: theme.colors.border,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    minHeight: 46,
+    paddingVertical: 8,
   },
   segmentButton: {
     alignItems: "center",
