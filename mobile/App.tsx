@@ -189,10 +189,12 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
-      <View style={styles.header}>
-        <Text style={styles.brand}>我为 CFO</Text>
-        <Text style={styles.subtitle}>像经营公司一样经营自己</Text>
-      </View>
+      {activeScreen !== "dashboard" ? (
+        <View style={styles.header}>
+          <Text style={styles.brand}>我为 CFO</Text>
+          <Text style={styles.subtitle}>像经营公司一样经营自己</Text>
+        </View>
+      ) : null}
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {renderScreen()}
       </ScrollView>
