@@ -5,7 +5,7 @@
 更新时间：2026-04-29  
 当前主分支：`main`  
 当前开发模式：trunk-based development，直接在 `main` 上小步提交。  
-本次快照原因：完成 V0.1 手动对账 / 资产盘点能力后刷新上下文。
+本次快照原因：完成 V0.1 交易记录 Phase 1 后刷新上下文。
 
 ## 1. 项目定位与关键决策
 
@@ -96,7 +96,8 @@ V0.1 只服务普通自然人，核心闭环是：
 - 资产负债管理支持资产和负债新增、编辑、删除。
 - 报表页支持资产负债表、现金流量表、利润表切换。
 - 报表页支持简易版 / 专业版切换。
-- 我的页支持本地数据导出、导入、恢复示例数据、清空本地数据和账户管理入口。
+- 我的页支持本地数据导出、导入、恢复示例数据、清空本地数据、账户管理入口和交易记录入口。
+- 交易记录 Phase 1 已完成：支持从管理页“更多”和我的页进入，只读查看交易列表、搜索、快捷筛选、按月分组和交易详情。
 
 已完成的账务安全规则：
 
@@ -110,6 +111,17 @@ V0.1 只服务普通自然人，核心闭环是：
 - 应收/应付生命周期规则缺少 `relatedAssetId` 或 `relatedLiabilityId` 时不 fallback 到随机资产/负债。
 
 本次新增：
+
+- `mobile/src/screens/TransactionRecordsScreen.tsx`：只读交易记录中心。
+- App 新增隐藏二级页面 `transactions`，不新增底部 Tab。
+- 管理页“更多”中的 `交易记录` 已从占位 Alert 改为进入交易记录中心。
+- 我的页新增 `交易记录` 入口。
+- 交易记录支持搜索交易标题/备注、分类、账户名、交易类型标签。
+- 快捷筛选包括：全部、收入、支出、资产、负债、投资、信用卡、对账调整、非现金。
+- 交易按日期倒序并按月份分组显示。
+- 点击交易卡片进入只读 `交易详情`，不提供编辑、删除或冲销。
+
+前一轮新增：
 
 - `mobile/src/domain/accounting/reconciliationRules.ts`：手动对账 / 资产盘点领域规则。
 - 账户详情页新增 `对账 / 更新余额`。
@@ -154,9 +166,10 @@ V0.1 只服务普通自然人，核心闭环是：
 
 - App 入口、页面切换、底部导航、全局数据回调。
 - 当前底部导航：首页、管理、报表、我的。
-- 隐藏二级页面包括资产负债管理和账户管理。
+- 隐藏二级页面包括资产负债管理、账户管理和交易记录。
 - 已接入 safe area。
 - 已向账户管理和资产负债管理传入 `onSaveReconciliation`。
+- 已向管理页和我的页传入交易记录入口。
 
 `mobile/src/app/useAppData.ts`
 
@@ -200,6 +213,13 @@ V0.1 只服务普通自然人，核心闭环是：
 - 当前“管理”根页面。
 - 管理中心 modal 增加 `对账 / 资产盘点` 入口。
 - 入口暂时打开资产负债管理页；账户对账从账户详情页进入。
+- 管理中心 modal 的 `交易记录` 已进入只读交易记录中心。
+
+`mobile/src/screens/TransactionRecordsScreen.tsx`
+
+- 只读交易记录中心。
+- 支持搜索、快捷筛选、按月分组、交易卡片和只读详情。
+- 不实现编辑、删除、冲销、批量操作或导出交易记录。
 
 `mobile/src/storage/seedData.ts`
 
@@ -212,6 +232,8 @@ V0.1 只服务普通自然人，核心闭环是：
 
 最近提交：
 
+- `3193ae5 feat: add transaction records list`
+- `816c6e9 docs: refresh current project context snapshot`
 - `22dd155 feat: add manual reconciliation adjustments`
 - `f0b4f00 docs: refresh current project context snapshot`
 - `d06b76b feat: add receivable payable lifecycle rules`
@@ -277,7 +299,7 @@ cd D:\imcfo\mobile
 npm.cmd run typecheck
 ```
 
-结果：通过。
+结果：通过。最近一次功能提交前已通过。
 
 已核对高复杂度示例账套：
 
