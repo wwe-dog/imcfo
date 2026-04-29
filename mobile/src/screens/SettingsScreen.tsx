@@ -177,13 +177,13 @@ export default function SettingsScreen({
 const styles = StyleSheet.create({
   avatar: {
     alignItems: "center",
-    backgroundColor: theme.colors.surfaceSoft,
-    borderColor: theme.colors.borderStrong,
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.border,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
-    height: 92,
+    height: 84,
     justifyContent: "center",
-    width: 92,
+    width: 84,
   },
   avatarText: {
     color: theme.colors.primaryDeep,
@@ -227,10 +227,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
+    paddingVertical: 14,
   },
   listRowBorder: {
-    borderTopColor: theme.colors.border,
+    borderTopColor: theme.colors.divider,
     borderTopWidth: 1,
   },
   listSubtitle: {
@@ -242,22 +242,22 @@ const styles = StyleSheet.create({
   listTitle: {
     color: theme.colors.textPrimary,
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "800",
   },
   panel: {
-    gap: theme.spacing.md,
+    gap: 14,
   },
   profileName: {
     color: theme.colors.textPrimary,
-    fontSize: 28,
-    fontWeight: "800",
+    fontSize: 26,
+    fontWeight: "900",
     letterSpacing: -0.6,
   },
   profileSection: {
     alignItems: "center",
     gap: theme.spacing.sm,
     paddingTop: theme.spacing.sm,
-    paddingVertical: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
   },
   profileSubtitle: {
     color: theme.colors.textMuted,
@@ -267,6 +267,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
   },
   stack: {
-    gap: theme.spacing.lg,
+    gap: theme.spacing.md,
   },
 });

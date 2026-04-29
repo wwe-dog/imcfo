@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   detailCard: {
-    gap: theme.spacing.md,
+    gap: 14,
   },
   detailLabel: {
     color: theme.colors.textMuted,
@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
     width: 78,
   },
   detailRow: {
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: theme.colors.divider,
     borderBottomWidth: 1,
     flexDirection: "row",
     gap: theme.spacing.md,
@@ -353,9 +353,9 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     borderWidth: 1,
     borderRadius: theme.radius.pill,
-    height: 44,
+    height: 42,
     justifyContent: "center",
-    width: 44,
+    width: 42,
   },
   headerRow: {
     alignItems: "center",
@@ -392,12 +392,12 @@ const styles = StyleSheet.create({
   listStack: {
     backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
     overflow: "hidden",
   },
   monthGroup: {
-    gap: 6,
+    gap: 5,
   },
   monthTitle: {
     color: theme.colors.textSecondary,
@@ -408,7 +408,7 @@ const styles = StyleSheet.create({
   pageTitle: {
     color: theme.colors.textPrimary,
     flex: 1,
-    fontSize: 22,
+    fontSize: 21,
     fontWeight: "900",
     letterSpacing: -0.5,
     textAlign: "center",
@@ -420,14 +420,14 @@ const styles = StyleSheet.create({
   },
   searchBox: {
     alignItems: "center",
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.surfaceElevated,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     flex: 1,
     flexDirection: "row",
     gap: theme.spacing.sm,
-    minHeight: 48,
+    minHeight: 44,
     paddingLeft: theme.spacing.md,
     paddingRight: theme.spacing.sm,
   },
@@ -435,12 +435,12 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     flex: 1,
     fontSize: 15,
-    minHeight: 40,
+    minHeight: 38,
     paddingHorizontal: theme.spacing.sm,
   },
   stack: {
     gap: theme.spacing.md,
-    paddingBottom: theme.spacing.xl,
+    paddingBottom: theme.spacing.lg,
   },
   toolbar: {
     alignItems: "center",
@@ -456,14 +456,14 @@ const styles = StyleSheet.create({
   },
   transactionCard: {
     alignItems: "center",
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: theme.colors.divider,
     borderBottomWidth: 1,
     flexDirection: "row",
     gap: theme.spacing.md,
     justifyContent: "space-between",
-    minHeight: 62,
+    minHeight: 58,
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: 10,
+    paddingVertical: 9,
   },
   transactionMain: {
     flex: 1,

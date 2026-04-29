@@ -946,10 +946,10 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   accountRow: {
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: theme.colors.divider,
     borderBottomWidth: 1,
     gap: theme.spacing.sm,
-    paddingVertical: theme.spacing.md,
+    paddingVertical: 12,
   },
   accountTitleRow: {
     alignItems: "center",
@@ -1001,12 +1001,12 @@ const styles = StyleSheet.create({
   },
   categoryRow: {
     alignItems: "center",
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: theme.colors.divider,
     borderBottomWidth: 1,
     flexDirection: "row",
     justifyContent: "space-between",
-    minHeight: 58,
-    paddingVertical: theme.spacing.sm,
+    minHeight: 56,
+    paddingVertical: 9,
   },
   categorySubtitle: {
     color: theme.colors.textMuted,
@@ -1031,9 +1031,9 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   emptyStateBox: {
-    backgroundColor: theme.colors.surfaceSoft,
+    backgroundColor: theme.colors.surfaceElevated,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
     gap: theme.spacing.sm,
     padding: theme.spacing.md,
@@ -1058,10 +1058,10 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: theme.typography.label,
     fontWeight: "700",
-    marginBottom: theme.spacing.xs,
+    marginBottom: 6,
   },
   formCard: {
-    gap: theme.spacing.md,
+    gap: 14,
   },
   headerRow: {
     alignItems: "center",
@@ -1075,7 +1075,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   listCard: {
-    gap: theme.spacing.sm,
+    gap: 6,
   },
   modalActions: {
     flexDirection: "row",
@@ -1084,7 +1084,7 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.sm,
   },
   modalBackdrop: {
-    backgroundColor: "rgba(13, 25, 18, 0.42)",
+    backgroundColor: "rgba(24, 16, 44, 0.30)",
     flex: 1,
     justifyContent: "flex-end",
     padding: theme.spacing.container,
@@ -1095,19 +1095,19 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   modalPanel: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.surfaceElevated,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.xl,
     borderWidth: 1,
     gap: theme.spacing.md,
-    padding: theme.spacing.lg,
+    padding: theme.spacing.md,
   },
   modalPrimaryButton: {
     flex: 1,
   },
   modalTitle: {
     color: theme.colors.textPrimary,
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "900",
   },
   overviewCard: {
@@ -1129,13 +1129,15 @@ const styles = StyleSheet.create({
   overviewRight: {
     alignItems: "flex-end",
     backgroundColor: theme.colors.successSoft,
+    borderColor: theme.colors.border,
     borderRadius: theme.radius.lg,
+    borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
   overviewValue: {
     color: theme.colors.textPrimary,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "900",
     letterSpacing: -0.6,
     marginTop: 3,
@@ -1143,7 +1145,7 @@ const styles = StyleSheet.create({
   pageTitle: {
     color: theme.colors.textPrimary,
     flex: 1,
-    fontSize: 22,
+    fontSize: 21,
     fontWeight: "900",
     letterSpacing: -0.5,
     textAlign: "center",
@@ -1167,7 +1169,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   smallActionButton: {
-    backgroundColor: theme.colors.surfaceSoft,
+    backgroundColor: theme.colors.surfaceElevated,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
@@ -1191,7 +1193,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   stack: {
-    gap: theme.spacing.lg,
+    gap: theme.spacing.md,
   },
   statusBadge: {
     backgroundColor: theme.colors.successSoft,
@@ -1223,7 +1225,7 @@ const styles = StyleSheet.create({
   },
   summaryValue: {
     color: theme.colors.textPrimary,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "900",
     letterSpacing: -0.6,
   },

@@ -854,21 +854,21 @@ function MoreMenuOption({ description, onPress, title }: MoreMenuOptionProps) {
 
 const styles = StyleSheet.create({
   amountInput: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.surfaceElevated,
     borderBottomColor: theme.colors.primary,
     borderBottomWidth: 2,
     borderColor: theme.colors.primarySoft,
-    borderRadius: theme.radius.xl,
+    borderRadius: 22,
     borderWidth: 1,
     color: theme.colors.textPrimary,
     fontSize: 36,
     fontWeight: "300",
-    minHeight: 76,
+    minHeight: 70,
     paddingHorizontal: theme.spacing.md,
     shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
   },
   amountLabel: {
     color: theme.colors.textPrimary,
@@ -887,10 +887,10 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: theme.typography.label,
     fontWeight: "700",
-    marginBottom: theme.spacing.sm,
+    marginBottom: 6,
   },
   formCard: {
-    gap: theme.spacing.md,
+    gap: 14,
   },
   ghostButton: {
     alignItems: "center",
@@ -916,8 +916,10 @@ const styles = StyleSheet.create({
   },
   messageBox: {
     backgroundColor: theme.colors.warningSoft,
-    borderRadius: theme.radius.md,
-    padding: theme.spacing.md,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    padding: 14,
   },
   modalAction: {
     flex: 1,
@@ -1034,8 +1036,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: "row",
     gap: theme.spacing.md,
-    minHeight: 78,
-    padding: theme.spacing.md,
+    minHeight: 72,
+    padding: 14,
   },
   moreOptionTitle: {
     color: theme.colors.textPrimary,
@@ -1070,12 +1072,12 @@ const styles = StyleSheet.create({
   },
   naturalInput: {
     borderColor: theme.colors.primaryDeep,
-    minHeight: 150,
+    minHeight: 136,
   },
   pageTitle: {
     color: theme.colors.textPrimary,
-    fontSize: 32,
-    fontWeight: "800",
+    fontSize: 30,
+    fontWeight: "900",
     letterSpacing: -0.8,
   },
   quickCategoryRow: {
@@ -1089,11 +1091,13 @@ const styles = StyleSheet.create({
     minWidth: "18%",
   },
   stack: {
-    gap: theme.spacing.lg,
+    gap: theme.spacing.md,
   },
   successBox: {
     backgroundColor: theme.colors.successSoft,
-    borderRadius: theme.radius.md,
-    padding: theme.spacing.md,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    padding: 14,
   },
 });

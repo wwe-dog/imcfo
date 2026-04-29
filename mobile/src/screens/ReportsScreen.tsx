@@ -204,7 +204,7 @@ export default function ReportsScreen({
 
 const styles = StyleSheet.create({
   controlCard: {
-    gap: theme.spacing.md,
+    gap: 14,
   },
   modeHint: {
     color: theme.colors.textMuted,
@@ -214,8 +214,8 @@ const styles = StyleSheet.create({
   },
   modeLabel: {
     color: theme.colors.textSecondary,
-    fontSize: 15,
-    fontWeight: "500",
+    fontSize: 14,
+    fontWeight: "700",
   },
   modeRow: {
     alignItems: "center",
@@ -248,8 +248,8 @@ const styles = StyleSheet.create({
     left: 34,
   },
   modeSwitchTrack: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.borderStrong,
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.border,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     height: 32,
@@ -258,19 +258,21 @@ const styles = StyleSheet.create({
   },
   reportButton: {
     flex: 1,
+    minHeight: 38,
+    paddingHorizontal: 8,
   },
   reportSwitcher: {
     flexDirection: "row",
-    gap: theme.spacing.sm,
+    gap: 6,
   },
   stack: {
-    gap: theme.spacing.lg,
+    gap: theme.spacing.md,
   },
   title: {
-    color: theme.colors.primaryDeep,
-    fontSize: 30,
-    fontWeight: "400",
-    letterSpacing: -0.8,
+    color: theme.colors.textPrimary,
+    fontSize: 26,
+    fontWeight: "900",
+    letterSpacing: -0.6,
     textAlign: "center",
   },
 });

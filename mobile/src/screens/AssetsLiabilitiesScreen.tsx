@@ -684,7 +684,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: 14,
     fontWeight: "700",
-    marginBottom: theme.spacing.sm,
+    marginBottom: 6,
   },
   inlineActions: {
     flexDirection: "row",
@@ -694,7 +694,9 @@ const styles = StyleSheet.create({
   inlineButton: {
     alignItems: "center",
     backgroundColor: theme.colors.surfaceSoft,
-    borderRadius: theme.radius.md,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
     justifyContent: "center",
     minHeight: 40,
     paddingHorizontal: theme.spacing.md,
@@ -707,7 +709,7 @@ const styles = StyleSheet.create({
   inlineDangerButton: {
     alignItems: "center",
     backgroundColor: theme.colors.dangerSoft,
-    borderRadius: theme.radius.md,
+    borderRadius: theme.radius.lg,
     justifyContent: "center",
     minHeight: 40,
     paddingHorizontal: theme.spacing.md,
@@ -718,9 +720,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   itemCard: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.surfaceElevated,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
     padding: theme.spacing.md,
   },
@@ -748,7 +750,7 @@ const styles = StyleSheet.create({
   itemTitle: {
     color: theme.colors.textPrimary,
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "800",
   },
   itemValue: {
     color: theme.colors.textPrimary,
@@ -789,10 +791,10 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   panel: {
-    gap: theme.spacing.md,
+    gap: 14,
   },
   stack: {
-    gap: theme.spacing.lg,
+    gap: theme.spacing.md,
   },
   summaryLabel: {
     color: theme.colors.textInverse,
@@ -800,7 +802,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   summaryPanel: {
-    backgroundColor: theme.colors.primaryDeep,
+    backgroundColor: theme.colors.surfaceStrong,
     borderRadius: theme.radius.xl,
     gap: theme.spacing.sm,
     padding: theme.spacing.lg,
@@ -817,8 +819,8 @@ const styles = StyleSheet.create({
   },
   title: {
     color: theme.colors.textPrimary,
-    fontSize: 30,
-    fontWeight: "800",
+    fontSize: 28,
+    fontWeight: "900",
     letterSpacing: -0.8,
   },
   diffBookValue: {

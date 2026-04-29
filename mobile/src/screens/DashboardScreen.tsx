@@ -1106,23 +1106,23 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     color: theme.colors.textPrimary,
-    fontSize: 22,
-    fontWeight: "800",
+    fontSize: 20,
+    fontWeight: "900",
     letterSpacing: -0.4,
   },
   chartCard: {
-    backgroundColor: theme.colors.surfaceSoft,
+    backgroundColor: theme.colors.surfaceElevated,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.lg,
     borderWidth: 1,
     flex: 1,
     gap: theme.spacing.sm,
-    minHeight: 174,
-    padding: theme.spacing.md,
+    minHeight: 166,
+    padding: 14,
   },
   chartGrid: {
     flexDirection: "row",
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   chartValue: {
     color: theme.colors.textPrimary,
@@ -1180,7 +1180,7 @@ const styles = StyleSheet.create({
   },
   detailChartCard: {
     alignItems: "center",
-    gap: theme.spacing.sm,
+    gap: 10,
     width: "100%",
   },
   detailHeader: {
@@ -1226,7 +1226,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   mainCard: {
-    gap: theme.spacing.md,
+    gap: 14,
   },
   metricLabel: {
     color: theme.colors.textMuted,
@@ -1243,7 +1243,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flex: 1,
     gap: 4,
-    minHeight: 72,
+    minHeight: 66,
     paddingHorizontal: 10,
     paddingVertical: 10,
   },
@@ -1251,8 +1251,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceMuted,
   },
   metricPillBlue: {
-    backgroundColor: "#EAF6FF",
-    borderColor: "#B7DDF8",
+    backgroundColor: theme.colors.blueSoft,
+    borderColor: theme.colors.blueBorder,
   },
   metricPillStrong: {
     backgroundColor: theme.colors.surfaceStrong,
@@ -1510,13 +1510,13 @@ const styles = StyleSheet.create({
   },
   trendChart: {
     alignItems: "stretch",
-    backgroundColor: theme.colors.surfaceSoft,
+    backgroundColor: theme.colors.surfaceElevated,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.lg,
     borderWidth: 1,
     flexDirection: "row",
     gap: 8,
-    height: 128,
+    height: 118,
     justifyContent: "space-between",
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
