@@ -2,7 +2,6 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type { LayoutAnimationConfig } from "react-native";
 import {
-  InteractionManager,
   LayoutAnimation,
   Modal,
   Platform,
@@ -17,15 +16,20 @@ import {
 } from "react-native";
 import AppIcon from "../components/AppIcon";
 import type { Account, AccountType, Asset, Liability, Transaction, TransactionType } from "../domain/models";
+import {
+  groupTransactionDisplayRecords,
+  type TransactionDisplayRecord,
+  type TransactionRecordsIndex,
+} from "../domain/transactions/transactionDisplayIndex";
 import { sharedStyles, theme } from "../styles/theme";
 import { formatCurrency } from "../utils/formatters";
 
 interface TransactionRecordsScreenProps {
-  accounts: Account[];
   assets: Asset[];
+  isPreparingRecordsIndex: boolean;
   liabilities: Liability[];
-  transactions: Transaction[];
   onBack: () => void;
+  recordsIndex: TransactionRecordsIndex | null;
 }
 
 const UNKNOWN_VALUE = "无";
@@ -76,21 +80,6 @@ interface TransactionSection {
   data: TransactionDisplayRecord[];
   monthKey: string;
   monthLabel: string;
-}
-
-interface TransactionDisplayRecord {
-  accountTypeBuckets: AccountFilter[];
-  amountText: string;
-  amountTone: "positive" | "negative" | "neutral";
-  cashStatus: string;
-  dateTime: string;
-  id: string;
-  monthKey: string;
-  monthLabel: string;
-  searchableText: string;
-  timestamp: number;
-  title: string;
-  transaction: Transaction;
 }
 
 const timeFilterOptions: Array<{ label: string; value: TimeFilter }> = [
@@ -383,9 +372,9 @@ const getLatestTransactionDate = (transactions: Transaction[]): Date => {
 
 const getCalendarMonthKey = (date: Date): string => toDateKey(date).slice(0, 7);
 
-const createDefaultFilters = (transactions: Transaction[]): FilterState => ({
+const createDefaultFilters = (latestDateKey?: string): FilterState => ({
   account: "all",
-  calendarMonth: getCalendarMonthKey(getLatestTransactionDate(transactions)),
+  calendarMonth: latestDateKey ? latestDateKey.slice(0, 7) : getCalendarMonthKey(new Date()),
   cashDirection: "all",
   customEndDate: null,
   customStartDate: null,
@@ -397,9 +386,9 @@ const hasActiveFilters = (filters: FilterState): boolean =>
 
 const getDateRangeForFilters = (
   filters: FilterState,
-  transactions: Transaction[],
+  latestDateKey: string,
 ): { endDate: string; startDate: string } | null => {
-  const baseDate = getLatestTransactionDate(transactions);
+  const baseDate = parseTransactionDate(latestDateKey) ?? new Date();
 
   if (filters.time === "currentMonth") {
     const year = baseDate.getFullYear();
@@ -487,7 +476,7 @@ const transactionMatchesFilters = (
   filters: FilterState,
   transactions: Transaction[],
 ): boolean => {
-  const dateRange = getDateRangeForFilters(filters, transactions);
+  const dateRange = getDateRangeForFilters(filters, toDateKey(getLatestTransactionDate(transactions)));
   if (dateRange && (transaction.date < dateRange.startDate || transaction.date > dateRange.endDate)) {
     return false;
   }
@@ -502,7 +491,7 @@ const transactionMatchesFiltersFromMaps = (
   filters: FilterState,
   transactions: Transaction[],
 ): boolean => {
-  const dateRange = getDateRangeForFilters(filters, transactions);
+  const dateRange = getDateRangeForFilters(filters, toDateKey(getLatestTransactionDate(transactions)));
   if (dateRange && (transaction.date < dateRange.startDate || transaction.date > dateRange.endDate)) {
     return false;
   }
@@ -555,7 +544,7 @@ const buildTransactionDisplayRecords = (
   transactions: Transaction[],
   accountNameById: Map<string, string>,
   accountTypeById: Map<string, AccountType>,
-): TransactionDisplayRecord[] =>
+) =>
   transactions
     .map((transaction) => {
       const monthKey = getTransactionMonthKey(transaction);
@@ -668,72 +657,44 @@ const getSelectedDateText = (filters: FilterState): string => {
 };
 
 export default function TransactionRecordsScreen({
-  accounts,
   assets,
+  isPreparingRecordsIndex,
   liabilities,
-  transactions,
   onBack,
+  recordsIndex,
 }: TransactionRecordsScreenProps) {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [selectedRecord, setSelectedRecord] = useState<TransactionDisplayRecord | null>(null);
   const [isFilterVisible, setIsFilterVisible] = useState(false);
-  const [appliedFilters, setAppliedFilters] = useState<FilterState>(() => createDefaultFilters(transactions));
-  const [draftFilters, setDraftFilters] = useState<FilterState>(() => createDefaultFilters(transactions));
+  const [appliedFilters, setAppliedFilters] = useState<FilterState>(() => createDefaultFilters(recordsIndex?.latestDateKey));
+  const [draftFilters, setDraftFilters] = useState<FilterState>(() => createDefaultFilters(recordsIndex?.latestDateKey));
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
-  const [displayRecords, setDisplayRecords] = useState<TransactionDisplayRecord[]>([]);
-  const [isPreparingRecords, setIsPreparingRecords] = useState(true);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 180);
     return () => clearTimeout(timer);
   }, [query]);
 
-  const accountNameById = useMemo(
-    () => new Map(accounts.map((account) => [account.id, account.name])),
-    [accounts],
-  );
-  const accountTypeById = useMemo(
-    () => new Map(accounts.map((account) => [account.id, account.type])),
-    [accounts],
-  );
-
   useEffect(() => {
-    let isCancelled = false;
-    setIsPreparingRecords(true);
-
-    const task = InteractionManager.runAfterInteractions(() => {
-      const nextRecords = buildTransactionDisplayRecords(transactions, accountNameById, accountTypeById);
-      if (isCancelled) return;
-
-      const latestMonthKey = nextRecords[0]?.monthKey;
-      const monthKeys = new Set(nextRecords.map((record) => record.monthKey));
-
-      setDisplayRecords(nextRecords);
-      setCollapsedMonths((current) => {
-        const next: Record<string, boolean> = {};
-        monthKeys.forEach((monthKey) => {
-          next[monthKey] = current[monthKey] ?? monthKey !== latestMonthKey;
-        });
-        return next;
-      });
-      setIsPreparingRecords(false);
-    });
-
-    return () => {
-      isCancelled = true;
-      task.cancel();
-    };
-  }, [accountNameById, accountTypeById, transactions]);
+    if (!recordsIndex?.latestDateKey) return;
+    const nextDefaults = createDefaultFilters(recordsIndex.latestDateKey);
+    setAppliedFilters((current) => ({ ...current, calendarMonth: current.calendarMonth || nextDefaults.calendarMonth }));
+    setDraftFilters((current) => ({ ...current, calendarMonth: current.calendarMonth || nextDefaults.calendarMonth }));
+  }, [recordsIndex?.latestDateKey]);
 
   const filteredGroups = useMemo(() => {
-    if (isPreparingRecords) return [];
+    if (!recordsIndex) return [];
 
     const normalizedQuery = debouncedQuery.trim().toLowerCase();
     const isFilterActive = hasActiveFilters(appliedFilters);
-    const dateRange = appliedFilters.time === "all" ? null : getDateRangeForFilters(appliedFilters, transactions);
+    if (!normalizedQuery && !isFilterActive) return recordsIndex.groups;
 
-    const filtered = displayRecords.filter((record) => {
+    const dateRange = appliedFilters.time === "all"
+      ? null
+      : getDateRangeForFilters(appliedFilters, recordsIndex.latestDateKey);
+
+    const filtered = recordsIndex.records.filter((record) => {
         const matchesSearch = normalizedQuery
           ? record.searchableText.includes(normalizedQuery)
           : true;
@@ -742,20 +703,21 @@ export default function TransactionRecordsScreen({
         return displayRecordMatchesFilters(record, appliedFilters, dateRange);
       });
 
-    return groupDisplayRecordsByMonth(filtered);
-  }, [appliedFilters, debouncedQuery, displayRecords, isPreparingRecords, transactions]);
+    return groupTransactionDisplayRecords(filtered);
+  }, [appliedFilters, debouncedQuery, recordsIndex]);
 
   const sections = useMemo<TransactionSection[]>(
     () =>
       filteredGroups.map((group) => ({
-        data: collapsedMonths[group.monthKey] ? [] : group.items,
+        data: (collapsedMonths[group.monthKey] ?? group.monthKey !== recordsIndex?.latestMonthKey) ? [] : group.items,
         monthKey: group.monthKey,
         monthLabel: group.monthLabel,
       })),
-    [collapsedMonths, filteredGroups],
+    [collapsedMonths, filteredGroups, recordsIndex?.latestMonthKey],
   );
 
-  const hasTransactions = transactions.length > 0;
+  const isPreparingRecords = isPreparingRecordsIndex || !recordsIndex;
+  const hasTransactions = Boolean(recordsIndex?.records.length) || isPreparingRecords;
   const hasResult = !isPreparingRecords && filteredGroups.length > 0;
   const isFilterActive = hasActiveFilters(appliedFilters);
 
@@ -768,14 +730,14 @@ export default function TransactionRecordsScreen({
     LayoutAnimation.configureNext(monthCollapseAnimation);
     setCollapsedMonths((current) => ({
       ...current,
-      [month]: !current[month],
+      [month]: !(current[month] ?? month !== recordsIndex?.latestMonthKey),
     }));
-  }, []);
+  }, [recordsIndex?.latestMonthKey]);
 
   const renderTransactionRow = useCallback(
     ({ item }: { item: TransactionDisplayRecord }) => (
       <TransactionRow
-        onSelect={setSelectedTransaction}
+        onSelect={setSelectedRecord}
         record={item}
       />
     ),
@@ -795,14 +757,13 @@ export default function TransactionRecordsScreen({
 
   const keyExtractor = useCallback((record: TransactionDisplayRecord) => record.id, []);
 
-  if (selectedTransaction) {
+  if (selectedRecord) {
     return (
       <TransactionDetail
-        accounts={accounts}
         assets={assets}
         liabilities={liabilities}
-        onBack={() => setSelectedTransaction(null)}
-        transaction={selectedTransaction}
+        onBack={() => setSelectedRecord(null)}
+        record={selectedRecord}
       />
     );
   }
@@ -879,7 +840,7 @@ export default function TransactionRecordsScreen({
         }}
         onClose={() => setIsFilterVisible(false)}
         onReset={() => {
-          const defaultFilters = createDefaultFilters(transactions);
+          const defaultFilters = createDefaultFilters(recordsIndex?.latestDateKey);
           setDraftFilters(defaultFilters);
           setAppliedFilters(defaultFilters);
           setIsFilterVisible(false);
@@ -892,20 +853,18 @@ export default function TransactionRecordsScreen({
 }
 
 function TransactionDetail({
-  accounts,
   assets,
   liabilities,
   onBack,
-  transaction,
+  record,
 }: {
-  accounts: Account[];
   assets: Asset[];
   liabilities: Liability[];
   onBack: () => void;
-  transaction: Transaction;
+  record: TransactionDisplayRecord;
 }) {
-  const amountTone = getAmountTone(transaction);
-  const accountDisplay = resolveAccountDisplay(accounts, transaction);
+  const transaction = record.transaction;
+  const accountDisplay = record.accountDisplay;
   const assetName = getAssetName(assets, transaction.relatedAssetId) ?? UNKNOWN_VALUE;
   const liabilityName = getLiabilityName(liabilities, transaction.relatedLiabilityId) ?? UNKNOWN_VALUE;
 
@@ -914,9 +873,9 @@ function TransactionDetail({
       <TopBar onBack={onBack} title="交易详情" />
 
       <View style={styles.detailHero}>
-        <Text style={styles.detailTitle}>{getTransactionTitle(transaction)}</Text>
-        <Text style={[styles.detailAmount, styles[`amount_${amountTone}`]]}>{formatSignedAmount(transaction)}</Text>
-        <Text style={styles.detailDate}>{getTransactionDateTime(transaction)}</Text>
+        <Text style={styles.detailTitle}>{record.title}</Text>
+        <Text style={[styles.detailAmount, styles[`amount_${record.amountTone}`]]}>{record.amountText}</Text>
+        <Text style={styles.detailDate}>{record.dateTime}</Text>
       </View>
 
       <DetailSection title="基础信息">
@@ -963,10 +922,10 @@ const TransactionRow = memo(function TransactionRow({
   onSelect,
 }: {
   record: TransactionDisplayRecord;
-  onSelect: (transaction: Transaction) => void;
+  onSelect: (record: TransactionDisplayRecord) => void;
 }) {
   return (
-    <Pressable onPress={() => onSelect(record.transaction)} style={styles.transactionCard}>
+    <Pressable onPress={() => onSelect(record)} style={styles.transactionCard}>
       <View style={styles.transactionMain}>
         <Text numberOfLines={1} style={styles.transactionTitle}>
           {record.title}

@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppData } from "./src/app/useAppData";
+import { useTransactionRecordsIndex } from "./src/hooks/useTransactionRecordsIndex";
 import type {
   AccountInput,
   AssetInput,
@@ -81,6 +82,10 @@ function AppShell() {
     exportData,
     importData,
   } = useAppData();
+  const transactionRecordsIndex = useTransactionRecordsIndex({
+    accounts: data?.accounts,
+    transactions: data?.transactions,
+  });
 
   const handleExport = async () => exportData();
 
@@ -206,8 +211,6 @@ function AppShell() {
       );
     }
 
-    const periodTransactions = filterTransactionsByReportPeriod(data.transactions, data.currentPeriod);
-
     switch (activeScreen) {
       case "dashboard":
         return (
@@ -234,11 +237,11 @@ function AppShell() {
       case "transactions":
         return (
           <TransactionRecordsScreen
-            accounts={data.accounts}
             assets={data.assets}
+            isPreparingRecordsIndex={transactionRecordsIndex.isPreparing}
             liabilities={data.liabilities}
-            transactions={data.transactions}
             onBack={() => setActiveScreen("record")}
+            recordsIndex={transactionRecordsIndex.index}
           />
         );
       case "accounts":
@@ -268,6 +271,7 @@ function AppShell() {
           />
         );
       case "reports":
+        const periodTransactions = filterTransactionsByReportPeriod(data.transactions, data.currentPeriod);
         return (
           <ReportsScreen
             assets={data.assets}
