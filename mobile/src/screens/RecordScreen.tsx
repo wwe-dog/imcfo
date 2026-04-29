@@ -78,6 +78,9 @@ export default function RecordScreen({
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState(findOption("expense").defaultCategory);
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
+  const [creditCardAccountId, setCreditCardAccountId] = useState(
+    accounts.find((account) => account.type === "creditCard")?.id ?? "",
+  );
   const [date, setDate] = useState(today());
   const [note, setNote] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -89,7 +92,16 @@ export default function RecordScreen({
   const selectedOption = findOption(type);
   const selectedMeta = transactionTypeMeta[type];
   const activeAccounts = useMemo(() => accounts.filter(isAccountEnabled), [accounts]);
+  const assetLikeAccounts = useMemo(
+    () => activeAccounts.filter((account) => account.type !== "creditCard"),
+    [activeAccounts],
+  );
+  const creditCardAccounts = useMemo(
+    () => activeAccounts.filter((account) => account.type === "creditCard"),
+    [activeAccounts],
+  );
   const selectedAccount = activeAccounts.find((account) => account.id === accountId);
+  const selectedCreditCardAccount = creditCardAccounts.find((account) => account.id === creditCardAccountId);
 
   const pickAccountId = (nextType: NaturalLanguageTransactionType): string => {
     const currentAccount = activeAccounts.find((account) => account.id === accountId);
@@ -103,6 +115,11 @@ export default function RecordScreen({
     return cashAccount?.id ?? currentAccount?.id ?? activeAccounts[0]?.id ?? "";
   };
 
+  const pickCreditCardAccountId = (): string => {
+    const currentCreditCardAccount = creditCardAccounts.find((account) => account.id === creditCardAccountId);
+    return currentCreditCardAccount?.id ?? creditCardAccounts[0]?.id ?? "";
+  };
+
   useEffect(() => {
     if (activeAccounts.length === 0) {
       setAccountId("");
@@ -112,7 +129,11 @@ export default function RecordScreen({
     if (!activeAccounts.some((account) => account.id === accountId)) {
       setAccountId(pickAccountId(type));
     }
-  }, [accountId, activeAccounts, type]);
+
+    if (type === "creditCardRepayment" && !creditCardAccounts.some((account) => account.id === creditCardAccountId)) {
+      setCreditCardAccountId(pickCreditCardAccountId());
+    }
+  }, [accountId, activeAccounts, creditCardAccountId, creditCardAccounts, type]);
 
   const clearEntryFields = () => {
     setAmount("");
@@ -150,6 +171,9 @@ export default function RecordScreen({
     setType(nextType);
     setCategory(nextOption.defaultCategory);
     setAccountId(pickAccountId(nextType));
+    if (nextType === "creditCardRepayment") {
+      setCreditCardAccountId(pickCreditCardAccountId());
+    }
     setSuccessMessage("");
   };
 
@@ -159,6 +183,9 @@ export default function RecordScreen({
     setCategory(parsedDraft.category);
     setDate(parsedDraft.date);
     setAccountId(pickAccountId(parsedDraft.type));
+    if (parsedDraft.type === "creditCardRepayment") {
+      setCreditCardAccountId(pickCreditCardAccountId());
+    }
     setNote(parsedDraft.rawText.trim());
     setDraft(parsedDraft);
     setSuccessMessage("");
@@ -208,6 +235,21 @@ export default function RecordScreen({
       return null;
     }
 
+    if (type === "creditCardRepayment") {
+      const payingAccount = assetLikeAccounts.find((account) => account.id === accountId);
+      const targetCreditCard = creditCardAccounts.find((account) => account.id === creditCardAccountId);
+
+      if (!payingAccount) {
+        Alert.alert("请选择付款账户", "信用卡还款需要选择一个启用的现金、银行卡或支付账户。");
+        return null;
+      }
+
+      if (!targetCreditCard) {
+        Alert.alert("请选择信用卡账户", "信用卡还款需要选择要偿还的信用卡账户。");
+        return null;
+      }
+    }
+
     if (!date.trim()) {
       Alert.alert("请填写日期", "日期是必填项，格式建议为 YYYY-MM-DD。");
       return null;
@@ -229,6 +271,7 @@ export default function RecordScreen({
         amount: numericAmount,
         category,
         accountId,
+        counterAccountId: type === "creditCardRepayment" ? creditCardAccountId : undefined,
         date,
         note: note.trim() || selectedMeta.impactText,
       });
@@ -366,10 +409,10 @@ export default function RecordScreen({
           value={category}
         />
 
-        <Text style={styles.fieldLabel}>账户</Text>
-        {activeAccounts.length > 0 ? (
+        <Text style={styles.fieldLabel}>{type === "creditCardRepayment" ? "付款账户" : "账户"}</Text>
+        {(type === "creditCardRepayment" ? assetLikeAccounts : activeAccounts).length > 0 ? (
           <View style={styles.chipWrap}>
-            {activeAccounts.map((account) => {
+            {(type === "creditCardRepayment" ? assetLikeAccounts : activeAccounts).map((account) => {
               const isActive = accountId === account.id;
               return (
                 <Pressable
@@ -390,10 +433,43 @@ export default function RecordScreen({
         ) : (
           <View style={styles.messageBox}>
             <Text style={sharedStyles.warningText}>
-              当前没有可用账户，请先通过“更多 - 账户管理”新增或启用账户。
+              {type === "creditCardRepayment"
+                ? "当前没有可用付款账户，请先在账户管理中启用现金、银行卡或支付账户。"
+                : "当前没有可用账户，请先通过“更多 - 账户管理”新增或启用账户。"}
             </Text>
           </View>
         )}
+
+        {type === "creditCardRepayment" ? (
+          <>
+            <Text style={styles.fieldLabel}>信用卡账户</Text>
+            {creditCardAccounts.length > 0 ? (
+              <View style={styles.chipWrap}>
+                {creditCardAccounts.map((account) => {
+                  const isActive = creditCardAccountId === account.id;
+                  return (
+                    <Pressable
+                      key={account.id}
+                      onPress={() => {
+                        setCreditCardAccountId(account.id);
+                        setSuccessMessage("");
+                      }}
+                      style={[sharedStyles.chip, isActive && sharedStyles.chipActiveDark]}
+                    >
+                      <Text style={[sharedStyles.chipText, isActive && sharedStyles.chipTextInverse]}>
+                        {account.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : (
+              <View style={styles.messageBox}>
+                <Text style={sharedStyles.warningText}>当前没有启用的信用卡账户，请先在账户管理中新增或启用信用卡。</Text>
+              </View>
+            )}
+          </>
+        ) : null}
 
         <Text style={styles.fieldLabel}>日期</Text>
         <TextInput
@@ -462,9 +538,15 @@ export default function RecordScreen({
                   <Text style={styles.modalValue}>{date || "未填写"}</Text>
                 </View>
                 <View style={styles.modalRow}>
-                  <Text style={styles.modalLabel}>账户</Text>
+                  <Text style={styles.modalLabel}>{type === "creditCardRepayment" ? "付款账户" : "账户"}</Text>
                   <Text style={styles.modalValue}>{selectedAccount?.name ?? "未选择"}</Text>
                 </View>
+                {type === "creditCardRepayment" ? (
+                  <View style={styles.modalRow}>
+                    <Text style={styles.modalLabel}>信用卡账户</Text>
+                    <Text style={styles.modalValue}>{selectedCreditCardAccount?.name ?? "未选择"}</Text>
+                  </View>
+                ) : null}
                 <View style={styles.modalRow}>
                   <Text style={styles.modalLabel}>现金流</Text>
                   <Text style={styles.modalValue}>{selectedMeta.cashFlowLabel}</Text>

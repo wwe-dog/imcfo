@@ -16,6 +16,7 @@ export interface TransactionInput {
   counterAccountId?: string;
   date: string;
   note?: string;
+  relatedAssetId?: string;
   relatedLiabilityId?: string;
 }
 
@@ -150,6 +151,7 @@ export const createTransactionFromInput = (input: TransactionInput): Transaction
     counterAccountId: input.counterAccountId,
     cashFlowType: rule.cashFlowType,
     note: input.note?.trim() || rule.limitation,
+    relatedAssetId: input.relatedAssetId,
     relatedLiabilityId: input.relatedLiabilityId,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -191,6 +193,21 @@ const updateAssetByAccount = (assets: Asset[], accountId: string, delta: number)
         }
       : asset,
   );
+
+const updateAssetById = (assets: Asset[], assetId: string | undefined, delta: number): Asset[] => {
+  if (!assetId || !assets.some((asset) => asset.id === assetId)) return assets;
+
+  return assets.map((asset) =>
+    asset.id === assetId
+      ? {
+          ...asset,
+          amount: Math.max(0, asset.amount + delta),
+          currentValue: Math.max(0, asset.currentValue + delta),
+          updatedAt: new Date().toISOString(),
+        }
+      : asset,
+  );
+};
 
 const updateFirstInvestmentAsset = (assets: Asset[], delta: number): Asset[] =>
   assets.map((asset) =>
@@ -266,8 +283,14 @@ const updateLiabilityByIdOrAccount = (
   return updateFirstLiability(liabilities, delta);
 };
 
-const syncAssetsByAccountBalance = (assets: Asset[], accountId: string, balance: number): Asset[] =>
-  assets.map((asset) =>
+const syncAssetsByAccountBalance = (assets: Asset[], accountId: string, balance: number): Asset[] => {
+  const linkedAssets = assets.filter((asset) => asset.accountId === accountId);
+  // Only one-to-one account/asset links are safe to sync. Investment accounts can
+  // hold multiple asset records, so copying one account balance into every linked
+  // asset would overstate the balance sheet.
+  if (linkedAssets.length !== 1) return assets;
+
+  return assets.map((asset) =>
     asset.accountId === accountId
       ? {
           ...asset,
@@ -277,6 +300,7 @@ const syncAssetsByAccountBalance = (assets: Asset[], accountId: string, balance:
         }
       : asset,
   );
+};
 
 const syncLiabilitiesByAccountDebt = (
   liabilities: Liability[],
@@ -303,14 +327,28 @@ export const applyTransactionToFinancialState = <T extends FinancialState>(
 
   switch (transaction.type) {
     case "income":
-    case "assetIncrease":
       accounts = updateAccountBalance(accounts, transaction.accountId, transaction.amount);
       assets = updateAssetByAccount(assets, transaction.accountId, transaction.amount);
       break;
     case "expense":
-    case "assetDecrease":
       accounts = updateAccountBalance(accounts, transaction.accountId, -transaction.amount);
       assets = updateAssetByAccount(assets, transaction.accountId, -transaction.amount);
+      break;
+    case "assetIncrease":
+      if (transaction.cashFlowType === "nonCash") {
+        assets = updateAssetById(assets, transaction.relatedAssetId, transaction.amount);
+      } else {
+        accounts = updateAccountBalance(accounts, transaction.accountId, transaction.amount);
+        assets = updateAssetByAccount(assets, transaction.accountId, transaction.amount);
+      }
+      break;
+    case "assetDecrease":
+      if (transaction.cashFlowType === "nonCash") {
+        assets = updateAssetById(assets, transaction.relatedAssetId, -transaction.amount);
+      } else {
+        accounts = updateAccountBalance(accounts, transaction.accountId, -transaction.amount);
+        assets = updateAssetByAccount(assets, transaction.accountId, -transaction.amount);
+      }
       break;
     case "investmentBuy":
       accounts = updateAccountBalance(accounts, transaction.accountId, -transaction.amount);
@@ -323,8 +361,10 @@ export const applyTransactionToFinancialState = <T extends FinancialState>(
       assets = updateFirstInvestmentAsset(assets, -transaction.amount);
       break;
     case "liabilityIncrease":
-      accounts = updateAccountBalance(accounts, transaction.accountId, transaction.amount);
-      assets = updateAssetByAccount(assets, transaction.accountId, transaction.amount);
+      if (transaction.cashFlowType !== "nonCash") {
+        accounts = updateAccountBalance(accounts, transaction.accountId, transaction.amount);
+        assets = updateAssetByAccount(assets, transaction.accountId, transaction.amount);
+      }
       liabilities = updateLiabilityByIdOrAccount(
         liabilities,
         transaction.relatedLiabilityId,
@@ -334,8 +374,10 @@ export const applyTransactionToFinancialState = <T extends FinancialState>(
       break;
     case "liabilityDecrease":
     case "repayment":
-      accounts = updateAccountBalance(accounts, transaction.accountId, -transaction.amount);
-      assets = updateAssetByAccount(assets, transaction.accountId, -transaction.amount);
+      if (transaction.cashFlowType !== "nonCash") {
+        accounts = updateAccountBalance(accounts, transaction.accountId, -transaction.amount);
+        assets = updateAssetByAccount(assets, transaction.accountId, -transaction.amount);
+      }
       liabilities = updateLiabilityByIdOrAccount(
         liabilities,
         transaction.relatedLiabilityId,
