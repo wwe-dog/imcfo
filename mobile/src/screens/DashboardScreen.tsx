@@ -520,7 +520,7 @@ function BalanceStructureCard({
           tone="muted"
           value={formatCompactCurrency(summary.totalLiabilities)}
         />
-        <MetricPill label="净资产" tone="strong" value={formatCompactCurrency(summary.ownerEquity)} />
+        <MetricPill label="净资产" tone="blue" value={formatCompactCurrency(summary.ownerEquity)} />
       </View>
 
       <View style={styles.chartGrid}>
@@ -860,20 +860,28 @@ interface MetricPillProps {
   label: string;
   onPress?: () => void;
   value: string;
-  tone?: "default" | "muted" | "strong";
+  tone?: "blue" | "default" | "muted" | "strong";
 }
 
 function MetricPill({ label, onPress, tone = "default", value }: MetricPillProps) {
   const isStrong = tone === "strong";
+  const isBlue = tone === "blue";
   const Container = onPress ? Pressable : View;
 
   return (
     <Container
       onPress={onPress}
-      style={[styles.metricPill, tone === "muted" && styles.metricPillMuted, isStrong && styles.metricPillStrong]}
+      style={[
+        styles.metricPill,
+        tone === "muted" && styles.metricPillMuted,
+        isStrong && styles.metricPillStrong,
+        isBlue && styles.metricPillBlue,
+      ]}
     >
-      <Text style={[styles.metricLabel, isStrong && styles.metricLabelStrong]}>{label}</Text>
-      <Text style={[styles.metricValue, isStrong && styles.metricValueStrong]} numberOfLines={1}>
+      <Text style={[styles.metricLabel, isStrong && styles.metricLabelStrong, isBlue && styles.metricLabelBlue]}>
+        {label}
+      </Text>
+      <Text style={[styles.metricValue, isStrong && styles.metricValueStrong, isBlue && styles.metricValueBlue]} numberOfLines={1}>
         {value}
       </Text>
     </Container>
@@ -1062,6 +1070,10 @@ const styles = StyleSheet.create({
   metricPillMuted: {
     backgroundColor: theme.colors.surfaceMuted,
   },
+  metricPillBlue: {
+    backgroundColor: "#EAF6FF",
+    borderColor: "#B7DDF8",
+  },
   metricPillStrong: {
     backgroundColor: theme.colors.surfaceStrong,
   },
@@ -1077,6 +1089,12 @@ const styles = StyleSheet.create({
   },
   metricValueStrong: {
     color: theme.colors.textInverse,
+  },
+  metricLabelBlue: {
+    color: "#375A6F",
+  },
+  metricValueBlue: {
+    color: "#17384F",
   },
   periodButton: {
     alignItems: "center",
