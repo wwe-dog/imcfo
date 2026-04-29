@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import type { ReactNode } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import AppIcon from "../components/AppIcon";
-import type { Account, Asset, Liability, Transaction, TransactionType } from "../domain/models";
+import type { Account, AccountType, Asset, Liability, Transaction, TransactionType } from "../domain/models";
 import { sharedStyles, theme } from "../styles/theme";
 import { formatCurrency } from "../utils/formatters";
 
@@ -16,6 +16,51 @@ interface TransactionRecordsScreenProps {
 
 const UNKNOWN_VALUE = "无";
 const RULE_BASED_VALUE = "按当前规则计算";
+
+type TimeFilter = "all" | "currentMonth" | "last7Days" | "custom";
+type AccountFilter = "all" | "bank" | "wechat" | "alipay" | "securities" | "fund" | "creditCard" | "other";
+type CashDirectionFilter = "all" | "inflow" | "outflow" | "nonCash";
+
+interface FilterState {
+  account: AccountFilter;
+  calendarMonth: string;
+  cashDirection: CashDirectionFilter;
+  customEndDate: string | null;
+  customStartDate: string | null;
+  time: TimeFilter;
+}
+
+interface CalendarCell {
+  dateKey: string;
+  day: number;
+}
+
+const timeFilterOptions: Array<{ label: string; value: TimeFilter }> = [
+  { label: "全部", value: "all" },
+  { label: "本月", value: "currentMonth" },
+  { label: "近7天", value: "last7Days" },
+  { label: "自定义", value: "custom" },
+];
+
+const accountFilterOptions: Array<{ label: string; value: AccountFilter }> = [
+  { label: "全部", value: "all" },
+  { label: "银行卡", value: "bank" },
+  { label: "微信", value: "wechat" },
+  { label: "支付宝", value: "alipay" },
+  { label: "证券账户", value: "securities" },
+  { label: "基金账户", value: "fund" },
+  { label: "信用卡", value: "creditCard" },
+  { label: "其他", value: "other" },
+];
+
+const cashDirectionOptions: Array<{ label: string; value: CashDirectionFilter }> = [
+  { label: "全部", value: "all" },
+  { label: "现金流入", value: "inflow" },
+  { label: "现金流出", value: "outflow" },
+  { label: "非现金", value: "nonCash" },
+];
+
+const weekLabels = ["日", "一", "二", "三", "四", "五", "六"];
 
 const transactionTypeLabels: Record<TransactionType, string> = {
   assetDecrease: "资产减少",
@@ -186,6 +231,201 @@ const resolveAccountDisplay = (accounts: Account[], transaction: Transaction): s
   return accountName ?? counterAccountName ?? UNKNOWN_VALUE;
 };
 
+const getTransactionSearchText = (transaction: Transaction, accounts: Account[]): string => {
+  const amountText = [
+    String(transaction.amount),
+    formatCurrency(transaction.amount),
+    formatSignedAmount(transaction),
+  ].join(" ");
+
+  return [
+    getTransactionTitle(transaction),
+    amountText,
+    transaction.category,
+    transaction.note ?? "",
+    getTypeLabel(transaction.type),
+    resolveAccountDisplay(accounts, transaction),
+  ]
+    .join(" ")
+    .toLowerCase();
+};
+
+const parseTransactionDate = (date: string): Date | null => {
+  const [yearText, monthText, dayText] = date.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+};
+
+const toDateKey = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const formatCalendarMonthTitle = (monthKey: string): string => {
+  const [year, month] = monthKey.split("-");
+  if (!year || !month) return "选择日期";
+  return `${year}年${Number(month)}月`;
+};
+
+const formatSelectedDate = (dateKey: string): string => {
+  const [, month, day] = dateKey.split("-");
+  return `${month}.${day}`;
+};
+
+const getLatestTransactionDate = (transactions: Transaction[]): Date => {
+  const latestDate = transactions
+    .map((transaction) => parseTransactionDate(transaction.date))
+    .filter((date): date is Date => Boolean(date))
+    .sort((first, second) => second.getTime() - first.getTime())[0];
+
+  return latestDate ?? new Date();
+};
+
+const getCalendarMonthKey = (date: Date): string => toDateKey(date).slice(0, 7);
+
+const createDefaultFilters = (transactions: Transaction[]): FilterState => ({
+  account: "all",
+  calendarMonth: getCalendarMonthKey(getLatestTransactionDate(transactions)),
+  cashDirection: "all",
+  customEndDate: null,
+  customStartDate: null,
+  time: "all",
+});
+
+const hasActiveFilters = (filters: FilterState): boolean =>
+  filters.time !== "all" || filters.account !== "all" || filters.cashDirection !== "all";
+
+const getDateRangeForFilters = (
+  filters: FilterState,
+  transactions: Transaction[],
+): { endDate: string; startDate: string } | null => {
+  const baseDate = getLatestTransactionDate(transactions);
+
+  if (filters.time === "currentMonth") {
+    const year = baseDate.getFullYear();
+    const month = baseDate.getMonth();
+    return {
+      endDate: toDateKey(new Date(year, month + 1, 0)),
+      startDate: toDateKey(new Date(year, month, 1)),
+    };
+  }
+
+  if (filters.time === "last7Days") {
+    const startDate = new Date(baseDate);
+    startDate.setDate(baseDate.getDate() - 6);
+    return { endDate: toDateKey(baseDate), startDate: toDateKey(startDate) };
+  }
+
+  if (filters.time === "custom" && filters.customStartDate) {
+    return {
+      endDate: filters.customEndDate ?? filters.customStartDate,
+      startDate: filters.customStartDate,
+    };
+  }
+
+  return null;
+};
+
+const mapAccountTypeToFilter = (type: AccountType): AccountFilter => {
+  if (type === "cash") return "other";
+  return type;
+};
+
+const transactionMatchesAccountFilter = (
+  transaction: Transaction,
+  accounts: Account[],
+  accountFilter: AccountFilter,
+): boolean => {
+  if (accountFilter === "all") return true;
+  const relatedAccountIds = [transaction.accountId, transaction.counterAccountId].filter(Boolean);
+  return relatedAccountIds.some((accountId) => {
+    const account = accounts.find((item) => item.id === accountId);
+    return account ? mapAccountTypeToFilter(account.type) === accountFilter : false;
+  });
+};
+
+const transactionMatchesCashDirection = (
+  transaction: Transaction,
+  cashDirection: CashDirectionFilter,
+): boolean => {
+  if (cashDirection === "all") return true;
+  if (cashDirection === "nonCash") return transaction.cashFlowType === "nonCash";
+  if (transaction.cashFlowType === "nonCash" || transaction.type === "transfer") return false;
+  return cashDirection === "inflow" ? isCashInflow(transaction) : !isCashInflow(transaction);
+};
+
+const transactionMatchesFilters = (
+  transaction: Transaction,
+  accounts: Account[],
+  filters: FilterState,
+  transactions: Transaction[],
+): boolean => {
+  const dateRange = getDateRangeForFilters(filters, transactions);
+  if (dateRange && (transaction.date < dateRange.startDate || transaction.date > dateRange.endDate)) {
+    return false;
+  }
+
+  if (!transactionMatchesAccountFilter(transaction, accounts, filters.account)) return false;
+  return transactionMatchesCashDirection(transaction, filters.cashDirection);
+};
+
+const groupTransactionsByMonth = (items: Transaction[]): Array<{ month: string; items: Transaction[] }> =>
+  items.reduce<Array<{ month: string; items: Transaction[] }>>((groups, transaction) => {
+    const month = getMonthLabel(transaction.date);
+    const existingGroup = groups.find((group) => group.month === month);
+    if (existingGroup) {
+      existingGroup.items.push(transaction);
+    } else {
+      groups.push({ month, items: [transaction] });
+    }
+    return groups;
+  }, []);
+
+const buildCalendarCells = (monthKey: string): Array<CalendarCell | null> => {
+  const [yearText, monthText] = monthKey.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  if (!year || !month) return [];
+
+  const firstDay = new Date(year, month - 1, 1).getDay();
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const cells: Array<CalendarCell | null> = Array.from({ length: firstDay }, () => null);
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    cells.push({
+      dateKey: `${yearText}-${monthText}-${String(day).padStart(2, "0")}`,
+      day,
+    });
+  }
+
+  while (cells.length % 7 !== 0) {
+    cells.push(null);
+  }
+
+  return cells;
+};
+
+const shiftMonthKey = (monthKey: string, offset: number): string => {
+  const [yearText, monthText] = monthKey.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  if (!year || !month) return monthKey;
+  return getCalendarMonthKey(new Date(year, month - 1 + offset, 1));
+};
+
+const getSelectedDateText = (filters: FilterState): string => {
+  if (filters.customStartDate && filters.customEndDate) {
+    return `已选：${formatSelectedDate(filters.customStartDate)} - ${formatSelectedDate(filters.customEndDate)}`;
+  }
+  if (filters.customStartDate) return `已选：${formatSelectedDate(filters.customStartDate)}`;
+  return "已选：未选择";
+};
+
 export default function TransactionRecordsScreen({
   accounts,
   assets,
@@ -195,48 +435,27 @@ export default function TransactionRecordsScreen({
 }: TransactionRecordsScreenProps) {
   const [query, setQuery] = useState("");
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [isFilterVisible, setIsFilterVisible] = useState(false);
+  const [appliedFilters, setAppliedFilters] = useState<FilterState>(() => createDefaultFilters(transactions));
+  const [draftFilters, setDraftFilters] = useState<FilterState>(() => createDefaultFilters(transactions));
 
   const filteredGroups = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
     const filtered = transactions
       .filter((transaction) => {
-        if (!normalizedQuery) return true;
-
-        const amountText = [
-          String(transaction.amount),
-          formatCurrency(transaction.amount),
-          formatSignedAmount(transaction),
-        ].join(" ");
-        const haystack = [
-          getTransactionTitle(transaction),
-          amountText,
-          transaction.category,
-          transaction.note ?? "",
-          getTypeLabel(transaction.type),
-          resolveAccountDisplay(accounts, transaction),
-        ]
-          .join(" ")
-          .toLowerCase();
-
-        return haystack.includes(normalizedQuery);
+        const matchesSearch = normalizedQuery
+          ? getTransactionSearchText(transaction, accounts).includes(normalizedQuery)
+          : true;
+        return matchesSearch && transactionMatchesFilters(transaction, accounts, appliedFilters, transactions);
       })
       .sort((first, second) => {
         if (first.date !== second.date) return second.date.localeCompare(first.date);
         return second.createdAt.localeCompare(first.createdAt);
       });
 
-    return filtered.reduce<Array<{ month: string; items: Transaction[] }>>((groups, transaction) => {
-      const month = getMonthLabel(transaction.date);
-      const existingGroup = groups.find((group) => group.month === month);
-      if (existingGroup) {
-        existingGroup.items.push(transaction);
-      } else {
-        groups.push({ month, items: [transaction] });
-      }
-      return groups;
-    }, []);
-  }, [accounts, query, transactions]);
+    return groupTransactionsByMonth(filtered);
+  }, [accounts, appliedFilters, query, transactions]);
 
   if (selectedTransaction) {
     return (
@@ -252,6 +471,12 @@ export default function TransactionRecordsScreen({
 
   const hasTransactions = transactions.length > 0;
   const hasResult = filteredGroups.length > 0;
+  const isFilterActive = hasActiveFilters(appliedFilters);
+
+  const openFilterPanel = () => {
+    setDraftFilters(appliedFilters);
+    setIsFilterVisible(true);
+  };
 
   return (
     <View style={styles.stack}>
@@ -270,10 +495,11 @@ export default function TransactionRecordsScreen({
         </View>
         <Pressable
           accessibilityLabel="筛选交易"
-          onPress={() => Alert.alert("筛选交易", "筛选功能将在后续版本中完善。", [{ text: "知道了" }])}
-          style={styles.filterButton}
+          onPress={openFilterPanel}
+          style={[styles.filterButton, isFilterActive ? styles.filterButtonActive : null]}
         >
-          <AppIcon color={theme.colors.primaryDeep} name="filter" size={19} />
+          <AppIcon color={isFilterActive ? "#FFFFFF" : theme.colors.primaryDeep} name="filter" size={19} />
+          {isFilterActive ? <View style={styles.filterActiveDot} /> : null}
         </Pressable>
       </View>
 
@@ -303,6 +529,23 @@ export default function TransactionRecordsScreen({
           ))}
         </View>
       ))}
+
+      <FilterPanel
+        draftFilters={draftFilters}
+        onApply={() => {
+          setAppliedFilters(draftFilters);
+          setIsFilterVisible(false);
+        }}
+        onClose={() => setIsFilterVisible(false)}
+        onReset={() => {
+          const defaultFilters = createDefaultFilters(transactions);
+          setDraftFilters(defaultFilters);
+          setAppliedFilters(defaultFilters);
+          setIsFilterVisible(false);
+        }}
+        setDraftFilters={setDraftFilters}
+        visible={isFilterVisible}
+      />
     </View>
   );
 }
@@ -394,6 +637,218 @@ function TransactionRow({
         </Text>
       </View>
       <Text style={[styles.transactionAmount, styles[`amount_${tone}`]]}>{formatSignedAmount(transaction)}</Text>
+    </Pressable>
+  );
+}
+
+function FilterPanel({
+  draftFilters,
+  onApply,
+  onClose,
+  onReset,
+  setDraftFilters,
+  visible,
+}: {
+  draftFilters: FilterState;
+  onApply: () => void;
+  onClose: () => void;
+  onReset: () => void;
+  setDraftFilters: Dispatch<SetStateAction<FilterState>>;
+  visible: boolean;
+}) {
+  const calendarCells = useMemo(() => buildCalendarCells(draftFilters.calendarMonth), [draftFilters.calendarMonth]);
+
+  const updateDraft = (partial: Partial<FilterState>) => {
+    setDraftFilters((current) => ({ ...current, ...partial }));
+  };
+
+  const handleDatePress = (dateKey: string) => {
+    setDraftFilters((current) => {
+      if (current.customStartDate && !current.customEndDate && current.customStartDate === dateKey) {
+        return {
+          ...current,
+          customEndDate: null,
+          customStartDate: null,
+          time: "custom",
+        };
+      }
+
+      if (!current.customStartDate || current.customEndDate) {
+        return {
+          ...current,
+          customEndDate: null,
+          customStartDate: dateKey,
+          time: "custom",
+        };
+      }
+
+      const startDate = dateKey < current.customStartDate ? dateKey : current.customStartDate;
+      const endDate = dateKey < current.customStartDate ? current.customStartDate : dateKey;
+      return {
+        ...current,
+        customEndDate: endDate,
+        customStartDate: startDate,
+        time: "custom",
+      };
+    });
+  };
+
+  const isDateSelected = (dateKey: string): boolean =>
+    dateKey === draftFilters.customStartDate || dateKey === draftFilters.customEndDate;
+
+  const isDateInRange = (dateKey: string): boolean =>
+    Boolean(
+      draftFilters.customStartDate &&
+        draftFilters.customEndDate &&
+        dateKey > draftFilters.customStartDate &&
+        dateKey < draftFilters.customEndDate,
+    );
+
+  return (
+    <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
+      <View style={styles.filterModalRoot}>
+        <Pressable accessibilityLabel="关闭筛选面板" onPress={onClose} style={styles.filterBackdrop} />
+        <View style={styles.filterPanel}>
+          <ScrollView contentContainerStyle={styles.filterPanelContent} showsVerticalScrollIndicator={false}>
+            <View style={styles.filterPanelHeader}>
+              <Text style={styles.filterPanelTitle}>筛选交易</Text>
+              <Pressable accessibilityLabel="关闭筛选面板" onPress={onClose} style={styles.filterCloseButton}>
+                <AppIcon color={theme.colors.textMuted} name="close" size={18} />
+              </Pressable>
+            </View>
+
+            <FilterSection title="时间">
+              <View style={styles.filterChipRow}>
+                {timeFilterOptions.map((option) => (
+                  <FilterChip
+                    key={option.value}
+                    active={draftFilters.time === option.value}
+                    label={option.label}
+                    onPress={() => updateDraft({ time: option.value })}
+                  />
+                ))}
+              </View>
+            </FilterSection>
+
+            {draftFilters.time === "custom" ? (
+              <View style={styles.calendarBox}>
+                <View style={styles.calendarHeader}>
+                  <Pressable
+                    onPress={() => updateDraft({ calendarMonth: shiftMonthKey(draftFilters.calendarMonth, -1) })}
+                    style={styles.calendarNavButton}
+                  >
+                    <Text style={styles.calendarNavText}>上月</Text>
+                  </Pressable>
+                  <Text style={styles.calendarTitle}>{formatCalendarMonthTitle(draftFilters.calendarMonth)}</Text>
+                  <Pressable
+                    onPress={() => updateDraft({ calendarMonth: shiftMonthKey(draftFilters.calendarMonth, 1) })}
+                    style={styles.calendarNavButton}
+                  >
+                    <Text style={styles.calendarNavText}>下月</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.weekRow}>
+                  {weekLabels.map((label) => (
+                    <Text key={label} style={styles.weekLabel}>
+                      {label}
+                    </Text>
+                  ))}
+                </View>
+
+                <View style={styles.calendarGrid}>
+                  {calendarCells.map((cell, index) =>
+                    cell ? (
+                      <Pressable
+                        key={cell.dateKey}
+                        onPress={() => handleDatePress(cell.dateKey)}
+                        style={[
+                          styles.calendarDay,
+                          isDateInRange(cell.dateKey) ? styles.calendarDayInRange : null,
+                          isDateSelected(cell.dateKey) ? styles.calendarDaySelected : null,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.calendarDayText,
+                            isDateSelected(cell.dateKey) ? styles.calendarDayTextSelected : null,
+                          ]}
+                        >
+                          {cell.day}
+                        </Text>
+                      </Pressable>
+                    ) : (
+                      <View key={`empty-${index}`} style={styles.calendarDay} />
+                    ),
+                  )}
+                </View>
+
+                <Text style={styles.selectedDateText}>{getSelectedDateText(draftFilters)}</Text>
+              </View>
+            ) : null}
+
+            <FilterSection title="账户">
+              <View style={styles.filterChipRow}>
+                {accountFilterOptions.map((option) => (
+                  <FilterChip
+                    key={option.value}
+                    active={draftFilters.account === option.value}
+                    label={option.label}
+                    onPress={() => updateDraft({ account: option.value })}
+                  />
+                ))}
+              </View>
+            </FilterSection>
+
+            <FilterSection title="资金方向">
+              <View style={styles.filterChipRow}>
+                {cashDirectionOptions.map((option) => (
+                  <FilterChip
+                    key={option.value}
+                    active={draftFilters.cashDirection === option.value}
+                    label={option.label}
+                    onPress={() => updateDraft({ cashDirection: option.value })}
+                  />
+                ))}
+              </View>
+            </FilterSection>
+          </ScrollView>
+
+          <View style={styles.filterFooter}>
+            <Pressable onPress={onReset} style={styles.filterResetButton}>
+              <Text style={styles.filterResetText}>重置</Text>
+            </Pressable>
+            <Pressable onPress={onApply} style={styles.filterApplyButton}>
+              <Text style={styles.filterApplyText}>应用筛选</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function FilterSection({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <View style={styles.filterSection}>
+      <Text style={styles.filterSectionTitle}>{title}</Text>
+      {children}
+    </View>
+  );
+}
+
+function FilterChip({
+  active,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={[styles.filterChip, active ? styles.filterChipActive : null]}>
+      <Text style={[styles.filterChipText, active ? styles.filterChipTextActive : null]}>{label}</Text>
     </Pressable>
   );
 }
@@ -529,6 +984,199 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 42,
   },
+  filterActiveDot: {
+    backgroundColor: theme.colors.warningSoft,
+    borderColor: "#FFFFFF",
+    borderRadius: 4,
+    borderWidth: 1,
+    height: 8,
+    position: "absolute",
+    right: 6,
+    top: 6,
+    width: 8,
+  },
+  filterApplyButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.lg,
+    flex: 1,
+    minHeight: 44,
+    justifyContent: "center",
+    paddingHorizontal: theme.spacing.md,
+  },
+  filterApplyText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  filterBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(28, 27, 34, 0.28)",
+  },
+  filterButtonActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  filterChip: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 34,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  filterChipActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  filterChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  filterChipText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  filterChipTextActive: {
+    color: "#FFFFFF",
+  },
+  filterCloseButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    height: 34,
+    justifyContent: "center",
+    width: 34,
+  },
+  filterFooter: {
+    borderTopColor: theme.colors.divider,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+  },
+  filterModalRoot: {
+    flex: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingTop: 92,
+  },
+  filterPanel: {
+    alignSelf: "center",
+    backgroundColor: theme.colors.surfaceElevated,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    maxHeight: "82%",
+    overflow: "hidden",
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 1,
+    shadowRadius: 28,
+    width: "100%",
+    elevation: 6,
+  },
+  filterPanelContent: {
+    gap: theme.spacing.md,
+    padding: theme.spacing.md,
+  },
+  filterPanelHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  filterPanelTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 19,
+    fontWeight: "900",
+    letterSpacing: -0.3,
+  },
+  filterResetButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    minHeight: 44,
+    justifyContent: "center",
+    paddingHorizontal: theme.spacing.md,
+    width: 96,
+  },
+  filterResetText: {
+    color: theme.colors.textSecondary,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  filterSection: {
+    gap: theme.spacing.sm,
+  },
+  filterSectionTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  calendarBox: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+  },
+  calendarDay: {
+    alignItems: "center",
+    borderRadius: theme.radius.md,
+    height: 34,
+    justifyContent: "center",
+    width: `${100 / 7}%`,
+  },
+  calendarDayInRange: {
+    backgroundColor: theme.colors.primarySoft,
+  },
+  calendarDaySelected: {
+    backgroundColor: theme.colors.primary,
+  },
+  calendarDayText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  calendarDayTextSelected: {
+    color: "#FFFFFF",
+  },
+  calendarGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  calendarHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  calendarNavButton: {
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  calendarNavText: {
+    color: theme.colors.primaryDeep,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  calendarTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "900",
+  },
   headerRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -575,6 +1223,12 @@ const styles = StyleSheet.create({
     minHeight: 38,
     paddingHorizontal: theme.spacing.sm,
   },
+  selectedDateText: {
+    color: theme.colors.textMuted,
+    fontSize: 13,
+    fontWeight: "800",
+    textAlign: "center",
+  },
   stack: {
     gap: theme.spacing.md,
     paddingBottom: theme.spacing.lg,
@@ -615,5 +1269,15 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     fontSize: 16,
     fontWeight: "900",
+  },
+  weekLabel: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: "900",
+    textAlign: "center",
+    width: `${100 / 7}%`,
+  },
+  weekRow: {
+    flexDirection: "row",
   },
 });
