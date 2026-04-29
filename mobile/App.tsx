@@ -17,6 +17,7 @@ import type {
   LiabilityInput,
   TransactionInput,
 } from "./src/domain/accounting/transactionRules";
+import type { ReconciliationInput } from "./src/domain/accounting/reconciliationRules";
 import AccountManagementScreen from "./src/screens/AccountManagementScreen";
 import AssetsLiabilitiesScreen from "./src/screens/AssetsLiabilitiesScreen";
 import DashboardScreen from "./src/screens/DashboardScreen";
@@ -51,6 +52,7 @@ function AppShell() {
     errorMessage,
     isLoading,
     saveTransaction,
+    saveReconciliation,
     saveAccount,
     disableAccount,
     deleteAccount,
@@ -93,6 +95,14 @@ function AppShell() {
       await saveTransaction(input);
     } catch {
       throw new Error("无法保存这笔记录。");
+    }
+  };
+
+  const handleSaveReconciliation = async (input: ReconciliationInput) => {
+    try {
+      await saveReconciliation(input);
+    } catch {
+      throw new Error("无法保存这笔对账调整。");
     }
   };
 
@@ -210,6 +220,7 @@ function AppShell() {
             onBack={() => setActiveScreen("record")}
             onDeleteAccount={handleDeleteAccount}
             onDisableAccount={handleDisableAccount}
+            onSaveReconciliation={handleSaveReconciliation}
             onSaveAccount={handleSaveAccount}
           />
         );
@@ -222,6 +233,7 @@ function AppShell() {
             summary={summary}
             onDeleteAsset={handleDeleteAsset}
             onDeleteLiability={handleDeleteLiability}
+            onSaveReconciliation={handleSaveReconciliation}
             onSaveAsset={handleSaveAsset}
             onSaveLiability={handleSaveLiability}
           />

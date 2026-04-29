@@ -1,5 +1,11 @@
 import { useMemo, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  calculateReconciliationDiff,
+  getReconciliationReasonOptions,
+  type ReconciliationInput,
+  type ReconciliationReason,
+} from "../domain/accounting/reconciliationRules";
 import type { AssetInput, LiabilityInput } from "../domain/accounting/transactionRules";
 import type { Account, Asset, Liability, ReportSummary } from "../domain/models";
 import { sharedStyles, theme } from "../styles/theme";
@@ -12,6 +18,7 @@ interface AssetsLiabilitiesScreenProps {
   summary: ReportSummary;
   onSaveAsset: (input: AssetInput) => Promise<void>;
   onDeleteAsset: (assetId: string) => Promise<void>;
+  onSaveReconciliation: (input: ReconciliationInput) => Promise<void>;
   onSaveLiability: (input: LiabilityInput) => Promise<void>;
   onDeleteLiability: (liabilityId: string) => Promise<void>;
 }
@@ -53,6 +60,15 @@ interface LiabilityFormState {
   note: string;
 }
 
+interface AssetReconciliationState {
+  asset?: Asset;
+  actualValue: string;
+  reason?: ReconciliationReason;
+  note: string;
+  isConfirming: boolean;
+  isSaving: boolean;
+}
+
 const createEmptyAssetForm = (): AssetFormState => ({
   amount: "",
   accountId: undefined,
@@ -78,6 +94,7 @@ export default function AssetsLiabilitiesScreen({
   summary,
   onSaveAsset,
   onDeleteAsset,
+  onSaveReconciliation,
   onSaveLiability,
   onDeleteLiability,
 }: AssetsLiabilitiesScreenProps) {
@@ -85,11 +102,81 @@ export default function AssetsLiabilitiesScreen({
   const [liabilityForm, setLiabilityForm] = useState<LiabilityFormState>(createEmptyLiabilityForm);
   const [isSavingAsset, setIsSavingAsset] = useState(false);
   const [isSavingLiability, setIsSavingLiability] = useState(false);
+  const [assetReconciliation, setAssetReconciliation] = useState<AssetReconciliationState>({
+    actualValue: "",
+    isConfirming: false,
+    isSaving: false,
+    note: "",
+  });
 
   const activeAccounts = useMemo(() => accounts.filter(isAccountEnabled), [accounts]);
 
   const resetAssetForm = () => setAssetForm(createEmptyAssetForm());
   const resetLiabilityForm = () => setLiabilityForm(createEmptyLiabilityForm());
+
+  const openAssetReconciliation = (asset: Asset) => {
+    setAssetReconciliation({
+      actualValue: String(asset.currentValue),
+      asset,
+      isConfirming: false,
+      isSaving: false,
+      note: "",
+      reason: undefined,
+    });
+  };
+
+  const closeAssetReconciliation = () => {
+    setAssetReconciliation({
+      actualValue: "",
+      isConfirming: false,
+      isSaving: false,
+      note: "",
+    });
+  };
+
+  const handleAssetReconciliationSubmit = async () => {
+    const asset = assetReconciliation.asset;
+    if (!asset) return;
+
+    const actualValue = Number(assetReconciliation.actualValue.replace(",", "."));
+    const diff = calculateReconciliationDiff(asset.currentValue, actualValue);
+
+    if (!Number.isFinite(actualValue) || actualValue < 0) {
+      Alert.alert("请输入实际金额", "实际金额必须大于等于 0。");
+      return;
+    }
+
+    if (Math.abs(diff) < 0.01) {
+      Alert.alert("无需调整", "差额为 0，无需生成对账调整。");
+      return;
+    }
+
+    if (!assetReconciliation.reason) {
+      Alert.alert("请选择差额原因", "请选择这次估值差额产生的原因。");
+      return;
+    }
+
+    if (!assetReconciliation.isConfirming) {
+      setAssetReconciliation((current) => ({ ...current, isConfirming: true }));
+      return;
+    }
+
+    setAssetReconciliation((current) => ({ ...current, isSaving: true }));
+    try {
+      await onSaveReconciliation({
+        actualValue,
+        note: assetReconciliation.note,
+        reason: assetReconciliation.reason,
+        targetId: asset.id,
+        targetType: "asset",
+      });
+      Alert.alert("更新完成", "资产当前价值已更新，首页和报表已同步刷新。");
+      closeAssetReconciliation();
+    } catch {
+      Alert.alert("更新失败", "无法保存这次资产估值调整。");
+      setAssetReconciliation((current) => ({ ...current, isSaving: false }));
+    }
+  };
 
   const handleEditAsset = (asset: Asset) => {
     setAssetForm({
@@ -329,6 +416,9 @@ export default function AssetsLiabilitiesScreen({
               </Text>
             ) : null}
             <View style={styles.inlineActions}>
+              <Pressable onPress={() => openAssetReconciliation(asset)} style={styles.inlineButton}>
+                <Text style={styles.inlineButtonText}>更新当前价值</Text>
+              </Pressable>
               <Pressable onPress={() => handleEditAsset(asset)} style={styles.inlineButton}>
                 <Text style={styles.inlineButtonText}>编辑</Text>
               </Pressable>
@@ -434,7 +524,143 @@ export default function AssetsLiabilitiesScreen({
           </View>
         ))}
       </View>
+
+      <AssetReconciliationModal
+        reconciliation={assetReconciliation}
+        onClose={closeAssetReconciliation}
+        onSubmit={() => void handleAssetReconciliationSubmit()}
+        updateReconciliation={(patch) => setAssetReconciliation((current) => ({ ...current, ...patch }))}
+      />
     </View>
+  );
+}
+
+interface AssetReconciliationModalProps {
+  reconciliation: AssetReconciliationState;
+  onClose: () => void;
+  onSubmit: () => void;
+  updateReconciliation: (patch: Partial<AssetReconciliationState>) => void;
+}
+
+function AssetReconciliationModal({
+  reconciliation,
+  onClose,
+  onSubmit,
+  updateReconciliation,
+}: AssetReconciliationModalProps) {
+  const asset = reconciliation.asset;
+  const actualValue = Number(reconciliation.actualValue.replace(",", "."));
+  const displayActual = Number.isFinite(actualValue) ? actualValue : asset?.currentValue ?? 0;
+  const diff = asset ? calculateReconciliationDiff(asset.currentValue, displayActual) : 0;
+  const reasonOptions = asset && Math.abs(diff) >= 0.01 ? getReconciliationReasonOptions("asset", diff) : [];
+
+  return (
+    <Modal animationType="fade" onRequestClose={onClose} transparent visible={asset !== undefined}>
+      <Pressable onPress={onClose} style={styles.modalBackdrop}>
+        <Pressable style={styles.modalPanel}>
+          {reconciliation.isConfirming ? (
+            <>
+              <Text style={styles.modalTitle}>确认对账调整</Text>
+              <Text style={styles.modalDescription}>
+                系统将根据你选择的原因生成一笔调整记录，并更新相关账户或资产。请确认这不是重复记录。
+              </Text>
+              <View style={styles.diffBox}>
+                <Text style={styles.diffLabel}>本次差额</Text>
+                <Text style={[styles.diffValue, diff >= 0 ? styles.diffPositive : styles.diffNegative]}>
+                  {diff >= 0 ? "+" : "-"}
+                  {formatCurrency(Math.abs(diff))}
+                </Text>
+              </View>
+              <View style={styles.modalActions}>
+                <Pressable
+                  disabled={reconciliation.isSaving}
+                  onPress={() => updateReconciliation({ isConfirming: false })}
+                  style={sharedStyles.secondaryButton}
+                >
+                  <Text style={sharedStyles.secondaryButtonText}>取消</Text>
+                </Pressable>
+                <Pressable
+                  disabled={reconciliation.isSaving}
+                  onPress={onSubmit}
+                  style={[sharedStyles.primaryButton, styles.modalPrimaryButton]}
+                >
+                  <Text style={sharedStyles.primaryButtonText}>
+                    {reconciliation.isSaving ? "保存中..." : "确认调整"}
+                  </Text>
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={styles.modalTitle}>更新当前价值</Text>
+              <Text style={styles.modalDescription}>
+                输入资产的实际市值，系统会生成非现金估值调整，不计入收入、费用或现金流。
+              </Text>
+              <View style={styles.diffBox}>
+                <View>
+                  <Text style={styles.diffLabel}>当前账面价值</Text>
+                  <Text style={styles.diffBookValue}>{formatCurrency(asset?.currentValue ?? 0)}</Text>
+                </View>
+                <View style={styles.diffRight}>
+                  <Text style={styles.diffLabel}>差额</Text>
+                  <Text style={[styles.diffValue, diff >= 0 ? styles.diffPositive : styles.diffNegative]}>
+                    {Math.abs(diff) < 0.01 ? "" : diff > 0 ? "+" : "-"}
+                    {formatCurrency(Math.abs(diff))}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.fieldLabel}>实际市值</Text>
+              <TextInput
+                keyboardType="decimal-pad"
+                onChangeText={(value) => updateReconciliation({ actualValue: value, isConfirming: false, reason: undefined })}
+                placeholder="请输入实际金额"
+                placeholderTextColor={theme.colors.textMuted}
+                style={sharedStyles.input}
+                value={reconciliation.actualValue}
+              />
+
+              <Text style={styles.fieldLabel}>差额原因</Text>
+              <View style={styles.chipGroup}>
+                {reasonOptions.map((option) => {
+                  const active = reconciliation.reason === option.value;
+                  return (
+                    <Pressable
+                      key={option.value}
+                      onPress={() => updateReconciliation({ reason: option.value, isConfirming: false })}
+                      style={[sharedStyles.chip, active && sharedStyles.chipActiveDark]}
+                    >
+                      <Text style={[sharedStyles.chipText, active && sharedStyles.chipTextInverse]}>
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.fieldLabel}>备注</Text>
+              <TextInput
+                multiline
+                onChangeText={(value) => updateReconciliation({ note: value })}
+                placeholder="可补充估值来源或说明"
+                placeholderTextColor={theme.colors.textMuted}
+                style={[sharedStyles.input, sharedStyles.textArea]}
+                value={reconciliation.note}
+              />
+
+              <View style={styles.modalActions}>
+                <Pressable onPress={onClose} style={sharedStyles.secondaryButton}>
+                  <Text style={sharedStyles.secondaryButtonText}>取消</Text>
+                </Pressable>
+                <Pressable onPress={onSubmit} style={[sharedStyles.primaryButton, styles.modalPrimaryButton]}>
+                  <Text style={sharedStyles.primaryButtonText}>下一步</Text>
+                </Pressable>
+              </View>
+            </>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -529,6 +755,39 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "800",
   },
+  modalActions: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    justifyContent: "flex-end",
+    marginTop: theme.spacing.sm,
+  },
+  modalBackdrop: {
+    backgroundColor: "rgba(13, 25, 18, 0.42)",
+    flex: 1,
+    justifyContent: "flex-end",
+    padding: theme.spacing.container,
+  },
+  modalDescription: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  modalPanel: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    gap: theme.spacing.md,
+    padding: theme.spacing.lg,
+  },
+  modalPrimaryButton: {
+    flex: 1,
+  },
+  modalTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 22,
+    fontWeight: "900",
+  },
   panel: {
     gap: theme.spacing.md,
   },
@@ -561,5 +820,39 @@ const styles = StyleSheet.create({
     fontSize: 30,
     fontWeight: "800",
     letterSpacing: -0.8,
+  },
+  diffBookValue: {
+    color: theme.colors.textPrimary,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  diffBox: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: theme.spacing.md,
+  },
+  diffLabel: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  diffNegative: {
+    color: theme.colors.danger,
+  },
+  diffPositive: {
+    color: theme.colors.success,
+  },
+  diffRight: {
+    alignItems: "flex-end",
+  },
+  diffValue: {
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: 3,
   },
 });

@@ -1,5 +1,11 @@
 import { useMemo, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  calculateReconciliationDiff,
+  getReconciliationReasonOptions,
+  type ReconciliationInput,
+  type ReconciliationReason,
+} from "../domain/accounting/reconciliationRules";
 import type { AccountInput } from "../domain/accounting/transactionRules";
 import type { Account, AccountType, Transaction } from "../domain/models";
 import { sharedStyles, theme } from "../styles/theme";
@@ -12,6 +18,7 @@ interface AccountManagementScreenProps {
   onDeleteAccount: (accountId: string) => Promise<void>;
   onDisableAccount: (accountId: string) => Promise<void>;
   onSaveAccount: (input: AccountInput) => Promise<void>;
+  onSaveReconciliation: (input: ReconciliationInput) => Promise<void>;
 }
 
 interface AccountFormState {
@@ -26,6 +33,16 @@ interface AccountFormState {
   currentDebt: string;
   billDay: string;
   repaymentDay: string;
+}
+
+interface AccountReconciliationState {
+  account?: Account;
+  actualValue: string;
+  reason?: ReconciliationReason;
+  note: string;
+  payingAccountId?: string;
+  isConfirming: boolean;
+  isSaving: boolean;
 }
 
 type AccountRoute =
@@ -144,12 +161,23 @@ export default function AccountManagementScreen({
   onDeleteAccount,
   onDisableAccount,
   onSaveAccount,
+  onSaveReconciliation,
 }: AccountManagementScreenProps) {
   const [route, setRoute] = useState<AccountRoute>({ name: "overview" });
   const [form, setForm] = useState<AccountFormState>(emptyForm());
   const [isSaving, setIsSaving] = useState(false);
+  const [reconciliation, setReconciliation] = useState<AccountReconciliationState>({
+    actualValue: "",
+    isConfirming: false,
+    isSaving: false,
+    note: "",
+  });
 
   const enabledAccounts = useMemo(() => accounts.filter(isAccountEnabled), [accounts]);
+  const enabledAssetAccounts = useMemo(
+    () => accounts.filter((account) => isAccountEnabled(account) && normalizeAccountType(account.type) !== "creditCard"),
+    [accounts],
+  );
   const enabledAssetBalance = getEnabledAssetBalance(accounts);
   const enabledCreditCardDebt = getEnabledCreditCardDebt(accounts);
 
@@ -170,6 +198,82 @@ export default function AccountManagementScreen({
 
   const updateForm = (patch: Partial<AccountFormState>) => {
     setForm((current) => ({ ...current, ...patch }));
+  };
+
+  const getAccountBookValue = (account: Account): number =>
+    normalizeAccountType(account.type) === "creditCard" ? getCreditCardDebt(account) : account.balance;
+
+  const openAccountReconciliation = (account: Account) => {
+    setReconciliation({
+      account,
+      actualValue: String(getAccountBookValue(account)),
+      isConfirming: false,
+      isSaving: false,
+      note: "",
+      payingAccountId: undefined,
+      reason: undefined,
+    });
+  };
+
+  const closeReconciliation = () => {
+    setReconciliation({
+      actualValue: "",
+      isConfirming: false,
+      isSaving: false,
+      note: "",
+    });
+  };
+
+  const handleReconciliationSubmit = async () => {
+    const account = reconciliation.account;
+    if (!account) return;
+
+    const actualValue = Number(reconciliation.actualValue.replace(",", "."));
+    const bookValue = getAccountBookValue(account);
+    const diff = calculateReconciliationDiff(bookValue, actualValue);
+    const isCreditCard = normalizeAccountType(account.type) === "creditCard";
+
+    if (!Number.isFinite(actualValue) || actualValue < 0) {
+      Alert.alert("请输入实际金额", "实际金额必须大于等于 0。");
+      return;
+    }
+
+    if (Math.abs(diff) < 0.01) {
+      Alert.alert("无需调整", "差额为 0，无需生成对账调整。");
+      return;
+    }
+
+    if (!reconciliation.reason) {
+      Alert.alert("请选择差额原因", "请选择这次差额产生的原因。");
+      return;
+    }
+
+    if (reconciliation.reason === "creditCardMissingRepayment" && !reconciliation.payingAccountId) {
+      Alert.alert("请选择付款账户", "漏记还款需要选择实际付款账户。");
+      return;
+    }
+
+    if (!reconciliation.isConfirming) {
+      setReconciliation((current) => ({ ...current, isConfirming: true }));
+      return;
+    }
+
+    setReconciliation((current) => ({ ...current, isSaving: true }));
+    try {
+      await onSaveReconciliation({
+        actualValue,
+        note: reconciliation.note,
+        payingAccountId: reconciliation.payingAccountId,
+        reason: reconciliation.reason,
+        targetId: account.id,
+        targetType: "account",
+      });
+      Alert.alert("对账完成", isCreditCard ? "信用卡欠款和相关负债已按本次对账更新。" : "账户余额已按本次对账更新。");
+      closeReconciliation();
+    } catch {
+      Alert.alert("对账失败", "无法保存这次对账调整。");
+      setReconciliation((current) => ({ ...current, isSaving: false }));
+    }
   };
 
   const handleBack = () => {
@@ -331,14 +435,26 @@ export default function AccountManagementScreen({
   };
 
   if (route.name === "form") {
+    const selectedAccount = form.id ? accounts.find((account) => account.id === form.id) : undefined;
     return (
-      <AccountFormPage
-        form={form}
-        isSaving={isSaving}
-        onBack={handleBack}
-        onSave={handleSave}
-        updateForm={updateForm}
-      />
+      <>
+        <AccountFormPage
+          form={form}
+          isSaving={isSaving}
+          onBack={handleBack}
+          onOpenReconciliation={selectedAccount ? () => openAccountReconciliation(selectedAccount) : undefined}
+          onSave={handleSave}
+          updateForm={updateForm}
+        />
+        <AccountReconciliationModal
+          accounts={enabledAssetAccounts}
+          bookValue={selectedAccount ? getAccountBookValue(selectedAccount) : 0}
+          reconciliation={reconciliation}
+          onClose={closeReconciliation}
+          onSubmit={() => void handleReconciliationSubmit()}
+          updateReconciliation={(patch) => setReconciliation((current) => ({ ...current, ...patch }))}
+        />
+      </>
     );
   }
 
@@ -506,11 +622,12 @@ interface AccountFormPageProps {
   form: AccountFormState;
   isSaving: boolean;
   onBack: () => void;
+  onOpenReconciliation?: () => void;
   onSave: () => void;
   updateForm: (patch: Partial<AccountFormState>) => void;
 }
 
-function AccountFormPage({ form, isSaving, onBack, onSave, updateForm }: AccountFormPageProps) {
+function AccountFormPage({ form, isSaving, onBack, onOpenReconciliation, onSave, updateForm }: AccountFormPageProps) {
   const isAccountDetail = form.id !== undefined;
   const accountTypeLabel = getAccountTypeLabel(form.type);
 
@@ -632,8 +749,177 @@ function AccountFormPage({ form, isSaving, onBack, onSave, updateForm }: Account
         >
           <Text style={sharedStyles.primaryButtonText}>{isSaving ? "保存中..." : "保存账户"}</Text>
         </Pressable>
+        {isAccountDetail && onOpenReconciliation ? (
+          <Pressable onPress={onOpenReconciliation} style={sharedStyles.secondaryButton}>
+            <Text style={sharedStyles.secondaryButtonText}>对账 / 更新余额</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
+  );
+}
+
+interface AccountReconciliationModalProps {
+  accounts: Account[];
+  bookValue: number;
+  reconciliation: AccountReconciliationState;
+  onClose: () => void;
+  onSubmit: () => void;
+  updateReconciliation: (patch: Partial<AccountReconciliationState>) => void;
+}
+
+function AccountReconciliationModal({
+  accounts,
+  bookValue,
+  reconciliation,
+  onClose,
+  onSubmit,
+  updateReconciliation,
+}: AccountReconciliationModalProps) {
+  const account = reconciliation.account;
+  const actualValue = Number(reconciliation.actualValue.replace(",", "."));
+  const displayActual = Number.isFinite(actualValue) ? actualValue : bookValue;
+  const diff = calculateReconciliationDiff(bookValue, displayActual);
+  const isCreditCard = account ? normalizeAccountType(account.type) === "creditCard" : false;
+  const reasonOptions =
+    account && Math.abs(diff) >= 0.01 ? getReconciliationReasonOptions("account", diff, isCreditCard) : [];
+  const requiresPayingAccount = reconciliation.reason === "creditCardMissingRepayment";
+
+  return (
+    <Modal
+      animationType="fade"
+      onRequestClose={onClose}
+      transparent
+      visible={account !== undefined}
+    >
+      <Pressable onPress={onClose} style={styles.modalBackdrop}>
+        <Pressable style={styles.modalPanel}>
+          {reconciliation.isConfirming ? (
+            <>
+              <Text style={styles.modalTitle}>确认对账调整</Text>
+              <Text style={styles.modalDescription}>
+                系统将根据你选择的原因生成一笔调整记录，并更新相关账户或资产。请确认这不是重复记录。
+              </Text>
+              <View style={styles.diffBox}>
+                <Text style={styles.diffLabel}>本次差额</Text>
+                <Text style={[styles.diffValue, diff >= 0 ? styles.diffPositive : styles.diffNegative]}>
+                  {diff >= 0 ? "+" : "-"}
+                  {formatCurrency(Math.abs(diff))}
+                </Text>
+              </View>
+              <View style={styles.modalActions}>
+                <Pressable
+                  disabled={reconciliation.isSaving}
+                  onPress={() => updateReconciliation({ isConfirming: false })}
+                  style={sharedStyles.secondaryButton}
+                >
+                  <Text style={sharedStyles.secondaryButtonText}>取消</Text>
+                </Pressable>
+                <Pressable
+                  disabled={reconciliation.isSaving}
+                  onPress={onSubmit}
+                  style={[sharedStyles.primaryButton, styles.modalPrimaryButton]}
+                >
+                  <Text style={sharedStyles.primaryButtonText}>
+                    {reconciliation.isSaving ? "保存中..." : "确认调整"}
+                  </Text>
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={styles.modalTitle}>对账 / 更新余额</Text>
+              <Text style={styles.modalDescription}>
+                输入实际余额，系统会计算差额并生成安全的对账调整。
+              </Text>
+
+              <View style={styles.diffBox}>
+                <View>
+                  <Text style={styles.diffLabel}>{isCreditCard ? "当前账面欠款" : "当前账面值"}</Text>
+                  <Text style={styles.diffBookValue}>{formatCurrency(bookValue)}</Text>
+                </View>
+                <View style={styles.diffRight}>
+                  <Text style={styles.diffLabel}>差额</Text>
+                  <Text style={[styles.diffValue, diff >= 0 ? styles.diffPositive : styles.diffNegative]}>
+                    {Math.abs(diff) < 0.01 ? "" : diff > 0 ? "+" : "-"}
+                    {formatCurrency(Math.abs(diff))}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.fieldLabel}>{isCreditCard ? "实际欠款" : "实际余额"}</Text>
+              <TextInput
+                keyboardType="decimal-pad"
+                onChangeText={(value) => updateReconciliation({ actualValue: value, isConfirming: false, reason: undefined })}
+                placeholder="请输入实际金额"
+                placeholderTextColor={theme.colors.textMuted}
+                style={sharedStyles.input}
+                value={reconciliation.actualValue}
+              />
+
+              <Text style={styles.fieldLabel}>差额原因</Text>
+              <View style={styles.chipWrap}>
+                {reasonOptions.map((option) => {
+                  const active = reconciliation.reason === option.value;
+                  return (
+                    <Pressable
+                      key={option.value}
+                      onPress={() => updateReconciliation({ reason: option.value, isConfirming: false })}
+                      style={[sharedStyles.chip, active && sharedStyles.chipActiveDark]}
+                    >
+                      <Text style={[sharedStyles.chipText, active && sharedStyles.chipTextInverse]}>
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {requiresPayingAccount ? (
+                <>
+                  <Text style={styles.fieldLabel}>付款账户</Text>
+                  <View style={styles.chipWrap}>
+                    {accounts.map((paymentAccount) => {
+                      const active = reconciliation.payingAccountId === paymentAccount.id;
+                      return (
+                        <Pressable
+                          key={paymentAccount.id}
+                          onPress={() => updateReconciliation({ payingAccountId: paymentAccount.id })}
+                          style={[sharedStyles.chip, active && sharedStyles.chipActiveDark]}
+                        >
+                          <Text style={[sharedStyles.chipText, active && sharedStyles.chipTextInverse]}>
+                            {paymentAccount.name}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </>
+              ) : null}
+
+              <Text style={styles.fieldLabel}>备注</Text>
+              <TextInput
+                multiline
+                onChangeText={(value) => updateReconciliation({ note: value })}
+                placeholder="可补充这次对账的来源或说明"
+                placeholderTextColor={theme.colors.textMuted}
+                style={[sharedStyles.input, sharedStyles.textArea]}
+                value={reconciliation.note}
+              />
+
+              <View style={styles.modalActions}>
+                <Pressable onPress={onClose} style={sharedStyles.secondaryButton}>
+                  <Text style={sharedStyles.secondaryButtonText}>取消</Text>
+                </Pressable>
+                <Pressable onPress={onSubmit} style={[sharedStyles.primaryButton, styles.modalPrimaryButton]}>
+                  <Text style={sharedStyles.primaryButtonText}>下一步</Text>
+                </Pressable>
+              </View>
+            </>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -791,6 +1077,39 @@ const styles = StyleSheet.create({
   listCard: {
     gap: theme.spacing.sm,
   },
+  modalActions: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    justifyContent: "flex-end",
+    marginTop: theme.spacing.sm,
+  },
+  modalBackdrop: {
+    backgroundColor: "rgba(13, 25, 18, 0.42)",
+    flex: 1,
+    justifyContent: "flex-end",
+    padding: theme.spacing.container,
+  },
+  modalDescription: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  modalPanel: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    gap: theme.spacing.md,
+    padding: theme.spacing.lg,
+  },
+  modalPrimaryButton: {
+    flex: 1,
+  },
+  modalTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 22,
+    fontWeight: "900",
+  },
   overviewCard: {
     alignItems: "center",
     flexDirection: "row",
@@ -914,5 +1233,39 @@ const styles = StyleSheet.create({
   twoColumnRow: {
     flexDirection: "row",
     gap: theme.spacing.sm,
+  },
+  diffBookValue: {
+    color: theme.colors.textPrimary,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  diffBox: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: theme.spacing.md,
+  },
+  diffLabel: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  diffNegative: {
+    color: theme.colors.danger,
+  },
+  diffPositive: {
+    color: theme.colors.success,
+  },
+  diffRight: {
+    alignItems: "flex-end",
+  },
+  diffValue: {
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: 3,
   },
 });

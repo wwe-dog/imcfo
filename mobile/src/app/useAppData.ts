@@ -15,6 +15,10 @@ import {
   type LiabilityInput,
   type TransactionInput,
 } from "../domain/accounting/transactionRules";
+import {
+  applyReconciliationAdjustment,
+  type ReconciliationInput,
+} from "../domain/accounting/reconciliationRules";
 import { asyncStorageAdapter } from "../storage/asyncStorageAdapter";
 import type { AppData } from "../storage/seedData";
 import type { StorageAdapter } from "../storage/storageAdapter";
@@ -30,6 +34,7 @@ interface UseAppDataResult {
   isSaving: boolean;
   reloadData: () => Promise<void>;
   saveTransaction: (input: TransactionInput) => Promise<void>;
+  saveReconciliation: (input: ReconciliationInput) => Promise<AppData>;
   saveAccount: (input: AccountInput) => Promise<AppData>;
   disableAccount: (accountId: string) => Promise<AppData>;
   deleteAccount: (accountId: string) => Promise<AppData>;
@@ -113,6 +118,12 @@ export function useAppData(storage: StorageAdapter = asyncStorageAdapter): UseAp
 
   const saveAsset = useCallback(
     async (input: AssetInput) => replaceData((currentData) => upsertAssetInFinancialState(currentData, input)),
+    [replaceData],
+  );
+
+  const saveReconciliation = useCallback(
+    async (input: ReconciliationInput) =>
+      replaceData((currentData) => applyReconciliationAdjustment(currentData, input)),
     [replaceData],
   );
 
@@ -224,6 +235,7 @@ export function useAppData(storage: StorageAdapter = asyncStorageAdapter): UseAp
     isSaving: status === "saving",
     reloadData: loadFromStorage,
     saveTransaction,
+    saveReconciliation,
     saveAccount,
     disableAccount,
     deleteAccount,

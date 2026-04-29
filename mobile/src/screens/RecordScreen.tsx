@@ -811,6 +811,11 @@ export default function RecordScreen({
                 title="资产负债管理"
               />
               <MoreMenuOption
+                description="更新账户余额和资产市值，处理自动到账、分红和估值变化。"
+                onPress={handleOpenAssets}
+                title="对账 / 资产盘点"
+              />
+              <MoreMenuOption
                 description="查看、编辑和追踪历史入账记录。"
                 onPress={handleOpenTransactions}
                 title="交易记录"
