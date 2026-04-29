@@ -5,7 +5,7 @@
 更新时间：2026-04-29  
 当前主分支：`main`  
 当前开发模式：trunk-based development，直接在 `main` 上小步提交。  
-本次快照原因：完成信用卡债务会计处理修复后，按上下文压缩恢复规则刷新。
+本次快照原因：完成 V0.1 会计交易规则风险修复后，按上下文压缩恢复规则刷新。
 
 ## 1. 项目定位与关键决策
 
@@ -98,6 +98,11 @@ V0.1 只服务普通自然人，核心闭环是：
 - 交易入账更新负债时优先使用 `transaction.relatedLiabilityId`，没有关联 ID 时才使用旧 fallback。
 - 信用卡消费会增加费用、增加信用卡欠款和对应负债，不减少现金，现金流为 `nonCash`。
 - 信用卡还款会减少付款账户现金、减少信用卡欠款和对应负债，不重复确认费用。
+- 非现金资产调整只更新 `relatedAssetId` 指向的目标资产，不再改银行、微信、支付宝、现金等账户余额。
+- 非现金负债计提只更新 `relatedLiabilityId` 指向的目标负债，不再增加现金资产。
+- 账户余额同步资产时只允许一对一账户/资产自动同步；一个账户关联多个资产时会跳过自动同步，防止覆盖多个资产明细。
+- 管理页在“信用卡还款”类型下显示两个账户选择：付款账户和信用卡账户。
+- 美元换汇示例交易已改为 `transfer + nonCash`，不再使用不安全的 `assetIncrease` workaround。
 - 记一笔账户选择只展示启用账户。
 - 资产负债管理支持资产和负债新增、编辑、删除。
 - 报表页支持资产负债表、现金流量表、利润表切换。
@@ -187,6 +192,9 @@ V0.1 只服务普通自然人，核心闭环是：
 - 信用卡账户保存时 `balance` 固定不作为资产余额使用，债务来源是 `currentDebt`。
 - 信用卡消费优先按 `relatedLiabilityId` 或信用卡账户关联负债增加负债。
 - 信用卡还款会同步减少信用卡账户 `currentDebt` 和关联负债，同时减少付款账户现金。
+- `assetIncrease/assetDecrease + nonCash` 只按 `relatedAssetId` 调整目标资产，不更新账户余额或账户关联现金资产。
+- `liabilityIncrease/liabilityDecrease + nonCash` 只调整目标负债，不更新账户余额或账户关联资产。
+- `syncAssetsByAccountBalance` 已加一对多保护：同一账户关联多个资产时不自动覆盖资产金额。
 
 `mobile/src/domain/accounting/naturalLanguageParser.ts`
 
@@ -200,6 +208,7 @@ V0.1 只服务普通自然人，核心闭环是：
 - 主入口是“一句话记账”。
 - `更多` 提供账户管理、资产负债管理、交易记录入口。
 - 账户选择只显示启用账户。
+- 信用卡还款类型会显示“付款账户”和“信用卡账户”两个选择，保存时通过 `counterAccountId` 传给领域规则。
 
 `mobile/src/screens/ReportsScreen.tsx`
 
@@ -228,6 +237,8 @@ V0.1 只服务普通自然人，核心闭环是：
 
 最近提交：
 
+- `0cc13ad fix: harden accounting transaction rules`
+- `0e55eec docs: refresh current project context snapshot`
 - `89004d4 fix: treat credit card debt as liability`
 - `195998d docs: refresh current project context snapshot`
 - `9cc7714 fix: sync account balances with financial records`
@@ -271,10 +282,10 @@ git status
 - 当前主要依赖 `npm.cmd run typecheck` 保底，自动化测试不足。
 - 详情页 donut 标签使用简单避让策略，极小屏幕或分类过多时仍可能拥挤。
 - 趋势图没有独立历史快照 schema，当前主要基于交易或当前值近似生成。
-- 账户保存同步只更新已存在的关联资产/负债；如果用户新增账户但没有创建对应资产/负债，系统不会自动生成资产/负债明细。
+- 账户保存同步只更新已存在的一对一关联资产/负债；如果用户新增账户但没有创建对应资产/负债，系统不会自动生成资产/负债明细。
 - 没有 `relatedLiabilityId` 的旧交易仍保留 first-liability fallback，这是为了兼容旧数据，但仍存在误更新风险。
 - 融资融券账户当前为 `securities` 类型且带 `currentDebt`，账户保存同步负债只对信用卡欠款做明确处理；融资负债仍建议通过负债明细或交易规则维护。
-- 记一笔暂未实现完整双账户信用卡还款 UI；当前规则可通过 `counterAccountId` 或关联负债定位信用卡账户，没有显式选择时会回退到第一个信用卡账户。
+- 记一笔已实现信用卡还款双账户选择，但自然语言解析仍只是规则型解析，复杂句子仍可能需要用户手动确认。
 
 ## 7. 架构与数据流摘要
 
