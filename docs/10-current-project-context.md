@@ -5,7 +5,7 @@
 更新时间：2026-04-29  
 当前主分支：`main`  
 当前开发模式：trunk-based development，直接在 `main` 上小步提交。  
-本次快照原因：完成高复杂度 V0.1 示例财务数据集后，按上下文压缩恢复规则刷新。
+本次快照原因：完成账户管理 drilldown 与账户详情页行为修复后，按上下文压缩恢复规则刷新。
 
 ## 1. 项目定位与关键决策
 
@@ -84,8 +84,10 @@ V0.1 只服务普通自然人，核心闭环是：
 - 资产/负债详情页 donut 图表支持外部标签、引导线和稳定 15 色配色；已移除分段点击高亮。
 - 管理页支持自然语言记账、识别结果 modal、确认入账、成功 modal。
 - 管理页保留手动修改 / 高级填写。
-- 账户管理已进入 V0.1：账户大类总览 → 某类账户详情 → 新增/编辑账户。
+- 账户管理已进入 V0.1：账户大类总览 → 某类账户详情 → 新增账户 / 账户详情。
 - 账户管理支持新增、编辑、停用、删除无交易引用账户；有交易引用的账户优先停用。
+- 进入账户分类详情不会自动打开账户表单；只有点击具体账户行才进入账户详情，点击新增才进入新增账户。
+- 账户详情页锁定账户类型，只允许修改账户名称、余额/欠款、启用状态和备注/用途；余额/欠款变化会先弹确认。
 - 管理页“更多”和我的页均可进入账户管理。
 - 记一笔账户选择只展示启用账户；收入/支出会沿现有交易入账流更新账户余额。
 - 资产负债管理支持资产和负债新增、编辑、删除。
@@ -206,12 +208,24 @@ V0.1 只服务普通自然人，核心闭环是：
 - 负责本地数据管理能力。
 - 已增加账户管理入口。
 
+`mobile/src/screens/AccountManagementScreen.tsx`
+
+- 账户管理采用大类总览、分类详情、账户详情/新增账户三层结构。
+- 分类详情页只展示该分类下账户列表，不会自动打开账户详情。
+- 点击具体账户行进入“账户详情”。
+- 账户详情页右上角为“保存”，账户类型只读，不允许切换。
+- 普通账户修改当前余额时会确认“这会影响到总资产”。
+- 信用卡账户修改当前欠款时会确认“这会影响到总负债”。
+
 ## 5. 当前 Git 状态与近期提交
 
 当前分支：`main`
 
 最新提交：
 
+- `e7a6096 fix: convert account edit form to account detail page`
+- `d0880bb fix: prevent account form from auto opening`
+- `cc3a456 docs: refresh current project context snapshot`
 - `a36d298 chore: add high complexity CFO demo dataset`
 - `447275b docs: refresh current project context snapshot`
 - `6792cda chore: expand complex demo finance data`
@@ -219,9 +233,6 @@ V0.1 只服务普通自然人，核心闭环是：
 - `d8f5e5b feat: add hierarchical account management`
 - `aed37a5 docs: refresh current project context snapshot`
 - `f2ca576 feat: add account management for V0.1`
-- `39c7c64 feat: add net worth detail drilldown`
-- `03533b3 style: soften net worth metric card color`
-- `81579bc fix: remove donut segment highlight interaction`
 
 本快照提交后，工作区应保持干净。继续开发前先运行：
 
