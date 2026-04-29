@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type { LayoutAnimationConfig } from "react-native";
 import {
@@ -6,6 +6,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  SectionList,
   ScrollView,
   StyleSheet,
   Text,
@@ -68,6 +69,11 @@ interface FilterState {
 interface CalendarCell {
   dateKey: string;
   day: number;
+}
+
+interface TransactionSection {
+  data: Transaction[];
+  month: string;
 }
 
 const timeFilterOptions: Array<{ label: string; value: TimeFilter }> = [
@@ -287,6 +293,31 @@ const getTransactionSearchText = (transaction: Transaction, accounts: Account[])
     .toLowerCase();
 };
 
+const getTransactionSearchTextFromMap = (
+  transaction: Transaction,
+  accountNameById: Map<string, string>,
+): string => {
+  const accountName = accountNameById.get(transaction.accountId);
+  const counterAccountName = transaction.counterAccountId ? accountNameById.get(transaction.counterAccountId) : undefined;
+  const accountDisplay = accountName && counterAccountName ? `${accountName} → ${counterAccountName}` : accountName ?? counterAccountName ?? "";
+  const amountText = [
+    String(transaction.amount),
+    formatCurrency(transaction.amount),
+    formatSignedAmount(transaction),
+  ].join(" ");
+
+  return [
+    getTransactionTitle(transaction),
+    amountText,
+    transaction.category,
+    transaction.note ?? "",
+    getTypeLabel(transaction.type),
+    accountDisplay,
+  ]
+    .join(" ")
+    .toLowerCase();
+};
+
 const parseTransactionDate = (date: string): Date | null => {
   const [yearText, monthText, dayText] = date.split("-");
   const year = Number(yearText);
@@ -389,10 +420,27 @@ const transactionMatchesAccountFilter = (
   accountFilter: AccountFilter,
 ): boolean => {
   if (accountFilter === "all") return true;
-  const relatedAccountIds = [transaction.accountId, transaction.counterAccountId].filter(Boolean);
+  const relatedAccountIds = [transaction.accountId, transaction.counterAccountId].filter(
+    (accountId): accountId is string => Boolean(accountId),
+  );
   return relatedAccountIds.some((accountId) => {
     const account = accounts.find((item) => item.id === accountId);
     return account ? mapAccountTypeToFilter(account.type) === accountFilter : false;
+  });
+};
+
+const transactionMatchesAccountFilterFromMap = (
+  transaction: Transaction,
+  accountTypeById: Map<string, AccountType>,
+  accountFilter: AccountFilter,
+): boolean => {
+  if (accountFilter === "all") return true;
+  const relatedAccountIds = [transaction.accountId, transaction.counterAccountId].filter(
+    (accountId): accountId is string => Boolean(accountId),
+  );
+  return relatedAccountIds.some((accountId) => {
+    const type = accountTypeById.get(accountId);
+    return type ? mapAccountTypeToFilter(type) === accountFilter : false;
   });
 };
 
@@ -418,6 +466,21 @@ const transactionMatchesFilters = (
   }
 
   if (!transactionMatchesAccountFilter(transaction, accounts, filters.account)) return false;
+  return transactionMatchesCashDirection(transaction, filters.cashDirection);
+};
+
+const transactionMatchesFiltersFromMaps = (
+  transaction: Transaction,
+  accountTypeById: Map<string, AccountType>,
+  filters: FilterState,
+  transactions: Transaction[],
+): boolean => {
+  const dateRange = getDateRangeForFilters(filters, transactions);
+  if (dateRange && (transaction.date < dateRange.startDate || transaction.date > dateRange.endDate)) {
+    return false;
+  }
+
+  if (!transactionMatchesAccountFilterFromMap(transaction, accountTypeById, filters.account)) return false;
   return transactionMatchesCashDirection(transaction, filters.cashDirection);
 };
 
@@ -481,21 +544,36 @@ export default function TransactionRecordsScreen({
   onBack,
 }: TransactionRecordsScreenProps) {
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isFilterVisible, setIsFilterVisible] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(() => createDefaultFilters(transactions));
   const [draftFilters, setDraftFilters] = useState<FilterState>(() => createDefaultFilters(transactions));
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 180);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const accountNameById = useMemo(
+    () => new Map(accounts.map((account) => [account.id, account.name])),
+    [accounts],
+  );
+  const accountTypeById = useMemo(
+    () => new Map(accounts.map((account) => [account.id, account.type])),
+    [accounts],
+  );
+
   const filteredGroups = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
+    const normalizedQuery = debouncedQuery.trim().toLowerCase();
 
     const filtered = transactions
       .filter((transaction) => {
         const matchesSearch = normalizedQuery
-          ? getTransactionSearchText(transaction, accounts).includes(normalizedQuery)
+          ? getTransactionSearchTextFromMap(transaction, accountNameById).includes(normalizedQuery)
           : true;
-        return matchesSearch && transactionMatchesFilters(transaction, accounts, appliedFilters, transactions);
+        return matchesSearch && transactionMatchesFiltersFromMaps(transaction, accountTypeById, appliedFilters, transactions);
       })
       .sort((first, second) => {
         if (first.date !== second.date) return second.date.localeCompare(first.date);
@@ -503,7 +581,16 @@ export default function TransactionRecordsScreen({
       });
 
     return groupTransactionsByMonth(filtered);
-  }, [accounts, appliedFilters, query, transactions]);
+  }, [accountNameById, accountTypeById, appliedFilters, debouncedQuery, transactions]);
+
+  const sections = useMemo<TransactionSection[]>(
+    () =>
+      filteredGroups.map((group) => ({
+        data: collapsedMonths[group.month] ? [] : group.items,
+        month: group.month,
+      })),
+    [collapsedMonths, filteredGroups],
+  );
 
   if (selectedTransaction) {
     return (
@@ -521,21 +608,44 @@ export default function TransactionRecordsScreen({
   const hasResult = filteredGroups.length > 0;
   const isFilterActive = hasActiveFilters(appliedFilters);
 
-  const openFilterPanel = () => {
+  const openFilterPanel = useCallback(() => {
     setDraftFilters(appliedFilters);
     setIsFilterVisible(true);
-  };
+  }, [appliedFilters]);
 
-  const toggleMonthCollapse = (month: string) => {
+  const toggleMonthCollapse = useCallback((month: string) => {
     LayoutAnimation.configureNext(monthCollapseAnimation);
     setCollapsedMonths((current) => ({
       ...current,
       [month]: !current[month],
     }));
-  };
+  }, []);
+
+  const renderTransactionRow = useCallback(
+    ({ item }: { item: Transaction }) => (
+      <TransactionRow
+        onSelect={setSelectedTransaction}
+        transaction={item}
+      />
+    ),
+    [],
+  );
+
+  const renderMonthHeader = useCallback(
+    ({ section }: { section: TransactionSection }) => (
+      <MonthHeader
+        isCollapsed={Boolean(collapsedMonths[section.month])}
+        month={section.month}
+        onPress={() => toggleMonthCollapse(section.month)}
+      />
+    ),
+    [collapsedMonths, toggleMonthCollapse],
+  );
+
+  const keyExtractor = useCallback((transaction: Transaction) => transaction.id, []);
 
   return (
-    <View style={styles.stack}>
+    <View style={styles.screen}>
       <TopBar onBack={onBack} title="交易记录" />
 
       <View style={styles.toolbar}>
@@ -573,26 +683,22 @@ export default function TransactionRecordsScreen({
         />
       ) : null}
 
-      <View style={styles.monthList}>
-        {filteredGroups.map((group) => (
-          <View key={group.month} style={styles.monthGroup}>
-            <MonthHeader
-              isCollapsed={Boolean(collapsedMonths[group.month])}
-              month={group.month}
-              onPress={() => toggleMonthCollapse(group.month)}
-            />
-            {collapsedMonths[group.month]
-              ? null
-              : group.items.map((transaction) => (
-                  <TransactionRow
-                    key={transaction.id}
-                    onPress={() => setSelectedTransaction(transaction)}
-                    transaction={transaction}
-                  />
-                ))}
-          </View>
-        ))}
-      </View>
+      {hasResult ? (
+        <SectionList
+          contentContainerStyle={styles.monthList}
+          initialNumToRender={28}
+          keyExtractor={keyExtractor}
+          maxToRenderPerBatch={28}
+          renderItem={renderTransactionRow}
+          renderSectionHeader={renderMonthHeader}
+          sections={sections}
+          showsVerticalScrollIndicator={false}
+          stickySectionHeadersEnabled={false}
+          style={styles.transactionList}
+          updateCellsBatchingPeriod={80}
+          windowSize={9}
+        />
+      ) : null}
 
       <FilterPanel
         draftFilters={draftFilters}
@@ -633,7 +739,7 @@ function TransactionDetail({
   const liabilityName = getLiabilityName(liabilities, transaction.relatedLiabilityId) ?? UNKNOWN_VALUE;
 
   return (
-    <View style={styles.stack}>
+    <ScrollView contentContainerStyle={styles.stack} showsVerticalScrollIndicator={false}>
       <TopBar onBack={onBack} title="交易详情" />
 
       <View style={styles.detailHero}>
@@ -664,7 +770,7 @@ function TransactionDetail({
         <DetailRow label="关联资产" value={assetName} />
         <DetailRow label="关联负债" value={liabilityName} />
       </DetailSection>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -681,17 +787,17 @@ function TopBar({ onBack, title }: { onBack: () => void; title: string }) {
   );
 }
 
-function TransactionRow({
+const TransactionRow = memo(function TransactionRow({
   transaction,
-  onPress,
+  onSelect,
 }: {
   transaction: Transaction;
-  onPress: () => void;
+  onSelect: (transaction: Transaction) => void;
 }) {
   const tone = getAmountTone(transaction);
 
   return (
-    <Pressable onPress={onPress} style={styles.transactionCard}>
+    <Pressable onPress={() => onSelect(transaction)} style={styles.transactionCard}>
       <View style={styles.transactionMain}>
         <Text numberOfLines={1} style={styles.transactionTitle}>
           {getTransactionTitle(transaction)}
@@ -703,9 +809,9 @@ function TransactionRow({
       <Text style={[styles.transactionAmount, styles[`amount_${tone}`]]}>{formatSignedAmount(transaction)}</Text>
     </Pressable>
   );
-}
+});
 
-function MonthHeader({
+const MonthHeader = memo(function MonthHeader({
   isCollapsed,
   month,
   onPress,
@@ -724,7 +830,7 @@ function MonthHeader({
       <Text style={styles.monthChevron}>{isCollapsed ? "›" : "˅"}</Text>
     </Pressable>
   );
-}
+});
 
 function FilterPanel({
   draftFilters,
@@ -1276,6 +1382,7 @@ const styles = StyleSheet.create({
   },
   monthList: {
     gap: 0,
+    paddingBottom: theme.spacing.xl,
   },
   monthHeaderRow: {
     alignItems: "center",
@@ -1329,6 +1436,10 @@ const styles = StyleSheet.create({
     minHeight: 38,
     paddingHorizontal: theme.spacing.sm,
   },
+  screen: {
+    flex: 1,
+    gap: theme.spacing.md,
+  },
   selectedDateText: {
     color: theme.colors.textMuted,
     fontSize: 13,
@@ -1344,6 +1455,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: theme.spacing.sm,
     minHeight: 48,
+  },
+  transactionList: {
+    flex: 1,
   },
   transactionAmount: {
     fontSize: 16,

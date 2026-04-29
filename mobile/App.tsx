@@ -301,12 +301,18 @@ function AppShell() {
           <Text style={styles.subtitle}>像经营公司一样经营自己</Text>
         </View>
       ) : null}
-      <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: 120 + insets.bottom }]}
-        showsVerticalScrollIndicator={false}
-      >
-        {renderScreen()}
-      </ScrollView>
+      {activeScreen === "transactions" ? (
+        <View style={[styles.content, styles.virtualizedContent, { paddingBottom: 120 + insets.bottom }]}>
+          {renderScreen()}
+        </View>
+      ) : (
+        <ScrollView
+          contentContainerStyle={[styles.content, { paddingBottom: 120 + insets.bottom }]}
+          showsVerticalScrollIndicator={false}
+        >
+          {renderScreen()}
+        </ScrollView>
+      )}
       <View style={[styles.tabBarShell, { paddingBottom: Math.max(insets.bottom, 14) }]}>
         <View style={styles.tabBar}>
           {tabs.map((tab) => {
@@ -344,6 +350,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 16,
     paddingBottom: 120,
+  },
+  virtualizedContent: {
+    flex: 1,
   },
   header: {
     backgroundColor: "rgba(255,254,252,0.92)",
