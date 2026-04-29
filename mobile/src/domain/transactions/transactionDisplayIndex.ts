@@ -44,18 +44,25 @@ export interface TransactionDisplayMonthGroup {
   monthLabel: string;
 }
 
+export interface TransactionMonthSummary {
+  latestTimestamp: number;
+  monthKey: string;
+  monthLabel: string;
+  transactionCount: number;
+}
+
 export interface TransactionRecordsIndex {
   accountById: Map<string, Account>;
   accountTypeById: Map<string, AccountType>;
-  groups: TransactionDisplayMonthGroup[];
   latestDateKey: string;
   latestMonthKey: string;
-  records: TransactionDisplayRecord[];
+  monthSummaries: TransactionMonthSummary[];
+  recordsByMonth: Map<string, TransactionDisplayRecord[]>;
+  rawTransactionsByMonth: Map<string, Transaction[]>;
   transactionById: Map<string, Transaction>;
 }
 
 const UNKNOWN_VALUE = "无";
-
 const DEBUG_TRANSACTION_PERF = false;
 
 const transactionTypeLabels: Record<TransactionType, string> = {
@@ -147,9 +154,7 @@ const getTransactionDateTime = (transaction: Transaction): string => {
   if (!Number.isNaN(createdAt.getTime())) {
     const hours = String(createdAt.getHours()).padStart(2, "0");
     const minutes = String(createdAt.getMinutes()).padStart(2, "0");
-    if (hours !== "00" || minutes !== "00") {
-      return `${transaction.date} ${hours}:${minutes}`;
-    }
+    if (hours !== "00" || minutes !== "00") return `${transaction.date} ${hours}:${minutes}`;
   }
 
   return transaction.date;
@@ -203,6 +208,76 @@ const getAccountTypeBuckets = (
   return Array.from(buckets);
 };
 
+export const buildTransactionDisplayRecord = (
+  transaction: Transaction,
+  accountById: Map<string, Account>,
+  accountTypeById: Map<string, AccountType>,
+): TransactionDisplayRecord => {
+  const title = getTransactionTitle(transaction);
+  const amountText = formatSignedAmount(transaction);
+  const typeLabel = getTransactionTypeLabel(transaction.type);
+  const accountDisplay = getAccountDisplay(accountById, transaction);
+  const accountIds = [transaction.accountId, transaction.counterAccountId].filter(Boolean) as string[];
+  const categoryText = transaction.category || UNKNOWN_VALUE;
+  const noteText = transaction.note?.trim() || UNKNOWN_VALUE;
+  const cashStatus = getCashStatusLabel(transaction);
+  const cashFlowLabel = getCashFlowLabel(transaction);
+  const monthKey = getTransactionMonthKey(transaction);
+  const searchableText = [
+    title,
+    transaction.note,
+    transaction.category,
+    typeLabel,
+    accountDisplay,
+    String(transaction.amount),
+    amountText,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return {
+    accountDisplay,
+    accountIds,
+    accountTypeBuckets: getAccountTypeBuckets(transaction, accountTypeById),
+    amountDirection: getTransactionAmountDirection(transaction),
+    amountText,
+    amountTone: getAmountTone(transaction),
+    cashFlowLabel,
+    cashStatus,
+    categoryText,
+    date: transaction.date,
+    dateTime: getTransactionDateTime(transaction),
+    id: transaction.id,
+    monthKey,
+    monthLabel: getMonthLabel(transaction.date),
+    noteText,
+    relatedAssetId: transaction.relatedAssetId,
+    relatedLiabilityId: transaction.relatedLiabilityId,
+    searchableText,
+    timestamp: getTransactionTimestamp(transaction),
+    title,
+    transaction,
+    typeLabel,
+  };
+};
+
+export const hydrateTransactionMonth = (
+  index: TransactionRecordsIndex,
+  monthKey: string,
+): TransactionDisplayRecord[] => {
+  const cachedRecords = index.recordsByMonth.get(monthKey);
+  if (cachedRecords) return cachedRecords;
+
+  const rawRecords = index.rawTransactionsByMonth.get(monthKey) ?? [];
+  return rawRecords.map((transaction) =>
+    buildTransactionDisplayRecord(transaction, index.accountById, index.accountTypeById),
+  );
+};
+
+export const hydrateAllTransactionRecords = (index: TransactionRecordsIndex): TransactionDisplayRecord[] =>
+  index.monthSummaries.flatMap((summary) => hydrateTransactionMonth(index, summary.monthKey));
+
 export const groupTransactionDisplayRecords = (
   records: TransactionDisplayRecord[],
 ): TransactionDisplayMonthGroup[] => {
@@ -227,78 +302,59 @@ export const buildTransactionRecordsIndex = (
   const startedAt = DEBUG_TRANSACTION_PERF ? Date.now() : 0;
   const accountById = new Map(accounts.map((account) => [account.id, account]));
   const accountTypeById = new Map(accounts.map((account) => [account.id, account.type]));
+  const sortedTransactions = [...transactions].sort((first, second) => {
+    const firstTimestamp = getTransactionTimestamp(first);
+    const secondTimestamp = getTransactionTimestamp(second);
+    if (firstTimestamp !== secondTimestamp) return secondTimestamp - firstTimestamp;
+    return second.id.localeCompare(first.id);
+  });
 
-  const records = transactions
-    .map((transaction) => {
-      const title = getTransactionTitle(transaction);
-      const amountText = formatSignedAmount(transaction);
-      const typeLabel = getTransactionTypeLabel(transaction.type);
-      const accountDisplay = getAccountDisplay(accountById, transaction);
-      const accountIds = [transaction.accountId, transaction.counterAccountId].filter(Boolean) as string[];
-      const categoryText = transaction.category || UNKNOWN_VALUE;
-      const noteText = transaction.note?.trim() || UNKNOWN_VALUE;
-      const cashStatus = getCashStatusLabel(transaction);
-      const cashFlowLabel = getCashFlowLabel(transaction);
-      const monthKey = getTransactionMonthKey(transaction);
-      const searchableText = [
-        title,
-        transaction.note,
-        transaction.category,
-        typeLabel,
-        accountDisplay,
-        String(transaction.amount),
-        amountText,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+  const rawTransactionsByMonth = new Map<string, Transaction[]>();
+  sortedTransactions.forEach((transaction) => {
+    const monthKey = getTransactionMonthKey(transaction);
+    const monthTransactions = rawTransactionsByMonth.get(monthKey);
+    if (monthTransactions) {
+      monthTransactions.push(transaction);
+    } else {
+      rawTransactionsByMonth.set(monthKey, [transaction]);
+    }
+  });
 
-      return {
-        accountDisplay,
-        accountIds,
-        accountTypeBuckets: getAccountTypeBuckets(transaction, accountTypeById),
-        amountDirection: getTransactionAmountDirection(transaction),
-        amountText,
-        amountTone: getAmountTone(transaction),
-        cashFlowLabel,
-        cashStatus,
-        categoryText,
-        date: transaction.date,
-        dateTime: getTransactionDateTime(transaction),
-        id: transaction.id,
-        monthKey,
-        monthLabel: getMonthLabel(transaction.date),
-        noteText,
-        relatedAssetId: transaction.relatedAssetId,
-        relatedLiabilityId: transaction.relatedLiabilityId,
-        searchableText,
-        timestamp: getTransactionTimestamp(transaction),
-        title,
-        transaction,
-        typeLabel,
-      } satisfies TransactionDisplayRecord;
-    })
-    .sort((first, second) => {
-      if (first.timestamp !== second.timestamp) return second.timestamp - first.timestamp;
-      return second.id.localeCompare(first.id);
-    });
+  const monthSummaries = Array.from(rawTransactionsByMonth.entries()).map(([monthKey, monthTransactions]) => ({
+    latestTimestamp: getTransactionTimestamp(monthTransactions[0]),
+    monthKey,
+    monthLabel: getMonthLabel(monthTransactions[0]?.date ?? monthKey),
+    transactionCount: monthTransactions.length,
+  }));
 
-  const groups = groupTransactionDisplayRecords(records);
-  const latestDateKey = records[0]?.date ?? "";
-  const latestMonthKey = records[0]?.monthKey ?? "";
+  const latestDateKey = sortedTransactions[0]?.date ?? "";
+  const latestMonthKey = monthSummaries[0]?.monthKey ?? "";
+  const recordsByMonth = new Map<string, TransactionDisplayRecord[]>();
+  if (latestMonthKey) {
+    recordsByMonth.set(
+      latestMonthKey,
+      (rawTransactionsByMonth.get(latestMonthKey) ?? []).map((transaction) =>
+        buildTransactionDisplayRecord(transaction, accountById, accountTypeById),
+      ),
+    );
+  }
+
   const transactionById = new Map(transactions.map((transaction) => [transaction.id, transaction]));
 
   if (DEBUG_TRANSACTION_PERF) {
-    console.log(`[transaction-records] build index: ${Date.now() - startedAt}ms, records=${records.length}`);
+    console.log(
+      `[transaction-records] build month index: ${Date.now() - startedAt}ms, months=${monthSummaries.length}`,
+    );
   }
 
   return {
     accountById,
     accountTypeById,
-    groups,
     latestDateKey,
     latestMonthKey,
-    records,
+    monthSummaries,
+    recordsByMonth,
+    rawTransactionsByMonth,
     transactionById,
   };
 };

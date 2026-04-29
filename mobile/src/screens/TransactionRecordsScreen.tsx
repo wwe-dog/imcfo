@@ -18,6 +18,8 @@ import AppIcon from "../components/AppIcon";
 import type { Account, AccountType, Asset, Liability, Transaction, TransactionType } from "../domain/models";
 import {
   groupTransactionDisplayRecords,
+  hydrateAllTransactionRecords,
+  hydrateTransactionMonth,
   type TransactionDisplayRecord,
   type TransactionRecordsIndex,
 } from "../domain/transactions/transactionDisplayIndex";
@@ -670,6 +672,10 @@ export default function TransactionRecordsScreen({
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(() => createDefaultFilters(recordsIndex?.latestDateKey));
   const [draftFilters, setDraftFilters] = useState<FilterState>(() => createDefaultFilters(recordsIndex?.latestDateKey));
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
+  const [fullRecords, setFullRecords] = useState<TransactionDisplayRecord[] | null>(null);
+  const [hydratedRecordsByMonth, setHydratedRecordsByMonth] = useState<Map<string, TransactionDisplayRecord[]>>(
+    () => new Map(recordsIndex?.recordsByMonth),
+  );
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 180);
@@ -683,28 +689,47 @@ export default function TransactionRecordsScreen({
     setDraftFilters((current) => ({ ...current, calendarMonth: current.calendarMonth || nextDefaults.calendarMonth }));
   }, [recordsIndex?.latestDateKey]);
 
+  useEffect(() => {
+    setFullRecords(null);
+    setCollapsedMonths({});
+    setHydratedRecordsByMonth(new Map(recordsIndex?.recordsByMonth));
+  }, [recordsIndex]);
+
+  const normalizedQuery = debouncedQuery.trim().toLowerCase();
+  const isFilterActive = hasActiveFilters(appliedFilters);
+  const isDefaultLazyMode = !normalizedQuery && !isFilterActive;
+
+  useEffect(() => {
+    if (!recordsIndex || isDefaultLazyMode || fullRecords) return;
+    setFullRecords(hydrateAllTransactionRecords(recordsIndex));
+  }, [fullRecords, isDefaultLazyMode, recordsIndex]);
+
   const filteredGroups = useMemo(() => {
     if (!recordsIndex) return [];
 
-    const normalizedQuery = debouncedQuery.trim().toLowerCase();
-    const isFilterActive = hasActiveFilters(appliedFilters);
-    if (!normalizedQuery && !isFilterActive) return recordsIndex.groups;
+    if (isDefaultLazyMode) {
+      return recordsIndex.monthSummaries.map((summary) => ({
+        items: hydratedRecordsByMonth.get(summary.monthKey) ?? [],
+        monthKey: summary.monthKey,
+        monthLabel: summary.monthLabel,
+      }));
+    }
+
+    if (!fullRecords) return [];
 
     const dateRange = appliedFilters.time === "all"
       ? null
       : getDateRangeForFilters(appliedFilters, recordsIndex.latestDateKey);
 
-    const filtered = recordsIndex.records.filter((record) => {
-        const matchesSearch = normalizedQuery
-          ? record.searchableText.includes(normalizedQuery)
-          : true;
-        if (!matchesSearch) return false;
-        if (!isFilterActive) return true;
-        return displayRecordMatchesFilters(record, appliedFilters, dateRange);
-      });
+    const filtered = fullRecords.filter((record) => {
+      const matchesSearch = normalizedQuery ? record.searchableText.includes(normalizedQuery) : true;
+      if (!matchesSearch) return false;
+      if (!isFilterActive) return true;
+      return displayRecordMatchesFilters(record, appliedFilters, dateRange);
+    });
 
     return groupTransactionDisplayRecords(filtered);
-  }, [appliedFilters, debouncedQuery, recordsIndex]);
+  }, [appliedFilters, fullRecords, hydratedRecordsByMonth, isDefaultLazyMode, isFilterActive, normalizedQuery, recordsIndex]);
 
   const sections = useMemo<TransactionSection[]>(
     () =>
@@ -717,22 +742,29 @@ export default function TransactionRecordsScreen({
   );
 
   const isPreparingRecords = isPreparingRecordsIndex || !recordsIndex;
-  const hasTransactions = Boolean(recordsIndex?.records.length) || isPreparingRecords;
-  const hasResult = !isPreparingRecords && filteredGroups.length > 0;
-  const isFilterActive = hasActiveFilters(appliedFilters);
-
+  const isPreparingFilteredRecords = !isDefaultLazyMode && !fullRecords;
+  const hasTransactions = Boolean(recordsIndex?.monthSummaries.length) || isPreparingRecords;
+  const hasResult = !isPreparingRecords && !isPreparingFilteredRecords && filteredGroups.length > 0;
   const openFilterPanel = useCallback(() => {
     setDraftFilters(appliedFilters);
     setIsFilterVisible(true);
   }, [appliedFilters]);
 
   const toggleMonthCollapse = useCallback((month: string) => {
+    if (!recordsIndex) return;
+
     LayoutAnimation.configureNext(monthCollapseAnimation);
+    setHydratedRecordsByMonth((current) => {
+      if (current.has(month)) return current;
+      const next = new Map(current);
+      next.set(month, hydrateTransactionMonth(recordsIndex, month));
+      return next;
+    });
     setCollapsedMonths((current) => ({
       ...current,
       [month]: !(current[month] ?? month !== recordsIndex?.latestMonthKey),
     }));
-  }, [recordsIndex?.latestMonthKey]);
+  }, [recordsIndex]);
 
   const renderTransactionRow = useCallback(
     ({ item }: { item: TransactionDisplayRecord }) => (
@@ -800,14 +832,14 @@ export default function TransactionRecordsScreen({
         />
       ) : null}
 
-      {hasTransactions && isPreparingRecords ? (
+      {hasTransactions && (isPreparingRecords || isPreparingFilteredRecords) ? (
         <EmptyState
           description="正在整理交易记录..."
           title="请稍候"
         />
       ) : null}
 
-      {hasTransactions && !isPreparingRecords && !hasResult ? (
+      {hasTransactions && !isPreparingRecords && !isPreparingFilteredRecords && !hasResult ? (
         <EmptyState
           description="试试调整关键词或筛选条件。"
           title="没有找到符合条件的交易"
@@ -832,22 +864,24 @@ export default function TransactionRecordsScreen({
         />
       ) : null}
 
-      <FilterPanel
-        draftFilters={draftFilters}
-        onApply={() => {
-          setAppliedFilters(draftFilters);
-          setIsFilterVisible(false);
-        }}
-        onClose={() => setIsFilterVisible(false)}
-        onReset={() => {
-          const defaultFilters = createDefaultFilters(recordsIndex?.latestDateKey);
-          setDraftFilters(defaultFilters);
-          setAppliedFilters(defaultFilters);
-          setIsFilterVisible(false);
-        }}
-        setDraftFilters={setDraftFilters}
-        visible={isFilterVisible}
-      />
+      {isFilterVisible ? (
+        <FilterPanel
+          draftFilters={draftFilters}
+          onApply={() => {
+            setAppliedFilters(draftFilters);
+            setIsFilterVisible(false);
+          }}
+          onClose={() => setIsFilterVisible(false)}
+          onReset={() => {
+            const defaultFilters = createDefaultFilters(recordsIndex?.latestDateKey);
+            setDraftFilters(defaultFilters);
+            setAppliedFilters(defaultFilters);
+            setIsFilterVisible(false);
+          }}
+          setDraftFilters={setDraftFilters}
+          visible={isFilterVisible}
+        />
+      ) : null}
     </View>
   );
 }
