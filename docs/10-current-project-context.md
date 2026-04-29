@@ -1,17 +1,17 @@
 # 我为CFO · 当前项目上下文快照
 
-> 用途：供下次 Codex 新会话、上下文压缩后恢复、或交接时快速加载。继续任何实现任务前，先读 `AGENTS.md` 和本文档，并用当前 Git 状态核对。
+> 用途：供下次 Codex 新会话、上下文压缩后恢复、或项目交接时快速加载。继续任何实现任务前，先读取 `AGENTS.md` 和本文档，并用当前 Git 状态核对。
 
-更新时间：2026-04-28  
+更新时间：2026-04-29  
 当前主分支：`main`  
-快照原因：完成首页图表数据接入后，按上下文压缩工作流刷新。  
-当前最新功能提交：`2f09479 feat: connect home dashboard charts to app data`
+当前开发模式：trunk-based development，直接在 `main` 上小步提交。  
+本次快照原因：完成首页资产/负债详情页 donut 图表标签与稳定配色修复后，按上下文压缩恢复规则刷新。
 
 ## 1. 项目定位与关键决策
 
 “我为CFO”不是普通记账 App，而是把个人生活翻译成公司式财务报表的个人经营系统。
 
-V0.1 只服务普通自然人，先跑通最小个人经营闭环：
+V0.1 只服务普通自然人，核心闭环是：
 
 记录数据 → 归类为资产、负债、收入、费用、现金流 → 生成三大报表 → 查看个人财务全貌 → 下月优化。
 
@@ -39,13 +39,14 @@ V0.1 只服务普通自然人，先跑通最小个人经营闭环：
 - TypeScript
 - AsyncStorage
 - 本地状态与本地存储
+- `react-native-svg` 用于首页图表
 
-开发模式：
+开发规则：
 
-- 当前采用 trunk-based development，直接在 `main` 上小步提交。
-- 每次实现后运行 `cd D:\imcfo\mobile` 与 `npm.cmd run typecheck`。
+- 每次实现后在 `D:\imcfo\mobile` 运行 `npm.cmd run typecheck`。
 - 屏幕不得直接调用 `AsyncStorage`，必须通过 `useAppData` 或 storage adapter。
-- 报表计算函数必须保持纯函数，不依赖 UI，不读写存储。
+- 报表计算函数保持纯函数，不依赖 UI，不读写存储。
+- 用户可见文案使用中文，技术命名可用英文。
 
 ## 3. 已完成部分
 
@@ -71,47 +72,58 @@ V0.1 只服务普通自然人，先跑通最小个人经营闭环：
 - `useAppData` 集中管理 AppData、加载、保存、导入、导出、重置、清空。
 - AsyncStorage 访问集中在 storage adapter。
 - 底部导航当前为：首页、管理、报表、我的。
-- Dashboard、管理、资产负债、报表、我的页面均已存在。
+- 首页、管理、资产负债、报表、我的相关页面能力已存在，其中资产负债不作为底部独立 tab。
 
 核心功能：
 
-- 首页已改为紧凑双视图仪表盘：`资产负债结构` 与 `收支现金流`。
-- 首页默认显示 `资产负债结构`，不再显示旧的六卡片长列表、月度分析、品牌大标题。
-- 首页资产/负债构成已接入当前本地资产与负债分类汇总，不再使用示例构成。
-- 首页收支趋势已接入当前交易数据，并支持按周线、月线、季度线、年线切换聚合展示。
+- 首页为紧凑双视图仪表盘：`资产负债结构` 与 `收支现金流`。
+- 首页默认显示 `资产负债结构`。
+- 首页资产/负债构成已接入当前本地资产与负债分类汇总。
+- 首页收支趋势已接入当前交易数据，并支持周线、月线、季度线、年线切换。
+- 首页资产/负债构成支持二级详情和三级分类明细钻取，不新增底部 tab。
+- 资产/负债详情页 donut 图表支持外部标签、引导线、点击高亮和稳定 15 色配色。
 - 管理页支持自然语言记账、识别结果 modal、确认入账、成功 modal。
 - 管理页保留手动修改 / 高级填写。
-- 资产负债页支持资产和负债新增、编辑、删除。
+- 资产负债管理能力已支持资产和负债新增、编辑、删除。
 - 报表页支持资产负债表、现金流量表、利润表切换。
 - 报表页支持简易版 / 专业版切换。
-- 我的页支持导出、导入、恢复示例数据、清空本地数据。
+- 我的页支持本地数据导出、导入、恢复示例数据、清空本地数据。
 
 ## 4. 重要文件修改记录
 
 `mobile/App.tsx`
 
 - App 入口、页面切换、底部导航、全局数据回调。
-- 当前底部导航：`首页`、`管理`、`报表`、`我的`。
-- 首页时隐藏全局品牌头，避免首页出现大标题块。
-
-`mobile/src/screens/DashboardScreen.tsx`
-
-- 首页当前实现双视图切换：
-- `资产负债结构`：展示资产、负债、净资产，资产构成和负债构成来自当前分类汇总。
-- `收支现金流`：展示收入、支出、净流入，收支趋势来自交易数据按周期聚合。
-- 周线、月线、季度线、年线会切换收支趋势聚合维度。
-- 净资产趋势目前为本期收入费用对当前净资产的轻量推算，不是持久化历史快照。
-- 当前图表为轻量 React Native View 实现，不依赖图表库。
+- 当前底部导航：首页、管理、报表、我的。
+- 已接入 safe area，避免 Android 状态栏遮挡内容。
 
 `mobile/src/app/useAppData.ts`
 
-- 当前 App 数据状态中心。
+- App 数据状态中心。
 - 负责 load/save/reset/clear/export/import/transaction/asset/liability 更新。
 
 `mobile/src/storage/asyncStorageAdapter.ts`
 
 - 唯一直接接触 AsyncStorage 的模块。
 - 屏幕层不要绕过它直接访问存储。
+
+`mobile/src/screens/DashboardScreen.tsx`
+
+- 首页双视图切换、资产/负债结构卡片、收支现金流卡片。
+- 支持资产构成详情、负债构成详情、资产分类三级详情、负债分类三级详情。
+- 图表数据按金额降序分配稳定 15 色调色板，超过 15 项时保留前 14 项并合并为“其他”。
+- 表格行颜色与图表颜色保持一致。
+
+`mobile/src/components/charts/DonutChart.tsx`
+
+- 基于 `react-native-svg` 的 donut 图表。
+- 支持紧凑首页模式与详情页模式。
+- 详情页可显示 >= 1% 分段的外部标签、金额、引导线和点击高亮。
+- 入口旋转动画使用 React Native Animated，不新增重型依赖。
+
+`mobile/src/components/charts/LineChart.tsx`
+
+- 基于 `react-native-svg` 的轻量折线图。
 
 `mobile/src/domain/accounting/calculations.ts`
 
@@ -148,20 +160,21 @@ V0.1 只服务普通自然人，先跑通最小个人经营闭环：
 
 当前分支：`main`
 
-刷新本快照前的工作区状态：
+最新功能提交：
 
-- 首页功能提交已完成。
-- 本快照文件随后单独提交。
+- `569f9d1 fix: show detail donut labels and stable chart colors`
+- `83478e5 feat: add detailed donut labels for asset liability drilldowns`
+- `7c2847d feat: add asset and liability composition drilldowns`
+- `e8b83ab feat: add donut chart callout labels and animation`
+- `8267179 feat: add svg charts to home dashboard`
+- `0a45292 chore: expand mobile demo data`
 
-近期提交：
+本快照提交后，工作区应保持干净。如继续开发，请先运行：
 
-- `2f09479 feat: connect home dashboard charts to app data`
-- `287ca83 docs: refresh current project context snapshot`
-- `e52d037 feat: redesign home dashboard switcher`
-- `d42d6ce docs: strengthen context snapshot workflow`
-- `3a40a46 feat: refactor management page recognition modal flow`
-- `4b40e32 style: complete stitch mobile UI cleanup`
-- `d1eeaec style: finish stitch mobile UI alignment`
+```powershell
+cd D:\imcfo
+git status
+```
 
 ## 6. 待办事项与风险
 
@@ -169,7 +182,7 @@ V0.1 只服务普通自然人，先跑通最小个人经营闭环：
 
 - 给核心报表计算函数补最小测试。
 - 给交易映射规则补关键样例测试。
-- 检查自然语言解析对“股票盈利”“分红”“朋友还我”等句子的边界处理。
+- 检查自然语言解析对“股票盈利”“分红”“朋友还我”等边界句子的处理。
 - 梳理账户管理与交易记录页是否进入 V0.1。
 
 中优先级：
@@ -182,14 +195,15 @@ V0.1 只服务普通自然人，先跑通最小个人经营闭环：
 风险：
 
 - 当前主要依赖 `npm.cmd run typecheck` 保底，自动化测试不足。
-- PowerShell 可能以 GBK 显示 UTF-8 中文，看到乱码时要用 UTF-8 读取方式核实。
+- 详情页 donut 标签使用简单避让策略，在极小屏幕或分类过多时仍可能拥挤。
+- PowerShell 默认编码可能导致终端显示中文乱码；应优先用 UTF-8 方式读取文件核实。
 - 上下文快照 skill 无法真正挂接 Codex 内部压缩事件，只能通过 skill metadata、`AGENTS.md` 规则和恢复流程提高命中率。
 
 ## 7. 架构与数据流摘要
 
 数据流：
 
-用户操作屏幕 → 调用 App/useAppData 回调 → storage adapter 保存 → App state 更新 → Dashboard/Reports 重新基于最新数据计算并渲染。
+用户操作屏幕 → 调用 App/useAppData 回调 → storage adapter 保存 → App state 更新 → Dashboard/Reports 基于最新数据重新计算并渲染。
 
 边界：
 
