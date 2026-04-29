@@ -5,7 +5,7 @@
 更新时间：2026-04-29  
 当前主分支：`main`  
 当前开发模式：trunk-based development，直接在 `main` 上小步提交。  
-本次快照原因：完成 Arco Design Pro 2.0 参考下的移动端全局视觉 polish 后刷新上下文。
+本次快照原因：完成 Arco 风格移动端图标系统后刷新上下文。
 
 ## 1. 项目定位与关键决策
 
@@ -104,9 +104,10 @@ V0.1 只服务普通自然人，核心闭环是：
 
 最新功能提交：
 
+- `a6d0533 style: add arco inspired mobile icon system`
 - `bab72b8 style: apply arco inspired mobile visual polish`
 
-本次只做视觉层调整，未修改账务公式、交易规则、存储 schema、种子数据或报表计算。
+本次只做 UI 图标层调整，未修改账务公式、交易规则、存储 schema、种子数据或报表计算。
 
 读取的 Arco 本地参考：
 
@@ -117,6 +118,15 @@ V0.1 只服务普通自然人，核心闭环是：
 
 本次 polish 覆盖：
 
+- `mobile/src/components/AppIcon.tsx`：新增基于 `react-native-svg` 的项目内语义化线性图标组件，不引入 Arco Web 或 Expo 图标依赖。
+- `references/arco-design-pro-2/icon-usage-notes.md`：记录图标使用边界，说明当前没有直接复制 Arco 图标包运行时代码。
+- `mobile/App.tsx`：底部导航接入首页、管理、报表、我的图标。
+- `mobile/src/screens/RecordScreen.tsx`：管理中心 modal 条目接入账户、资产、对账、交易记录图标。
+- `mobile/src/screens/TransactionRecordsScreen.tsx`：搜索框使用搜索图标，筛选按钮使用独立 funnel 图标，不使用“筛”字按钮。
+- `mobile/src/screens/AccountManagementScreen.tsx`：账户分类、返回、新增和启用/停用状态接入统一图标。
+- `mobile/src/screens/DashboardScreen.tsx`：首页资产、负债、净资产、现金流指标和周期按钮接入统一图标。
+- `mobile/src/screens/ReportsScreen.tsx`：三大报表切换按钮接入统一图标。
+- `mobile/src/screens/SettingsScreen.tsx`：我的页入口列表接入统一图标。
 - `mobile/src/styles/theme.ts`：增加 `surfaceElevated`、`divider`、浅蓝 token，收敛卡片、按钮、输入框、chip、文字层级和阴影。
 - `mobile/App.tsx`：根内容边距、顶部品牌栏、底部导航密度和阴影更轻。
 - `mobile/src/screens/DashboardScreen.tsx`：首页指标 pill、图表卡片、趋势区和详情页表格密度更统一。
