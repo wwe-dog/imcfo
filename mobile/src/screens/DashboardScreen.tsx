@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import AppIcon from "../components/AppIcon";
+import ScreenTransition from "../components/ScreenTransition";
 import DonutChart from "../components/charts/DonutChart";
 import LineChart from "../components/charts/LineChart";
 import type { Asset, Liability, ReportSummary, Transaction } from "../domain/models";
@@ -391,55 +392,65 @@ export default function DashboardScreen({ assets, liabilities, summary, transact
 
   if (route.name === "assetCompositionDetail") {
     return (
-      <AssetCompositionDetailScreen
-        assets={assets}
-        onBack={() => setRoute({ name: "dashboard" })}
-        onOpenCategory={(category) => setRoute({ category, name: "assetCategoryDetail" })}
-        totalAssets={summary.totalAssets}
-      />
+      <ScreenTransition animateOnMount transitionKey="assetCompositionDetail" variant="drilldown">
+        <AssetCompositionDetailScreen
+          assets={assets}
+          onBack={() => setRoute({ name: "dashboard" })}
+          onOpenCategory={(category) => setRoute({ category, name: "assetCategoryDetail" })}
+          totalAssets={summary.totalAssets}
+        />
+      </ScreenTransition>
     );
   }
 
   if (route.name === "liabilityCompositionDetail") {
     return (
-      <LiabilityCompositionDetailScreen
-        liabilities={liabilities}
-        onBack={() => setRoute({ name: "dashboard" })}
-        onOpenCategory={(category) => setRoute({ category, name: "liabilityCategoryDetail" })}
-        totalLiabilities={summary.totalLiabilities}
-      />
+      <ScreenTransition animateOnMount transitionKey="liabilityCompositionDetail" variant="drilldown">
+        <LiabilityCompositionDetailScreen
+          liabilities={liabilities}
+          onBack={() => setRoute({ name: "dashboard" })}
+          onOpenCategory={(category) => setRoute({ category, name: "liabilityCategoryDetail" })}
+          totalLiabilities={summary.totalLiabilities}
+        />
+      </ScreenTransition>
     );
   }
 
   if (route.name === "netWorthDetail") {
     return (
-      <NetWorthDetailScreen
-        onBack={() => setRoute({ name: "dashboard" })}
-        summary={summary}
-        transactions={transactions}
-      />
+      <ScreenTransition animateOnMount transitionKey="netWorthDetail" variant="drilldown">
+        <NetWorthDetailScreen
+          onBack={() => setRoute({ name: "dashboard" })}
+          summary={summary}
+          transactions={transactions}
+        />
+      </ScreenTransition>
     );
   }
 
   if (route.name === "assetCategoryDetail") {
     return (
-      <AssetCategoryDetailScreen
-        assets={assets}
-        category={route.category}
-        onBack={() => setRoute({ name: "assetCompositionDetail" })}
-        totalAssets={summary.totalAssets}
-      />
+      <ScreenTransition animateOnMount transitionKey={`assetCategoryDetail-${route.category}`} variant="drilldown">
+        <AssetCategoryDetailScreen
+          assets={assets}
+          category={route.category}
+          onBack={() => setRoute({ name: "assetCompositionDetail" })}
+          totalAssets={summary.totalAssets}
+        />
+      </ScreenTransition>
     );
   }
 
   if (route.name === "liabilityCategoryDetail") {
     return (
-      <LiabilityCategoryDetailScreen
-        category={route.category}
-        liabilities={liabilities}
-        onBack={() => setRoute({ name: "liabilityCompositionDetail" })}
-        totalLiabilities={summary.totalLiabilities}
-      />
+      <ScreenTransition animateOnMount transitionKey={`liabilityCategoryDetail-${route.category}`} variant="drilldown">
+        <LiabilityCategoryDetailScreen
+          category={route.category}
+          liabilities={liabilities}
+          onBack={() => setRoute({ name: "liabilityCompositionDetail" })}
+          totalLiabilities={summary.totalLiabilities}
+        />
+      </ScreenTransition>
     );
   }
 

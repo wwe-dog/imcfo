@@ -1,7 +1,9 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type { LayoutAnimationConfig } from "react-native";
 import {
+  Animated,
+  Easing,
   LayoutAnimation,
   Modal,
   Platform,
@@ -15,6 +17,7 @@ import {
   View,
 } from "react-native";
 import AppIcon from "../components/AppIcon";
+import ScreenTransition from "../components/ScreenTransition";
 import type { Account, AccountType, Asset, Liability, Transaction, TransactionType } from "../domain/models";
 import {
   groupTransactionDisplayRecords,
@@ -791,12 +794,14 @@ export default function TransactionRecordsScreen({
 
   if (selectedRecord) {
     return (
-      <TransactionDetail
-        assets={assets}
-        liabilities={liabilities}
-        onBack={() => setSelectedRecord(null)}
-        record={selectedRecord}
-      />
+      <ScreenTransition animateOnMount transitionKey={`transaction-detail-${selectedRecord.id}`} variant="drilldown">
+        <TransactionDetail
+          assets={assets}
+          liabilities={liabilities}
+          onBack={() => setSelectedRecord(null)}
+          record={selectedRecord}
+        />
+      </ScreenTransition>
     );
   }
 
@@ -1009,7 +1014,19 @@ function FilterPanel({
   setDraftFilters: Dispatch<SetStateAction<FilterState>>;
   visible: boolean;
 }) {
+  const panelProgress = useRef(new Animated.Value(0)).current;
   const calendarCells = useMemo(() => buildCalendarCells(draftFilters.calendarMonth), [draftFilters.calendarMonth]);
+
+  useEffect(() => {
+    if (!visible) return;
+    panelProgress.setValue(0);
+    Animated.timing(panelProgress, {
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  }, [panelProgress, visible]);
 
   const updateDraft = (partial: Partial<FilterState>) => {
     setDraftFilters((current) => ({ ...current, ...partial }));
@@ -1061,7 +1078,28 @@ function FilterPanel({
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
       <View style={styles.filterModalRoot}>
         <Pressable accessibilityLabel="关闭筛选面板" onPress={onClose} style={styles.filterBackdrop} />
-        <View style={styles.filterPanel}>
+        <Animated.View
+          style={[
+            styles.filterPanel,
+            {
+              opacity: panelProgress,
+              transform: [
+                {
+                  translateY: panelProgress.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-8, 0],
+                  }),
+                },
+                {
+                  scale: panelProgress.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.98, 1],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
           <ScrollView contentContainerStyle={styles.filterPanelContent} showsVerticalScrollIndicator={false}>
             <View style={styles.filterPanelHeader}>
               <Text style={styles.filterPanelTitle}>筛选交易</Text>
@@ -1175,7 +1213,7 @@ function FilterPanel({
               <Text style={styles.filterApplyText}>应用筛选</Text>
             </Pressable>
           </View>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );

@@ -28,6 +28,7 @@ import RecordScreen from "./src/screens/RecordScreen";
 import ReportsScreen from "./src/screens/ReportsScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import TransactionRecordsScreen from "./src/screens/TransactionRecordsScreen";
+import ScreenTransition from "./src/components/ScreenTransition";
 import { theme } from "./src/styles/theme";
 
 type ScreenKey = "dashboard" | "record" | "assets" | "accounts" | "transactions" | "reports" | "settings";
@@ -51,6 +52,9 @@ const getTabIcon = (key: Exclude<ScreenKey, "assets" | "accounts" | "transaction
       return "profile";
   }
 };
+
+const isBottomTabScreen = (screen: ScreenKey): boolean =>
+  screen === "dashboard" || screen === "record" || screen === "reports" || screen === "settings";
 
 export default function App() {
   return (
@@ -307,14 +311,27 @@ function AppShell() {
       ) : null}
       {activeScreen === "transactions" ? (
         <View style={[styles.content, styles.virtualizedContent, { paddingBottom: 120 + insets.bottom }]}>
-          {renderScreen()}
+          <ScreenTransition
+            animateOnMount
+            style={styles.virtualizedContent}
+            transitionKey={activeScreen}
+            variant={isBottomTabScreen(activeScreen) ? "tab" : "drilldown"}
+          >
+            {renderScreen()}
+          </ScreenTransition>
         </View>
       ) : (
         <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: 120 + insets.bottom }]}
           showsVerticalScrollIndicator={false}
         >
-          {renderScreen()}
+          <ScreenTransition
+            animateOnMount
+            transitionKey={activeScreen}
+            variant={isBottomTabScreen(activeScreen) ? "tab" : "drilldown"}
+          >
+            {renderScreen()}
+          </ScreenTransition>
         </ScrollView>
       )}
       <View style={[styles.tabBarShell, { paddingBottom: Math.max(insets.bottom, 14) }]}>

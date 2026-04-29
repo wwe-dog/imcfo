@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Alert, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Animated, Easing, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   parseNaturalLanguageTransaction,
   transactionTypeMeta,
@@ -101,6 +101,7 @@ export default function RecordScreen({
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [modalState, setModalState] = useState<ModalState>("draft");
   const [isMoreMenuVisible, setIsMoreMenuVisible] = useState(false);
+  const moreMenuProgress = useRef(new Animated.Value(0)).current;
 
   const selectedOption = findOption(type);
   const selectedMeta = transactionTypeMeta[type];
@@ -132,6 +133,17 @@ export default function RecordScreen({
   const selectedCreditCardAccount = creditCardAccounts.find((account) => account.id === creditCardAccountId);
   const selectedReceivableAsset = receivableAssets.find((asset) => asset.id === relatedAssetId);
   const selectedPayableLiability = payableLiabilities.find((liability) => liability.id === relatedLiabilityId);
+
+  useEffect(() => {
+    if (!isMoreMenuVisible) return;
+    moreMenuProgress.setValue(0);
+    Animated.timing(moreMenuProgress, {
+      duration: 190,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  }, [isMoreMenuVisible, moreMenuProgress]);
 
   const pickAccountId = (nextType: NaturalLanguageTransactionType): string => {
     const currentAccount = activeAccounts.find((account) => account.id === accountId);
@@ -796,7 +808,28 @@ export default function RecordScreen({
             onPress={closeMoreMenu}
             style={styles.moreModalBackdrop}
           />
-          <View style={styles.moreSheet}>
+          <Animated.View
+            style={[
+              styles.moreSheet,
+              {
+                opacity: moreMenuProgress,
+                transform: [
+                  {
+                    translateY: moreMenuProgress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [18, 0],
+                    }),
+                  },
+                  {
+                    scale: moreMenuProgress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.98, 1],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
             <View style={styles.moreHandle} />
             <View style={styles.moreHeader}>
               <Text style={styles.moreTitle}>管理中心</Text>
@@ -833,7 +866,7 @@ export default function RecordScreen({
             <Pressable onPress={closeMoreMenu} style={styles.moreCloseButton}>
               <Text style={styles.moreCloseText}>关闭</Text>
             </Pressable>
-          </View>
+          </Animated.View>
         </View>
       </Modal>
     </View>

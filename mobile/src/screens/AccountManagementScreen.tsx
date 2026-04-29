@@ -9,6 +9,7 @@ import {
 import type { AccountInput } from "../domain/accounting/transactionRules";
 import type { Account, AccountType, Transaction } from "../domain/models";
 import AppIcon, { type AppIconName } from "../components/AppIcon";
+import ScreenTransition from "../components/ScreenTransition";
 import { sharedStyles, theme } from "../styles/theme";
 import { formatCurrency } from "../utils/formatters";
 
@@ -458,7 +459,11 @@ export default function AccountManagementScreen({
   if (route.name === "form") {
     const selectedAccount = form.id ? accounts.find((account) => account.id === form.id) : undefined;
     return (
-      <>
+      <ScreenTransition
+        animateOnMount
+        transitionKey={form.id ? `account-detail-${form.id}` : `account-create-${route.type ?? "overview"}`}
+        variant="drilldown"
+      >
         <AccountFormPage
           form={form}
           isSaving={isSaving}
@@ -475,7 +480,7 @@ export default function AccountManagementScreen({
           onSubmit={() => void handleReconciliationSubmit()}
           updateReconciliation={(patch) => setReconciliation((current) => ({ ...current, ...patch }))}
         />
-      </>
+      </ScreenTransition>
     );
   }
 
@@ -484,34 +489,36 @@ export default function AccountManagementScreen({
     const categoryAccounts = accounts.filter((account) => normalizeAccountType(account.type) === route.type);
 
     return (
-      <View style={styles.stack}>
-        <TopBar onBack={handleBack} onAdd={() => openCreateForm(route.type, route.type)} title={meta.detailTitle} />
-        <CategorySummaryCard accounts={categoryAccounts} meta={meta} />
-        <View style={[sharedStyles.card, styles.listCard]}>
-          <Text style={sharedStyles.sectionTitle}>具体账户</Text>
-          {categoryAccounts.length > 0 ? (
-            categoryAccounts.map((account) => (
-              <AccountDetailRow
-                account={account}
-                key={account.id}
-                onDelete={() => handleDelete(account)}
-                onDisable={() => handleDisable(account)}
-                onEdit={() => openEditForm(account, route.type)}
-              />
-            ))
-          ) : (
-            <View style={styles.emptyStateBox}>
-              <Text style={styles.emptyStateTitle}>暂无账户</Text>
-              <Text style={styles.emptyStateDescription}>
-                你可以新增一个{meta.label}账户，用于后续记账和资产统计。
-              </Text>
-              <Pressable onPress={() => openCreateForm(route.type, route.type)} style={sharedStyles.primaryButton}>
-                <Text style={sharedStyles.primaryButtonText}>新增账户</Text>
-              </Pressable>
-            </View>
-          )}
+      <ScreenTransition animateOnMount transitionKey={`account-category-${route.type}`} variant="drilldown">
+        <View style={styles.stack}>
+          <TopBar onBack={handleBack} onAdd={() => openCreateForm(route.type, route.type)} title={meta.detailTitle} />
+          <CategorySummaryCard accounts={categoryAccounts} meta={meta} />
+          <View style={[sharedStyles.card, styles.listCard]}>
+            <Text style={sharedStyles.sectionTitle}>具体账户</Text>
+            {categoryAccounts.length > 0 ? (
+              categoryAccounts.map((account) => (
+                <AccountDetailRow
+                  account={account}
+                  key={account.id}
+                  onDelete={() => handleDelete(account)}
+                  onDisable={() => handleDisable(account)}
+                  onEdit={() => openEditForm(account, route.type)}
+                />
+              ))
+            ) : (
+              <View style={styles.emptyStateBox}>
+                <Text style={styles.emptyStateTitle}>暂无账户</Text>
+                <Text style={styles.emptyStateDescription}>
+                  你可以新增一个{meta.label}账户，用于后续记账和资产统计。
+                </Text>
+                <Pressable onPress={() => openCreateForm(route.type, route.type)} style={sharedStyles.primaryButton}>
+                  <Text style={sharedStyles.primaryButtonText}>新增账户</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
         </View>
-      </View>
+      </ScreenTransition>
     );
   }
 
