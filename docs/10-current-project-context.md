@@ -3,7 +3,7 @@
 更新时间：2026-04-29  
 当前分支：`main`  
 开发模式：trunk-based development，直接在 `main` 上小步提交。  
-本次快照原因：完成交易记录页入口卡顿消除优化后刷新上下文，便于后续压缩/恢复。
+本次快照原因：完成交易记录页月份懒水合性能优化后刷新上下文，便于后续压缩/恢复。
 
 ## 1. 项目定位与边界
 
@@ -54,13 +54,19 @@ git log --oneline --decorate -10
 ## 4. 最近完成的工作
 
 最新提交：
+- `8f2c3aa perf: lazy hydrate transaction months`
 - `839da79 perf: precompute transaction records index`
 - `364ff22 docs: refresh current project context snapshot`
 - `1be2dc1 perf: reduce transaction records initial load lag`
 - `ec6dbe5 perf: optimize transaction records list rendering`
 - `7c6cddc style: animate transaction month collapse`
 
-本次性能优化范围：
+最近交易记录性能优化范围：
+- `8f2c3aa` 将交易记录索引拆为月份摘要和按月行数据两层。
+- `transactionDisplayIndex.ts` 现在构建 `monthSummaries`、`rawTransactionsByMonth`，并只在初始索引中水合最新月份的 `recordsByMonth`。
+- `TransactionRecordsScreen.tsx` 默认模式只渲染月份头和已水合月份行，历史月份展开时调用 `hydrateTransactionMonth` 生成该月行数据。
+- 搜索或筛选激活后才调用 `hydrateAllTransactionRecords` 生成全量展示记录；清空搜索和筛选后回到默认懒加载模式。
+- 筛选弹层和日历网格仅在点击漏斗按钮后挂载，不再随页面隐藏渲染。
 - 新增 `mobile/src/domain/transactions/transactionDisplayIndex.ts`：构建 UI 派生的交易记录展示索引，不写入 AsyncStorage。
 - 新增 `mobile/src/hooks/useTransactionRecordsIndex.ts`：App 数据加载后用 `InteractionManager.runAfterInteractions` 预热索引。
 - 更新 `mobile/App.tsx`：在 AppShell 级别预建交易记录索引并传入交易记录页；报表期交易过滤只在进入报表页时执行，避免打开交易记录时做无关遍历。
@@ -97,7 +103,7 @@ git log --oneline --decorate -10
 - `mobile/src/domain/accounting/transactionRules.ts`：交易入账和账户/资产/负债同步规则。
 - `mobile/src/domain/accounting/reconciliationRules.ts`：对账/资产盘点调整规则。
 - `mobile/src/domain/accounting/periodFilters.ts`：按当前报告期过滤交易，避免历史交易污染当前期报表。
-- `mobile/src/domain/transactions/transactionDisplayIndex.ts`：交易记录页 UI 派生索引构建，负责预排序、预分组、搜索文本和展示字段。
+- `mobile/src/domain/transactions/transactionDisplayIndex.ts`：交易记录页 UI 派生索引构建，负责月份摘要、最新月预水合、按月懒水合、搜索文本和展示字段。
 - `mobile/src/hooks/useTransactionRecordsIndex.ts`：交易记录索引预热 hook。
 - `mobile/src/screens/TransactionRecordsScreen.tsx`：交易记录列表、筛选、月份折叠、交易详情展示。
 - `mobile/src/screens/AccountManagementScreen.tsx`：账户管理层级页面和账户详情。
@@ -114,7 +120,7 @@ git log --oneline --decorate -10
 
 已知风险：
 - 当前主要依赖 `npm.cmd run typecheck` 保底，自动化测试不足。
-- 交易记录性能优化已移出打开路径，但尚未做真实 Android profiler 帧率采样。
+- 交易记录性能优化已改为月份摘要 + 懒水合，但尚未做真实 Android profiler 帧率采样。
 - 趋势图尚无独立历史快照 schema，部分趋势仍依赖现有数据或近似。
 - 对账规则不会随机 fallback 到任意资产/负债；缺少明确关联时只更新可确认目标。
 - 普通账户一对多关联资产时不会自动覆盖多个资产，需用户进入资产明细分别更新。
@@ -135,6 +141,7 @@ npm.cmd run typecheck
 刷新本快照前的最近提交：
 
 ```text
+8f2c3aa perf: lazy hydrate transaction months
 839da79 perf: precompute transaction records index
 364ff22 docs: refresh current project context snapshot
 1be2dc1 perf: reduce transaction records initial load lag
