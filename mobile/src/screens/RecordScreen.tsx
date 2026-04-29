@@ -18,6 +18,7 @@ interface RecordScreenProps {
   onOpenAccounts: () => void;
   onOpenReports: () => void;
   onOpenAssets: () => void;
+  onOpenTransactions: () => void;
 }
 
 interface TransactionTypeOption {
@@ -79,6 +80,7 @@ export default function RecordScreen({
   onOpenAccounts,
   onOpenReports,
   onOpenAssets,
+  onOpenTransactions,
 }: RecordScreenProps) {
   const [naturalText, setNaturalText] = useState("");
   const [draft, setDraft] = useState<ParsedTransactionDraft | null>(null);
@@ -222,7 +224,7 @@ export default function RecordScreen({
 
   const handleOpenTransactions = () => {
     closeMoreMenu();
-    Alert.alert("交易记录", "该功能将在后续版本中完善。");
+    onOpenTransactions();
   };
 
   const handleTypeChange = (nextType: NaturalLanguageTransactionType) => {

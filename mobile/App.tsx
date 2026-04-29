@@ -24,11 +24,12 @@ import DashboardScreen from "./src/screens/DashboardScreen";
 import RecordScreen from "./src/screens/RecordScreen";
 import ReportsScreen from "./src/screens/ReportsScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
+import TransactionRecordsScreen from "./src/screens/TransactionRecordsScreen";
 import { theme } from "./src/styles/theme";
 
-type ScreenKey = "dashboard" | "record" | "assets" | "accounts" | "reports" | "settings";
+type ScreenKey = "dashboard" | "record" | "assets" | "accounts" | "transactions" | "reports" | "settings";
 
-const tabs: Array<{ key: Exclude<ScreenKey, "assets">; label: string }> = [
+const tabs: Array<{ key: Exclude<ScreenKey, "assets" | "accounts" | "transactions">; label: string }> = [
   { key: "dashboard", label: "首页" },
   { key: "record", label: "管理" },
   { key: "reports", label: "报表" },
@@ -208,8 +209,17 @@ function AppShell() {
             liabilities={data.liabilities}
             onOpenAccounts={() => setActiveScreen("accounts")}
             onOpenAssets={() => setActiveScreen("assets")}
+            onOpenTransactions={() => setActiveScreen("transactions")}
             onOpenReports={() => setActiveScreen("reports")}
             onSave={handleSaveTransaction}
+          />
+        );
+      case "transactions":
+        return (
+          <TransactionRecordsScreen
+            accounts={data.accounts}
+            transactions={data.transactions}
+            onBack={() => setActiveScreen("record")}
           />
         );
       case "accounts":
@@ -252,6 +262,7 @@ function AppShell() {
           <SettingsScreen
             appVersion={data.version}
             onOpenAccounts={() => setActiveScreen("accounts")}
+            onOpenTransactions={() => setActiveScreen("transactions")}
             onClear={handleClear}
             onExport={handleExport}
             onImport={handleImport}

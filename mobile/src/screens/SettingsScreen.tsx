@@ -8,6 +8,7 @@ interface SettingsScreenProps {
   onExport: () => Promise<string>;
   onImport: (serializedData: string) => Promise<void>;
   onOpenAccounts: () => void;
+  onOpenTransactions: () => void;
   onReset: () => Promise<void>;
   onClear: () => Promise<void>;
 }
@@ -18,6 +19,7 @@ export default function SettingsScreen({
   onExport,
   onImport,
   onOpenAccounts,
+  onOpenTransactions,
   onReset,
   onClear,
 }: SettingsScreenProps) {
@@ -87,6 +89,13 @@ export default function SettingsScreen({
           <View style={styles.listCopy}>
             <Text style={styles.listTitle}>账户管理</Text>
             <Text style={styles.listSubtitle}>现金、银行卡、支付账户和信用卡</Text>
+          </View>
+          <Text style={styles.listArrow}>›</Text>
+        </Pressable>
+        <Pressable onPress={onOpenTransactions} style={[styles.listRow, styles.listRowBorder]}>
+          <View style={styles.listCopy}>
+            <Text style={styles.listTitle}>交易记录</Text>
+            <Text style={styles.listSubtitle}>查看、搜索和筛选历史财务事件</Text>
           </View>
           <Text style={styles.listArrow}>›</Text>
         </Pressable>
