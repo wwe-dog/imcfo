@@ -5,7 +5,7 @@
 更新时间：2026-04-29  
 当前主分支：`main`  
 当前开发模式：trunk-based development，直接在 `main` 上小步提交。  
-本次快照原因：完成 2023-05 至 2026-04 三年高复杂度历史示例账套后刷新上下文。
+本次快照原因：完成交易记录 3 年历史数据下的列表渲染性能优化后刷新上下文。
 
 ## 1. 项目定位与关键决策
 
@@ -105,6 +105,7 @@ V0.1 只服务普通自然人，核心闭环是：
 
 最新功能提交：
 
+- `ec6dbe5 perf: optimize transaction records list rendering`
 - `54d04f7 chore: add three year high complexity demo data`
 - `b8318a5 feat: add collapsible transaction month sections`
 - `90cdc59 feat: add transaction calendar filters`
@@ -113,7 +114,7 @@ V0.1 只服务普通自然人，核心闭环是：
 - `51764c0 feat: add read-only transaction detail page`
 - `bab72b8 style: apply arco inspired mobile visual polish`
 
-本次新增三年历史示例交易数据和当前期间交易过滤输入，未修改账务公式、交易规则、现金流规则、存储 schema 或报表计算函数。
+本次优化交易记录页虚拟化渲染性能，未修改账务公式、交易规则、现金流规则、存储 schema、种子数据或报表计算函数。
 
 读取的 Arco 本地参考：
 
@@ -124,6 +125,12 @@ V0.1 只服务普通自然人，核心闭环是：
 
 本次最新交易记录筛选覆盖：
 
+- `mobile/App.tsx`：交易记录页不再被 App 外层 `ScrollView` 包裹，改由页面内部虚拟化列表接管滚动，避免嵌套滚动导致 `SectionList` 虚拟化失效。
+- `mobile/src/screens/TransactionRecordsScreen.tsx`：月份分组与交易行从普通 `map` 渲染改为 `SectionList`，只渲染可视区域附近的月份和交易行。
+- `mobile/src/screens/TransactionRecordsScreen.tsx`：搜索输入增加约 180ms debounce，减少每次按键立即过滤 1000+ 交易的同步计算。
+- `mobile/src/screens/TransactionRecordsScreen.tsx`：账户名称和账户类型查找改为 memoized `Map`，搜索和账户筛选不再为每笔交易反复线性查找账户。
+- `mobile/src/screens/TransactionRecordsScreen.tsx`：交易行和月份头使用 `React.memo`，renderItem / section header / keyExtractor 使用稳定 callback。
+- `mobile/src/screens/TransactionRecordsScreen.tsx`：折叠月份的 `SectionList` section data 为空，隐藏交易行不会被渲染；折叠月份行继续保持无垂直空隙。
 - `mobile/src/storage/historicalDemoData.ts`：新增 36 个月历史快照（2023-05 至 2026-04）和历史交易生成器；生成 2023-05 至 2026-03 历史交易，保留 2026-04 原始高复杂度交易。
 - `mobile/src/storage/seedData.ts`：恢复示例数据现在加载三年历史交易，共 36 个月、约 1054 笔交易；2026-04 资产、负债、利润表和现金流期望值保持不变。
 - `mobile/src/domain/accounting/periodFilters.ts`：新增按 `currentPeriod` 过滤交易的 helper，供摘要和报表输入使用，避免历史交易污染当前月报表。
@@ -235,6 +242,7 @@ V0.1 只服务普通自然人，核心闭环是：
 
 - 只读交易记录中心。
 - 支持搜索、筛选弹层、本月/近7天/近3个月/今年/自定义日期范围、账户类别筛选、资金方向筛选、按月分组、月份折叠、账本式交易行和只读详情。
+- 当前使用 `SectionList` 虚拟化渲染三年历史交易，避免一次性渲染 1000+ 行。
 
 `mobile/src/storage/seedData.ts`
 
