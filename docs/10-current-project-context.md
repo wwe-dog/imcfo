@@ -5,7 +5,7 @@
 更新时间：2026-04-29  
 当前主分支：`main`  
 当前开发模式：trunk-based development，直接在 `main` 上小步提交。  
-本次快照原因：完成首页资产/负债详情页 donut 图表标签与稳定配色修复后，按上下文压缩恢复规则刷新。
+本次快照原因：完成 V0.1 账户管理后，按上下文压缩恢复规则刷新。
 
 ## 1. 项目定位与关键决策
 
@@ -81,9 +81,13 @@ V0.1 只服务普通自然人，核心闭环是：
 - 首页资产/负债构成已接入当前本地资产与负债分类汇总。
 - 首页收支趋势已接入当前交易数据，并支持周线、月线、季度线、年线切换。
 - 首页资产/负债构成支持二级详情和三级分类明细钻取，不新增底部 tab。
-- 资产/负债详情页 donut 图表支持外部标签、引导线、点击高亮和稳定 15 色配色。
+- 首页“净资产”支持进入 `净资产详情`，展示紧凑净资产、净资产趋势和本期变化近似表。
+- 资产/负债详情页 donut 图表支持外部标签、引导线和稳定 15 色配色；已移除分段点击高亮。
 - 管理页支持自然语言记账、识别结果 modal、确认入账、成功 modal。
 - 管理页保留手动修改 / 高级填写。
+- 账户管理已进入 V0.1：可新增、编辑、停用、删除无交易引用的账户，不新增底部 tab。
+- 管理页“更多”和我的页均可进入账户管理。
+- 记一笔账户选择只展示启用账户；收入/支出会沿现有交易入账流更新账户余额。
 - 资产负债管理能力已支持资产和负债新增、编辑、删除。
 - 报表页支持资产负债表、现金流量表、利润表切换。
 - 报表页支持简易版 / 专业版切换。
@@ -95,12 +99,20 @@ V0.1 只服务普通自然人，核心闭环是：
 
 - App 入口、页面切换、底部导航、全局数据回调。
 - 当前底部导航：首页、管理、报表、我的。
+- 隐藏二级页面包括资产负债管理和账户管理，不新增底部 tab。
 - 已接入 safe area，避免 Android 状态栏遮挡内容。
 
 `mobile/src/app/useAppData.ts`
 
 - App 数据状态中心。
-- 负责 load/save/reset/clear/export/import/transaction/asset/liability 更新。
+- 负责 load/save/reset/clear/export/import/transaction/account/asset/liability 更新。
+
+`mobile/src/screens/AccountManagementScreen.tsx`
+
+- V0.1 账户管理页。
+- 支持账户新增、编辑、停用、删除无交易引用账户。
+- 信用卡账户支持可选信用额度、当前欠款、账单日、还款日。
+- 有交易引用的账户优先停用，避免破坏历史数据。
 
 `mobile/src/storage/asyncStorageAdapter.ts`
 
@@ -132,7 +144,8 @@ V0.1 只服务普通自然人，核心闭环是：
 
 `mobile/src/domain/accounting/transactionRules.ts`
 
-- 交易类型映射、交易入账、资产/负债 upsert/delete helper。
+- 交易类型映射、交易入账、账户/资产/负债 upsert/delete/disable helper。
+- 收入和支出会更新所选账户余额；信用卡消费会增加信用卡账户欠款。
 
 `mobile/src/domain/accounting/naturalLanguageParser.ts`
 
@@ -145,6 +158,7 @@ V0.1 只服务普通自然人，核心闭环是：
 - 当前“管理”根页面。
 - 主入口是“一句话记账”。
 - `更多` 提供账户管理、资产负债管理、交易记录入口，其中部分仍是占位。
+- 账户选择只展示启用账户；无可用账户时提示先进入账户管理新增或启用账户。
 
 `mobile/src/screens/ReportsScreen.tsx`
 
@@ -155,6 +169,7 @@ V0.1 只服务普通自然人，核心闭环是：
 
 - 当前对应底部导航“我的”。
 - 负责本地数据管理能力。
+- 已增加账户管理入口。
 
 ## 5. 当前 Git 状态与近期提交
 
@@ -162,12 +177,12 @@ V0.1 只服务普通自然人，核心闭环是：
 
 最新功能提交：
 
+- `f2ca576 feat: add account management for V0.1`
+- `39c7c64 feat: add net worth detail drilldown`
+- `03533b3 style: soften net worth metric card color`
+- `81579bc fix: remove donut segment highlight interaction`
+- `d1ac72d docs: refresh current project context snapshot`
 - `569f9d1 fix: show detail donut labels and stable chart colors`
-- `83478e5 feat: add detailed donut labels for asset liability drilldowns`
-- `7c2847d feat: add asset and liability composition drilldowns`
-- `e8b83ab feat: add donut chart callout labels and animation`
-- `8267179 feat: add svg charts to home dashboard`
-- `0a45292 chore: expand mobile demo data`
 
 本快照提交后，工作区应保持干净。如继续开发，请先运行：
 
@@ -183,7 +198,8 @@ git status
 - 给核心报表计算函数补最小测试。
 - 给交易映射规则补关键样例测试。
 - 检查自然语言解析对“股票盈利”“分红”“朋友还我”等边界句子的处理。
-- 梳理账户管理与交易记录页是否进入 V0.1。
+- 梳理交易记录页是否进入 V0.1。
+- 后续补全信用卡还款的“双账户”选择：付款账户 + 信用卡账户。
 
 中优先级：
 
@@ -191,6 +207,7 @@ git status
 - 增加数据版本迁移机制。
 - 增加默认分类模板。
 - 首页净资产趋势后续接入真实历史资产负债快照。
+- 账户余额与资产/负债明细的双向同步仍较轻量，后续需要更明确的账户-资产映射规则。
 
 风险：
 
