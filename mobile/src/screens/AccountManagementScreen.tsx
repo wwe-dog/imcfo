@@ -41,6 +41,7 @@ interface AccountCategoryMeta {
 }
 
 const accountCategories: AccountCategoryMeta[] = [
+  { type: "cash", label: "现金账户", detailTitle: "现金账户", countUnit: "个账户" },
   { type: "bank", label: "银行卡", detailTitle: "银行卡账户", countUnit: "张卡" },
   { type: "wechat", label: "微信钱包", detailTitle: "微信钱包", countUnit: "个账户" },
   { type: "alipay", label: "支付宝", detailTitle: "支付宝", countUnit: "个账户" },
@@ -65,14 +66,10 @@ const emptyForm = (type: AccountType = "bank"): AccountFormState => ({
 const getCategoryMeta = (type: AccountType): AccountCategoryMeta =>
   accountCategories.find((category) => category.type === type) ?? accountCategories[accountCategories.length - 1];
 
-const getAccountTypeLabel = (type: AccountType): string => {
-  if (type === "cash") return "现金";
-  return getCategoryMeta(type).label;
-};
+const getAccountTypeLabel = (type: AccountType): string => getCategoryMeta(type).label;
 
 const normalizeAccountType = (type: Account["type"] | string): AccountType => {
   if (type === "investment") return "fund";
-  if (type === "cash") return "other";
   return accountCategories.some((category) => category.type === type) ? (type as AccountType) : "other";
 };
 
