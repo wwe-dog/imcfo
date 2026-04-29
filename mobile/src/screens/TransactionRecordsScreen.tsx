@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { Account, Transaction, TransactionType } from "../domain/models";
+import AppIcon from "../components/AppIcon";
 import { sharedStyles, theme } from "../styles/theme";
 import { formatCurrency } from "../utils/formatters";
 
@@ -175,7 +176,7 @@ export default function TransactionRecordsScreen({
 
       <View style={styles.toolbar}>
         <View style={styles.searchBox}>
-          <Text style={styles.searchIcon}>⌕</Text>
+          <AppIcon color={theme.colors.textMuted} name="search" size={18} />
           <TextInput
             onChangeText={setQuery}
             placeholder="搜索交易、金额、备注"
@@ -189,10 +190,7 @@ export default function TransactionRecordsScreen({
           onPress={() => Alert.alert("筛选交易", "筛选功能将在后续版本中完善。", [{ text: "知道了" }])}
           style={styles.filterButton}
         >
-          <View style={styles.funnelIcon}>
-            <View style={styles.funnelTop} />
-            <View style={styles.funnelStem} />
-          </View>
+          <AppIcon color={theme.colors.primaryDeep} name="filter" size={19} />
         </Pressable>
       </View>
 
@@ -232,6 +230,7 @@ function TopBar({ onBack, title }: { onBack: () => void; title: string }) {
   return (
     <View style={styles.headerRow}>
       <Pressable onPress={onBack} style={styles.backButton}>
+        <AppIcon color={theme.colors.primaryDeep} name="back" size={15} strokeWidth={2.2} />
         <Text style={styles.backButtonText}>返回</Text>
       </Pressable>
       <Text style={styles.pageTitle}>{title}</Text>
@@ -293,10 +292,13 @@ const styles = StyleSheet.create({
     color: theme.colors.success,
   },
   backButton: {
+    alignItems: "center",
     backgroundColor: theme.colors.primarySoft,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
+    flexDirection: "row",
+    gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
@@ -363,29 +365,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     justifyContent: "space-between",
   },
-  funnelIcon: {
-    alignItems: "center",
-    height: 18,
-    justifyContent: "center",
-    width: 18,
-  },
-  funnelStem: {
-    backgroundColor: theme.colors.primaryDeep,
-    borderRadius: theme.radius.pill,
-    height: 7,
-    marginTop: -1,
-    width: 4,
-  },
-  funnelTop: {
-    borderLeftColor: "transparent",
-    borderLeftWidth: 7,
-    borderRightColor: "transparent",
-    borderRightWidth: 7,
-    borderTopColor: theme.colors.primaryDeep,
-    borderTopWidth: 9,
-    height: 0,
-    width: 0,
-  },
   headerSpacer: {
     width: 58,
   },
@@ -412,11 +391,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: -0.5,
     textAlign: "center",
-  },
-  searchIcon: {
-    color: theme.colors.textMuted,
-    fontSize: 20,
-    fontWeight: "800",
   },
   searchBox: {
     alignItems: "center",

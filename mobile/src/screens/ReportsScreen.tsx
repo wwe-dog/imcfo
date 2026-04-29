@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import AppIcon, { type AppIconName } from "../components/AppIcon";
 import ReportBlock from "../components/ReportBlock";
 import type { Asset, Liability, ReportMode, ReportPeriod, Transaction } from "../domain/models";
 import { buildBalanceSheetSummary } from "../domain/reports/balanceSheet";
@@ -22,6 +23,17 @@ const reportTabs: Array<{ key: ReportKey; label: string }> = [
   { key: "cashFlow", label: "现金流量表" },
   { key: "incomeStatement", label: "利润表" },
 ];
+
+const getReportIcon = (key: ReportKey): AppIconName => {
+  switch (key) {
+    case "balanceSheet":
+      return "asset";
+    case "cashFlow":
+      return "cashFlow";
+    case "incomeStatement":
+      return "report";
+  }
+};
 
 const getCashFlowDirection = (cashNetChange: number): string => {
   if (cashNetChange > 0) return "本期现金以净流入为主。";
@@ -168,6 +180,12 @@ export default function ReportsScreen({
                 onPress={() => setSelectedReport(tab.key)}
                 style={[sharedStyles.chip, styles.reportButton, isActive && sharedStyles.chipActiveLight]}
               >
+                <AppIcon
+                  color={isActive ? theme.colors.primaryDeep : theme.colors.textMuted}
+                  name={getReportIcon(tab.key)}
+                  size={16}
+                  strokeWidth={2}
+                />
                 <Text style={sharedStyles.chipText}>{tab.label}</Text>
               </Pressable>
             );
@@ -258,6 +276,8 @@ const styles = StyleSheet.create({
   },
   reportButton: {
     flex: 1,
+    flexDirection: "row",
+    gap: 5,
     minHeight: 38,
     paddingHorizontal: 8,
   },

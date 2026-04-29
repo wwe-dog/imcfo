@@ -8,6 +8,7 @@ import {
 } from "../domain/accounting/reconciliationRules";
 import type { AccountInput } from "../domain/accounting/transactionRules";
 import type { Account, AccountType, Transaction } from "../domain/models";
+import AppIcon, { type AppIconName } from "../components/AppIcon";
 import { sharedStyles, theme } from "../styles/theme";
 import { formatCurrency } from "../utils/formatters";
 
@@ -84,6 +85,26 @@ const getCategoryMeta = (type: AccountType): AccountCategoryMeta =>
   accountCategories.find((category) => category.type === type) ?? accountCategories[accountCategories.length - 1];
 
 const getAccountTypeLabel = (type: AccountType): string => getCategoryMeta(type).label;
+
+const getAccountTypeIcon = (type: AccountType): AppIconName => {
+  switch (type) {
+    case "cash":
+      return "wallet";
+    case "bank":
+      return "bank";
+    case "wechat":
+    case "alipay":
+      return "wallet";
+    case "securities":
+      return "securities";
+    case "fund":
+      return "fund";
+    case "creditCard":
+      return "card";
+    case "other":
+      return "account";
+  }
+};
 
 const normalizeAccountType = (type: Account["type"] | string): AccountType => {
   if (type === "investment") return "fund";
@@ -521,6 +542,9 @@ export default function AccountManagementScreen({
               onPress={() => openCategoryDetail(category.type)}
               style={styles.categoryRow}
             >
+              <View style={styles.categoryIcon}>
+                <AppIcon color={theme.colors.primaryDeep} name={getAccountTypeIcon(category.type)} size={20} />
+              </View>
               <View style={styles.categoryMain}>
                 <Text style={styles.categoryTitle}>{category.label}</Text>
                 <Text style={styles.categorySubtitle}>
@@ -529,7 +553,7 @@ export default function AccountManagementScreen({
               </View>
               <View style={styles.categoryRight}>
                 <Text style={styles.categoryAmount}>{formatCategoryAmount(category.type, categoryAmount)}</Text>
-                <Text style={styles.listArrow}>›</Text>
+                <AppIcon color={theme.colors.textMuted} name="chevronRight" size={17} />
               </View>
             </Pressable>
           );
@@ -550,10 +574,12 @@ function TopBar({ actionLabel = "新增", onBack, onAdd, title }: TopBarProps) {
   return (
     <View style={styles.headerRow}>
       <Pressable onPress={onBack} style={styles.backButton}>
+        <AppIcon color={theme.colors.primaryDeep} name="back" size={15} strokeWidth={2.2} />
         <Text style={styles.backButtonText}>返回</Text>
       </Pressable>
       <Text style={styles.pageTitle}>{title}</Text>
       <Pressable onPress={onAdd} style={styles.addButton}>
+        <AppIcon color="#FFFFFF" name="add" size={16} strokeWidth={2.1} />
         <Text style={styles.addButtonText}>{actionLabel}</Text>
       </Pressable>
     </View>
@@ -598,7 +624,15 @@ function AccountDetailRow({ account, onDelete, onDisable, onEdit }: AccountDetai
       <Pressable onPress={onEdit} style={styles.accountMain}>
         <View style={styles.accountTitleRow}>
           <Text style={styles.accountName}>{account.name}</Text>
-          <Text style={[styles.statusBadge, !enabled && styles.statusBadgeMuted]}>{enabled ? "启用" : "停用"}</Text>
+          <View style={[styles.statusPill, !enabled && styles.statusPillMuted]}>
+            <AppIcon
+              color={enabled ? theme.colors.success : theme.colors.textMuted}
+              name={enabled ? "enabled" : "disabled"}
+              size={12}
+              strokeWidth={2}
+            />
+            <Text style={[styles.statusBadge, !enabled && styles.statusBadgeMuted]}>{enabled ? "启用" : "停用"}</Text>
+          </View>
         </View>
         <Text style={styles.accountBalance}>{formatAccountBalance(account)}</Text>
         {isCreditCard && account.creditLimit ? (
@@ -960,6 +994,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.colors.primary,
     borderRadius: theme.radius.pill,
+    flexDirection: "row",
+    gap: 4,
     justifyContent: "center",
     minHeight: 38,
     minWidth: 64,
@@ -971,10 +1007,13 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   backButton: {
+    alignItems: "center",
     backgroundColor: theme.colors.primarySoft,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
+    flexDirection: "row",
+    gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
@@ -993,6 +1032,17 @@ const styles = StyleSheet.create({
   },
   categoryMain: {
     flex: 1,
+  },
+  categoryIcon: {
+    alignItems: "center",
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    height: 38,
+    justifyContent: "center",
+    marginRight: theme.spacing.sm,
+    width: 38,
   },
   categoryRight: {
     alignItems: "center",
@@ -1068,11 +1118,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: theme.spacing.sm,
     justifyContent: "space-between",
-  },
-  listArrow: {
-    color: theme.colors.textMuted,
-    fontSize: 24,
-    lineHeight: 24,
   },
   listCard: {
     gap: 6,
@@ -1196,18 +1241,24 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   statusBadge: {
-    backgroundColor: theme.colors.successSoft,
-    borderRadius: theme.radius.pill,
     color: theme.colors.success,
     fontSize: 12,
     fontWeight: "800",
-    overflow: "hidden",
+  },
+  statusBadgeMuted: {
+    color: theme.colors.textMuted,
+  },
+  statusPill: {
+    alignItems: "center",
+    backgroundColor: theme.colors.successSoft,
+    borderRadius: theme.radius.pill,
+    flexDirection: "row",
+    gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  statusBadgeMuted: {
+  statusPillMuted: {
     backgroundColor: theme.colors.surfaceMuted,
-    color: theme.colors.textMuted,
   },
   summaryCard: {
     gap: 4,

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import AppIcon from "../components/AppIcon";
 import DonutChart from "../components/charts/DonutChart";
 import LineChart from "../components/charts/LineChart";
 import type { Asset, Liability, ReportSummary, Transaction } from "../domain/models";
@@ -554,14 +555,16 @@ function BalanceStructureCard({
       </View>
 
       <View style={styles.metricRow}>
-        <MetricPill label="资产" onPress={onOpenAssetDetail} value={formatCompactCurrency(summary.totalAssets)} />
+        <MetricPill icon="asset" label="资产" onPress={onOpenAssetDetail} value={formatCompactCurrency(summary.totalAssets)} />
         <MetricPill
+          icon="liability"
           label="负债"
           onPress={onOpenLiabilityDetail}
           tone="muted"
           value={formatCompactCurrency(summary.totalLiabilities)}
         />
         <MetricPill
+          icon="netWorth"
           label="净资产"
           onPress={onOpenNetWorthDetail}
           tone="blue"
@@ -797,7 +800,7 @@ function NetWorthDetailScreen({ onBack, summary, transactions }: NetWorthDetailS
           <Text style={styles.sectionLabel}>净资产趋势</Text>
           <Pressable onPress={() => setIsPeriodSelectorVisible(true)} style={styles.periodButton}>
             <Text style={styles.periodButtonText}>{selectedPeriod}</Text>
-            <Text style={styles.periodIcon}>日历</Text>
+            <AppIcon color={theme.colors.textMuted} name="calendar" size={15} />
           </Pressable>
         </View>
         <LineChart emptyText="暂无净资产趋势数据" points={trendPoints} />
@@ -871,6 +874,7 @@ function DetailHeader({ onBack, rightText, title }: DetailHeaderProps) {
   return (
     <View style={styles.detailHeader}>
       <Pressable onPress={onBack} style={styles.backButton}>
+        <AppIcon color={theme.colors.primaryDeep} name="back" size={15} strokeWidth={2.2} />
         <Text style={styles.backButtonText}>返回</Text>
       </Pressable>
       <Text style={styles.detailTitle} numberOfLines={1}>
@@ -990,14 +994,14 @@ function CashFlowCard({ onOpenPeriodSelector, periodLabel, summary, transactions
         <Text style={styles.cardTitle}>收支现金流</Text>
         <Pressable onPress={onOpenPeriodSelector} style={styles.periodButton}>
           <Text style={styles.periodButtonText}>{periodLabel}</Text>
-          <Text style={styles.periodIcon}>日历</Text>
+          <AppIcon color={theme.colors.textMuted} name="calendar" size={15} />
         </Pressable>
       </View>
 
       <View style={styles.metricRow}>
-        <MetricPill label="收入" value={formatCompactCurrency(summary.totalIncome)} />
-        <MetricPill label="支出" tone="muted" value={formatCompactCurrency(summary.totalExpenses)} />
-        <MetricPill label="净流入" tone="strong" value={formatCompactCurrency(summary.cashNetChange)} />
+        <MetricPill icon="cashFlow" label="收入" value={formatCompactCurrency(summary.totalIncome)} />
+        <MetricPill icon="transaction" label="支出" tone="muted" value={formatCompactCurrency(summary.totalExpenses)} />
+        <MetricPill icon="cashFlow" label="净流入" tone="strong" value={formatCompactCurrency(summary.cashNetChange)} />
       </View>
 
       <View style={styles.trendSection}>
@@ -1012,13 +1016,14 @@ function CashFlowCard({ onOpenPeriodSelector, periodLabel, summary, transactions
 }
 
 interface MetricPillProps {
+  icon?: "asset" | "cashFlow" | "liability" | "netWorth" | "transaction";
   label: string;
   onPress?: () => void;
   value: string;
   tone?: "blue" | "default" | "muted" | "strong";
 }
 
-function MetricPill({ label, onPress, tone = "default", value }: MetricPillProps) {
+function MetricPill({ icon, label, onPress, tone = "default", value }: MetricPillProps) {
   const isStrong = tone === "strong";
   const isBlue = tone === "blue";
   const Container = onPress ? Pressable : View;
@@ -1033,6 +1038,13 @@ function MetricPill({ label, onPress, tone = "default", value }: MetricPillProps
         isBlue && styles.metricPillBlue,
       ]}
     >
+      {icon ? (
+        <AppIcon
+          color={isStrong ? theme.colors.textInverse : isBlue ? theme.colors.blueText : theme.colors.primaryDeep}
+          name={icon}
+          size={17}
+        />
+      ) : null}
       <Text style={[styles.metricLabel, isStrong && styles.metricLabelStrong, isBlue && styles.metricLabelBlue]}>
         {label}
       </Text>
@@ -1166,10 +1178,13 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   backButton: {
+    alignItems: "center",
     backgroundColor: theme.colors.primarySoft,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
+    flexDirection: "row",
+    gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
@@ -1317,11 +1332,6 @@ const styles = StyleSheet.create({
     color: theme.colors.primaryDeep,
     fontSize: 13,
     fontWeight: "800",
-  },
-  periodIcon: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    fontWeight: "600",
   },
   periodModalBackdrop: {
     ...StyleSheet.absoluteFillObject,

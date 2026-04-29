@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import AppIcon, { type AppIconName } from "../components/AppIcon";
 import { sharedStyles, theme } from "../styles/theme";
 
 interface SettingsScreenProps {
@@ -86,32 +87,36 @@ export default function SettingsScreen({
 
       <View style={[sharedStyles.card, styles.listCard]}>
         <Pressable onPress={onOpenAccounts} style={styles.listRow}>
+          <SettingsIcon name="account" />
           <View style={styles.listCopy}>
             <Text style={styles.listTitle}>账户管理</Text>
             <Text style={styles.listSubtitle}>现金、银行卡、支付账户和信用卡</Text>
           </View>
-          <Text style={styles.listArrow}>›</Text>
+          <AppIcon color={theme.colors.textMuted} name="chevronRight" size={17} />
         </Pressable>
         <Pressable onPress={onOpenTransactions} style={[styles.listRow, styles.listRowBorder]}>
+          <SettingsIcon name="transaction" />
           <View style={styles.listCopy}>
             <Text style={styles.listTitle}>交易记录</Text>
             <Text style={styles.listSubtitle}>查看、搜索和筛选历史财务事件</Text>
           </View>
-          <Text style={styles.listArrow}>›</Text>
+          <AppIcon color={theme.colors.textMuted} name="chevronRight" size={17} />
         </Pressable>
         <Pressable style={[styles.listRow, styles.listRowBorder]}>
+          <SettingsIcon name="data" />
           <View style={styles.listCopy}>
             <Text style={styles.listTitle}>数据管理</Text>
             <Text style={styles.listSubtitle}>导入 / 导出 / 清理</Text>
           </View>
-          <Text style={styles.listArrow}>›</Text>
+          <AppIcon color={theme.colors.textMuted} name="chevronRight" size={17} />
         </Pressable>
         <Pressable style={[styles.listRow, styles.listRowBorder]}>
+          <SettingsIcon name="settings" />
           <View style={styles.listCopy}>
             <Text style={styles.listTitle}>通用设置</Text>
             <Text style={styles.listSubtitle}>{storageMode} · 数据版本 {appVersion}</Text>
           </View>
-          <Text style={styles.listArrow}>›</Text>
+          <AppIcon color={theme.colors.textMuted} name="chevronRight" size={17} />
         </Pressable>
       </View>
 
@@ -174,6 +179,14 @@ export default function SettingsScreen({
   );
 }
 
+function SettingsIcon({ name }: { name: AppIconName }) {
+  return (
+    <View style={styles.listIcon}>
+      <AppIcon color={theme.colors.primaryDeep} name={name} size={20} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   avatar: {
     alignItems: "center",
@@ -210,17 +223,23 @@ const styles = StyleSheet.create({
   largeTextArea: {
     minHeight: 164,
   },
-  listArrow: {
-    color: theme.colors.textMuted,
-    fontSize: 24,
-    lineHeight: 24,
-  },
   listCard: {
     paddingHorizontal: 0,
     paddingVertical: 0,
   },
   listCopy: {
     flex: 1,
+  },
+  listIcon: {
+    alignItems: "center",
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: "center",
+    marginRight: theme.spacing.sm,
+    width: 40,
   },
   listRow: {
     alignItems: "center",

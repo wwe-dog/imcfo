@@ -18,6 +18,7 @@ import type {
   TransactionInput,
 } from "./src/domain/accounting/transactionRules";
 import type { ReconciliationInput } from "./src/domain/accounting/reconciliationRules";
+import AppIcon, { type AppIconName } from "./src/components/AppIcon";
 import AccountManagementScreen from "./src/screens/AccountManagementScreen";
 import AssetsLiabilitiesScreen from "./src/screens/AssetsLiabilitiesScreen";
 import DashboardScreen from "./src/screens/DashboardScreen";
@@ -35,6 +36,19 @@ const tabs: Array<{ key: Exclude<ScreenKey, "assets" | "accounts" | "transaction
   { key: "reports", label: "报表" },
   { key: "settings", label: "我的" },
 ];
+
+const getTabIcon = (key: Exclude<ScreenKey, "assets" | "accounts" | "transactions">): AppIconName => {
+  switch (key) {
+    case "dashboard":
+      return "home";
+    case "record":
+      return "manage";
+    case "reports":
+      return "reports";
+    case "settings":
+      return "profile";
+  }
+};
 
 export default function App() {
   return (
@@ -298,8 +312,13 @@ function AppShell() {
                 onPress={() => setActiveScreen(tab.key)}
                 style={[styles.tabButton, isActive && styles.tabButtonActive]}
               >
+                <AppIcon
+                  color={isActive ? theme.colors.primaryDeep : theme.colors.textMuted}
+                  name={getTabIcon(tab.key)}
+                  size={19}
+                  strokeWidth={1.9}
+                />
                 <Text style={[styles.tabText, isActive && styles.tabTextActive]}>{tab.label}</Text>
-                <View style={[styles.tabDot, isActive && styles.tabDotActive]} />
               </Pressable>
             );
           })}
@@ -373,23 +392,14 @@ const styles = StyleSheet.create({
   tabButton: {
     alignItems: "center",
     borderRadius: theme.radius.lg,
-    gap: 5,
+    gap: 3,
     justifyContent: "center",
-    minHeight: 48,
+    minHeight: 50,
     minWidth: 64,
     paddingHorizontal: 10,
   },
   tabButtonActive: {
     backgroundColor: "#ECE8FF",
-  },
-  tabDot: {
-    backgroundColor: "transparent",
-    borderRadius: theme.radius.pill,
-    height: 6,
-    width: 6,
-  },
-  tabDotActive: {
-    backgroundColor: theme.colors.primary,
   },
   tabText: {
     color: theme.colors.textMuted,

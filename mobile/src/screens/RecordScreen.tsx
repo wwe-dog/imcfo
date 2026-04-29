@@ -8,6 +8,7 @@ import {
 } from "../domain/accounting/naturalLanguageParser";
 import type { TransactionInput } from "../domain/accounting/transactionRules";
 import type { Account, Asset, Liability } from "../domain/models";
+import AppIcon, { type AppIconName } from "../components/AppIcon";
 import { sharedStyles, theme } from "../styles/theme";
 
 interface RecordScreenProps {
@@ -422,6 +423,7 @@ export default function RecordScreen({
             </Text>
           </View>
           <Pressable onPress={openMoreMenu} style={styles.moreButton}>
+            <AppIcon color={theme.colors.primaryDeep} name="more" size={18} />
             <Text style={styles.moreButtonText}>更多</Text>
           </Pressable>
         </View>
@@ -804,21 +806,25 @@ export default function RecordScreen({
             <View style={styles.moreOptionList}>
               <MoreMenuOption
                 description="维护银行卡、微信、支付宝、证券账户、基金账户和信用卡。"
+                icon="account"
                 onPress={handleOpenAccounts}
                 title="账户管理"
               />
               <MoreMenuOption
                 description="维护当前资产、负债和个人净资产基础数据。"
+                icon="asset"
                 onPress={handleOpenAssets}
                 title="资产负债管理"
               />
               <MoreMenuOption
                 description="更新账户余额和资产市值，处理自动到账、分红和估值变化。"
+                icon="reconcile"
                 onPress={handleOpenAssets}
                 title="对账 / 资产盘点"
               />
               <MoreMenuOption
                 description="查看、编辑和追踪历史入账记录。"
+                icon="transaction"
                 onPress={handleOpenTransactions}
                 title="交易记录"
               />
@@ -836,18 +842,22 @@ export default function RecordScreen({
 
 interface MoreMenuOptionProps {
   description: string;
+  icon: AppIconName;
   onPress: () => void;
   title: string;
 }
 
-function MoreMenuOption({ description, onPress, title }: MoreMenuOptionProps) {
+function MoreMenuOption({ description, icon, onPress, title }: MoreMenuOptionProps) {
   return (
     <Pressable onPress={onPress} style={styles.moreOptionRow}>
+      <View style={styles.moreOptionIcon}>
+        <AppIcon color={theme.colors.primaryDeep} name={icon} size={21} />
+      </View>
       <View style={styles.moreOptionContent}>
         <Text style={styles.moreOptionTitle}>{title}</Text>
         <Text style={styles.moreOptionDescription}>{description}</Text>
       </View>
-      <Text style={styles.moreOptionArrow}>›</Text>
+      <AppIcon color={theme.colors.primaryDeep} name="chevronRight" size={18} strokeWidth={2} />
     </Pressable>
   );
 }
@@ -967,6 +977,8 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.borderStrong,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
     justifyContent: "center",
     minHeight: 38,
     minWidth: 64,
@@ -1015,6 +1027,16 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "300",
     lineHeight: 28,
+  },
+  moreOptionIcon: {
+    alignItems: "center",
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
   },
   moreOptionContent: {
     flex: 1,
