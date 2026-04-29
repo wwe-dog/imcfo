@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type { LayoutAnimationConfig } from "react-native";
 import {
+  InteractionManager,
   LayoutAnimation,
   Modal,
   Platform,
@@ -72,8 +73,24 @@ interface CalendarCell {
 }
 
 interface TransactionSection {
-  data: Transaction[];
-  month: string;
+  data: TransactionDisplayRecord[];
+  monthKey: string;
+  monthLabel: string;
+}
+
+interface TransactionDisplayRecord {
+  accountTypeBuckets: AccountFilter[];
+  amountText: string;
+  amountTone: "positive" | "negative" | "neutral";
+  cashStatus: string;
+  dateTime: string;
+  id: string;
+  monthKey: string;
+  monthLabel: string;
+  searchableText: string;
+  timestamp: number;
+  title: string;
+  transaction: Transaction;
 }
 
 const timeFilterOptions: Array<{ label: string; value: TimeFilter }> = [
@@ -270,6 +287,16 @@ const getNetWorthImpact = (transaction: Transaction): string => {
 const resolveAccountDisplay = (accounts: Account[], transaction: Transaction): string => {
   const accountName = getAccountName(accounts, transaction.accountId);
   const counterAccountName = getAccountName(accounts, transaction.counterAccountId);
+  if (accountName && counterAccountName) return `${accountName} → ${counterAccountName}`;
+  return accountName ?? counterAccountName ?? UNKNOWN_VALUE;
+};
+
+const resolveAccountDisplayFromMap = (
+  accountNameById: Map<string, string>,
+  transaction: Transaction,
+): string => {
+  const accountName = transaction.accountId ? accountNameById.get(transaction.accountId) : undefined;
+  const counterAccountName = transaction.counterAccountId ? accountNameById.get(transaction.counterAccountId) : undefined;
   if (accountName && counterAccountName) return `${accountName} → ${counterAccountName}`;
   return accountName ?? counterAccountName ?? UNKNOWN_VALUE;
 };
@@ -496,6 +523,110 @@ const groupTransactionsByMonth = (items: Transaction[]): Array<{ month: string; 
     return groups;
   }, []);
 
+const getTransactionTimestamp = (transaction: Transaction): number => {
+  const createdAtTime = Date.parse(transaction.createdAt);
+  if (!Number.isNaN(createdAtTime)) return createdAtTime;
+
+  const dateTime = Date.parse(`${transaction.date}T00:00:00`);
+  return Number.isNaN(dateTime) ? 0 : dateTime;
+};
+
+const getTransactionMonthKey = (transaction: Transaction): string => {
+  const monthKey = transaction.date.slice(0, 7);
+  return monthKey.length === 7 ? monthKey : "unknown";
+};
+
+const getAccountTypeBuckets = (
+  transaction: Transaction,
+  accountTypeById: Map<string, AccountType>,
+): AccountFilter[] => {
+  const buckets = new Set<AccountFilter>();
+  const relatedAccountIds = [transaction.accountId, transaction.counterAccountId].filter(Boolean) as string[];
+
+  relatedAccountIds.forEach((accountId) => {
+    const type = accountTypeById.get(accountId);
+    if (type) buckets.add(mapAccountTypeToFilter(type));
+  });
+
+  return Array.from(buckets);
+};
+
+const buildTransactionDisplayRecords = (
+  transactions: Transaction[],
+  accountNameById: Map<string, string>,
+  accountTypeById: Map<string, AccountType>,
+): TransactionDisplayRecord[] =>
+  transactions
+    .map((transaction) => {
+      const monthKey = getTransactionMonthKey(transaction);
+      const title = getTransactionTitle(transaction);
+      const amountText = formatSignedAmount(transaction);
+      const cashStatus = getCashStatusLabel(transaction);
+      const typeLabel = getTypeLabel(transaction.type);
+      const accountDisplay = resolveAccountDisplayFromMap(accountNameById, transaction);
+      const searchableText = [
+        title,
+        transaction.note,
+        transaction.category,
+        typeLabel,
+        accountDisplay,
+        String(transaction.amount),
+        amountText,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return {
+        accountTypeBuckets: getAccountTypeBuckets(transaction, accountTypeById),
+        amountText,
+        amountTone: getAmountTone(transaction),
+        cashStatus,
+        dateTime: getTransactionDateTime(transaction),
+        id: transaction.id,
+        monthKey,
+        monthLabel: getMonthLabel(transaction.date),
+        searchableText,
+        timestamp: getTransactionTimestamp(transaction),
+        title,
+        transaction,
+      };
+    })
+    .sort((first, second) => {
+      if (first.timestamp !== second.timestamp) return second.timestamp - first.timestamp;
+      return second.id.localeCompare(first.id);
+    });
+
+const displayRecordMatchesFilters = (
+  record: TransactionDisplayRecord,
+  filters: FilterState,
+  dateRange: { endDate: string; startDate: string } | null,
+): boolean => {
+  if (dateRange && (record.transaction.date < dateRange.startDate || record.transaction.date > dateRange.endDate)) {
+    return false;
+  }
+
+  if (filters.account !== "all" && !record.accountTypeBuckets.includes(filters.account)) return false;
+  return transactionMatchesCashDirection(record.transaction, filters.cashDirection);
+};
+
+const groupDisplayRecordsByMonth = (
+  records: TransactionDisplayRecord[],
+): Array<{ items: TransactionDisplayRecord[]; monthKey: string; monthLabel: string }> => {
+  const groups: Array<{ items: TransactionDisplayRecord[]; monthKey: string; monthLabel: string }> = [];
+  let currentGroup: { items: TransactionDisplayRecord[]; monthKey: string; monthLabel: string } | undefined;
+
+  records.forEach((record) => {
+    if (!currentGroup || currentGroup.monthKey !== record.monthKey) {
+      currentGroup = { items: [], monthKey: record.monthKey, monthLabel: record.monthLabel };
+      groups.push(currentGroup);
+    }
+    currentGroup.items.push(record);
+  });
+
+  return groups;
+};
+
 const buildCalendarCells = (monthKey: string): Array<CalendarCell | null> => {
   const [yearText, monthText] = monthKey.split("-");
   const year = Number(yearText);
@@ -550,6 +681,8 @@ export default function TransactionRecordsScreen({
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(() => createDefaultFilters(transactions));
   const [draftFilters, setDraftFilters] = useState<FilterState>(() => createDefaultFilters(transactions));
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
+  const [displayRecords, setDisplayRecords] = useState<TransactionDisplayRecord[]>([]);
+  const [isPreparingRecords, setIsPreparingRecords] = useState(true);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 180);
@@ -565,47 +698,65 @@ export default function TransactionRecordsScreen({
     [accounts],
   );
 
-  const filteredGroups = useMemo(() => {
-    const normalizedQuery = debouncedQuery.trim().toLowerCase();
+  useEffect(() => {
+    let isCancelled = false;
+    setIsPreparingRecords(true);
 
-    const filtered = transactions
-      .filter((transaction) => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      const nextRecords = buildTransactionDisplayRecords(transactions, accountNameById, accountTypeById);
+      if (isCancelled) return;
+
+      const latestMonthKey = nextRecords[0]?.monthKey;
+      const monthKeys = new Set(nextRecords.map((record) => record.monthKey));
+
+      setDisplayRecords(nextRecords);
+      setCollapsedMonths((current) => {
+        const next: Record<string, boolean> = {};
+        monthKeys.forEach((monthKey) => {
+          next[monthKey] = current[monthKey] ?? monthKey !== latestMonthKey;
+        });
+        return next;
+      });
+      setIsPreparingRecords(false);
+    });
+
+    return () => {
+      isCancelled = true;
+      task.cancel();
+    };
+  }, [accountNameById, accountTypeById, transactions]);
+
+  const filteredGroups = useMemo(() => {
+    if (isPreparingRecords) return [];
+
+    const normalizedQuery = debouncedQuery.trim().toLowerCase();
+    const isFilterActive = hasActiveFilters(appliedFilters);
+    const dateRange = appliedFilters.time === "all" ? null : getDateRangeForFilters(appliedFilters, transactions);
+
+    const filtered = displayRecords.filter((record) => {
         const matchesSearch = normalizedQuery
-          ? getTransactionSearchTextFromMap(transaction, accountNameById).includes(normalizedQuery)
+          ? record.searchableText.includes(normalizedQuery)
           : true;
-        return matchesSearch && transactionMatchesFiltersFromMaps(transaction, accountTypeById, appliedFilters, transactions);
-      })
-      .sort((first, second) => {
-        if (first.date !== second.date) return second.date.localeCompare(first.date);
-        return second.createdAt.localeCompare(first.createdAt);
+        if (!matchesSearch) return false;
+        if (!isFilterActive) return true;
+        return displayRecordMatchesFilters(record, appliedFilters, dateRange);
       });
 
-    return groupTransactionsByMonth(filtered);
-  }, [accountNameById, accountTypeById, appliedFilters, debouncedQuery, transactions]);
+    return groupDisplayRecordsByMonth(filtered);
+  }, [appliedFilters, debouncedQuery, displayRecords, isPreparingRecords, transactions]);
 
   const sections = useMemo<TransactionSection[]>(
     () =>
       filteredGroups.map((group) => ({
-        data: collapsedMonths[group.month] ? [] : group.items,
-        month: group.month,
+        data: collapsedMonths[group.monthKey] ? [] : group.items,
+        monthKey: group.monthKey,
+        monthLabel: group.monthLabel,
       })),
     [collapsedMonths, filteredGroups],
   );
 
-  if (selectedTransaction) {
-    return (
-      <TransactionDetail
-        accounts={accounts}
-        assets={assets}
-        liabilities={liabilities}
-        onBack={() => setSelectedTransaction(null)}
-        transaction={selectedTransaction}
-      />
-    );
-  }
-
   const hasTransactions = transactions.length > 0;
-  const hasResult = filteredGroups.length > 0;
+  const hasResult = !isPreparingRecords && filteredGroups.length > 0;
   const isFilterActive = hasActiveFilters(appliedFilters);
 
   const openFilterPanel = useCallback(() => {
@@ -622,10 +773,10 @@ export default function TransactionRecordsScreen({
   }, []);
 
   const renderTransactionRow = useCallback(
-    ({ item }: { item: Transaction }) => (
+    ({ item }: { item: TransactionDisplayRecord }) => (
       <TransactionRow
         onSelect={setSelectedTransaction}
-        transaction={item}
+        record={item}
       />
     ),
     [],
@@ -634,15 +785,27 @@ export default function TransactionRecordsScreen({
   const renderMonthHeader = useCallback(
     ({ section }: { section: TransactionSection }) => (
       <MonthHeader
-        isCollapsed={Boolean(collapsedMonths[section.month])}
-        month={section.month}
-        onPress={() => toggleMonthCollapse(section.month)}
+        isCollapsed={Boolean(collapsedMonths[section.monthKey])}
+        month={section.monthLabel}
+        onPress={() => toggleMonthCollapse(section.monthKey)}
       />
     ),
     [collapsedMonths, toggleMonthCollapse],
   );
 
-  const keyExtractor = useCallback((transaction: Transaction) => transaction.id, []);
+  const keyExtractor = useCallback((record: TransactionDisplayRecord) => record.id, []);
+
+  if (selectedTransaction) {
+    return (
+      <TransactionDetail
+        accounts={accounts}
+        assets={assets}
+        liabilities={liabilities}
+        onBack={() => setSelectedTransaction(null)}
+        transaction={selectedTransaction}
+      />
+    );
+  }
 
   return (
     <View style={styles.screen}>
@@ -676,7 +839,14 @@ export default function TransactionRecordsScreen({
         />
       ) : null}
 
-      {hasTransactions && !hasResult ? (
+      {hasTransactions && isPreparingRecords ? (
+        <EmptyState
+          description="正在整理交易记录..."
+          title="请稍候"
+        />
+      ) : null}
+
+      {hasTransactions && !isPreparingRecords && !hasResult ? (
         <EmptyState
           description="试试调整关键词或筛选条件。"
           title="没有找到符合条件的交易"
@@ -686,17 +856,18 @@ export default function TransactionRecordsScreen({
       {hasResult ? (
         <SectionList
           contentContainerStyle={styles.monthList}
-          initialNumToRender={28}
+          initialNumToRender={14}
           keyExtractor={keyExtractor}
-          maxToRenderPerBatch={28}
+          maxToRenderPerBatch={18}
+          removeClippedSubviews={Platform.OS === "android"}
           renderItem={renderTransactionRow}
           renderSectionHeader={renderMonthHeader}
           sections={sections}
           showsVerticalScrollIndicator={false}
           stickySectionHeadersEnabled={false}
           style={styles.transactionList}
-          updateCellsBatchingPeriod={80}
-          windowSize={9}
+          updateCellsBatchingPeriod={60}
+          windowSize={7}
         />
       ) : null}
 
@@ -788,25 +959,23 @@ function TopBar({ onBack, title }: { onBack: () => void; title: string }) {
 }
 
 const TransactionRow = memo(function TransactionRow({
-  transaction,
+  record,
   onSelect,
 }: {
-  transaction: Transaction;
+  record: TransactionDisplayRecord;
   onSelect: (transaction: Transaction) => void;
 }) {
-  const tone = getAmountTone(transaction);
-
   return (
-    <Pressable onPress={() => onSelect(transaction)} style={styles.transactionCard}>
+    <Pressable onPress={() => onSelect(record.transaction)} style={styles.transactionCard}>
       <View style={styles.transactionMain}>
         <Text numberOfLines={1} style={styles.transactionTitle}>
-          {getTransactionTitle(transaction)}
+          {record.title}
         </Text>
         <Text numberOfLines={1} style={styles.transactionMeta}>
-          {getTransactionDateTime(transaction)} · {getCashStatusLabel(transaction)}
+          {record.dateTime} · {record.cashStatus}
         </Text>
       </View>
-      <Text style={[styles.transactionAmount, styles[`amount_${tone}`]]}>{formatSignedAmount(transaction)}</Text>
+      <Text style={[styles.transactionAmount, styles[`amount_${record.amountTone}`]]}>{record.amountText}</Text>
     </Pressable>
   );
 });
