@@ -18,6 +18,7 @@ import type {
   TransactionInput,
 } from "./src/domain/accounting/transactionRules";
 import type { ReconciliationInput } from "./src/domain/accounting/reconciliationRules";
+import { filterTransactionsByReportPeriod } from "./src/domain/accounting/periodFilters";
 import AppIcon, { type AppIconName } from "./src/components/AppIcon";
 import AccountManagementScreen from "./src/screens/AccountManagementScreen";
 import AssetsLiabilitiesScreen from "./src/screens/AssetsLiabilitiesScreen";
@@ -205,6 +206,8 @@ function AppShell() {
       );
     }
 
+    const periodTransactions = filterTransactionsByReportPeriod(data.transactions, data.currentPeriod);
+
     switch (activeScreen) {
       case "dashboard":
         return (
@@ -270,7 +273,7 @@ function AppShell() {
             assets={data.assets}
             liabilities={data.liabilities}
             period={data.currentPeriod}
-            transactions={data.transactions}
+            transactions={periodTransactions}
           />
         );
       case "settings":

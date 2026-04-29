@@ -17,7 +17,7 @@ interface TransactionRecordsScreenProps {
 const UNKNOWN_VALUE = "无";
 const RULE_BASED_VALUE = "按当前规则计算";
 
-type TimeFilter = "all" | "currentMonth" | "last7Days" | "custom";
+type TimeFilter = "all" | "currentMonth" | "last7Days" | "last3Months" | "thisYear" | "custom";
 type AccountFilter = "all" | "bank" | "wechat" | "alipay" | "securities" | "fund" | "creditCard" | "other";
 type CashDirectionFilter = "all" | "inflow" | "outflow" | "nonCash";
 
@@ -39,6 +39,8 @@ const timeFilterOptions: Array<{ label: string; value: TimeFilter }> = [
   { label: "全部", value: "all" },
   { label: "本月", value: "currentMonth" },
   { label: "近7天", value: "last7Days" },
+  { label: "近3个月", value: "last3Months" },
+  { label: "今年", value: "thisYear" },
   { label: "自定义", value: "custom" },
 ];
 
@@ -318,6 +320,16 @@ const getDateRangeForFilters = (
   if (filters.time === "last7Days") {
     const startDate = new Date(baseDate);
     startDate.setDate(baseDate.getDate() - 6);
+    return { endDate: toDateKey(baseDate), startDate: toDateKey(startDate) };
+  }
+
+  if (filters.time === "last3Months") {
+    const startDate = new Date(baseDate.getFullYear(), baseDate.getMonth() - 2, 1);
+    return { endDate: toDateKey(baseDate), startDate: toDateKey(startDate) };
+  }
+
+  if (filters.time === "thisYear") {
+    const startDate = new Date(baseDate.getFullYear(), 0, 1);
     return { endDate: toDateKey(baseDate), startDate: toDateKey(startDate) };
   }
 

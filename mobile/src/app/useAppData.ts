@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { buildDashboardSummary } from "../domain/accounting/calculations";
+import { filterTransactionsByReportPeriod } from "../domain/accounting/periodFilters";
 import {
   applyTransactionToFinancialState,
   createTransactionFromInput,
@@ -223,7 +224,8 @@ export function useAppData(storage: StorageAdapter = asyncStorageAdapter): UseAp
 
   const summary = useMemo(() => {
     if (!data) return null;
-    return buildDashboardSummary(data.currentPeriod, data.assets, data.liabilities, data.transactions);
+    const periodTransactions = filterTransactionsByReportPeriod(data.transactions, data.currentPeriod);
+    return buildDashboardSummary(data.currentPeriod, data.assets, data.liabilities, periodTransactions);
   }, [data]);
 
   return {

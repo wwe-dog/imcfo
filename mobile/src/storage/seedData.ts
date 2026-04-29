@@ -7,6 +7,7 @@ import type {
   ReportPeriod,
   Transaction,
 } from "../domain/models";
+import { generateHistoricalTransactions } from "./historicalDemoData";
 
 export const APP_VERSION = "0.1.0";
 
@@ -522,7 +523,7 @@ const liabilities: Liability[] = [
   },
 ];
 
-const transactions: Transaction[] = [
+const april2026Transactions: Transaction[] = [
   {
     id: "tx-2026-04-salary",
     date: "2026-04-05",
@@ -929,6 +930,8 @@ const transactions: Transaction[] = [
     updatedAt: now,
   },
 ];
+
+const transactions: Transaction[] = [...generateHistoricalTransactions(), ...april2026Transactions];
 
 export const seedData: AppData = {
   version: APP_VERSION,
