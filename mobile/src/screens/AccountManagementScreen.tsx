@@ -574,7 +574,7 @@ function TopBar({ actionLabel = "新增", onBack, onAdd, title }: TopBarProps) {
   return (
     <View style={styles.headerRow}>
       <Pressable onPress={onBack} style={styles.backButton}>
-        <AppIcon color={theme.colors.primaryDeep} name="back" size={15} strokeWidth={2.2} />
+        <AppIcon color={theme.colors.backButtonText} name="back" size={15} strokeWidth={2.2} />
         <Text style={styles.backButtonText}>返回</Text>
       </Pressable>
       <Text style={styles.pageTitle}>{title}</Text>
@@ -1008,8 +1008,8 @@ const styles = StyleSheet.create({
   },
   backButton: {
     alignItems: "center",
-    backgroundColor: theme.colors.primarySoft,
-    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.backButtonBackground,
+    borderColor: theme.colors.backButtonBorder,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     flexDirection: "row",
@@ -1018,7 +1018,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   backButtonText: {
-    color: theme.colors.primaryDeep,
+    color: theme.colors.backButtonText,
     fontSize: 13,
     fontWeight: "800",
   },

@@ -294,15 +294,13 @@ export default function TransactionRecordsScreen({
       {filteredGroups.map((group) => (
         <View key={group.month} style={styles.monthGroup}>
           <Text style={styles.monthTitle}>{group.month}</Text>
-          <View style={styles.listStack}>
-            {group.items.map((transaction) => (
-              <TransactionRow
-                key={transaction.id}
-                onPress={() => setSelectedTransaction(transaction)}
-                transaction={transaction}
-              />
-            ))}
-          </View>
+          {group.items.map((transaction) => (
+            <TransactionRow
+              key={transaction.id}
+              onPress={() => setSelectedTransaction(transaction)}
+              transaction={transaction}
+            />
+          ))}
         </View>
       ))}
     </View>
@@ -367,7 +365,7 @@ function TopBar({ onBack, title }: { onBack: () => void; title: string }) {
   return (
     <View style={styles.headerRow}>
       <Pressable onPress={onBack} style={styles.backButton}>
-        <AppIcon color={theme.colors.primaryDeep} name="back" size={15} strokeWidth={2.2} />
+        <AppIcon color={theme.colors.backButtonText} name="back" size={15} strokeWidth={2.2} />
         <Text style={styles.backButtonText}>返回</Text>
       </Pressable>
       <Text style={styles.pageTitle}>{title}</Text>
@@ -439,8 +437,8 @@ const styles = StyleSheet.create({
   },
   backButton: {
     alignItems: "center",
-    backgroundColor: theme.colors.primarySoft,
-    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.backButtonBackground,
+    borderColor: theme.colors.backButtonBorder,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     flexDirection: "row",
@@ -449,7 +447,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   backButtonText: {
-    color: theme.colors.primaryDeep,
+    color: theme.colors.backButtonText,
     fontSize: 13,
     fontWeight: "800",
   },
@@ -540,21 +538,14 @@ const styles = StyleSheet.create({
   headerSpacer: {
     width: 58,
   },
-  listStack: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    overflow: "hidden",
-  },
   monthGroup: {
-    gap: 5,
+    gap: 4,
   },
   monthTitle: {
     color: theme.colors.textSecondary,
     fontSize: 14,
     fontWeight: "900",
-    paddingHorizontal: 2,
+    paddingHorizontal: theme.spacing.md,
   },
   pageTitle: {
     color: theme.colors.textPrimary,
