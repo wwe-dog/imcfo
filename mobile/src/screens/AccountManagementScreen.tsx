@@ -19,6 +19,7 @@ interface AccountFormState {
   name: string;
   type: AccountType;
   balance: string;
+  originalAmount?: number;
   isEnabled: boolean;
   note: string;
   creditLimit: string;
@@ -63,6 +64,11 @@ const emptyForm = (type: AccountType = "bank"): AccountFormState => ({
 
 const getCategoryMeta = (type: AccountType): AccountCategoryMeta =>
   accountCategories.find((category) => category.type === type) ?? accountCategories[accountCategories.length - 1];
+
+const getAccountTypeLabel = (type: AccountType): string => {
+  if (type === "cash") return "现金";
+  return getCategoryMeta(type).label;
+};
 
 const normalizeAccountType = (type: Account["type"] | string): AccountType => {
   if (type === "investment") return "fund";
@@ -115,14 +121,16 @@ const parseOptionalDay = (value: string): number | undefined => {
 };
 
 const buildFormFromAccount = (account: Account): AccountFormState => {
-  const type = normalizeAccountType(account.type);
+  const type = account.type;
   const currentDebt = getCreditCardDebt(account);
+  const editableAmount = type === "creditCard" ? currentDebt : account.balance;
 
   return {
     id: account.id,
     name: account.name,
     type,
-    balance: String(type === "creditCard" ? currentDebt : account.balance),
+    balance: String(editableAmount),
+    originalAmount: editableAmount,
     isEnabled: isAccountEnabled(account),
     note: account.note ?? "",
     creditLimit: account.creditLimit === undefined ? "" : String(account.creditLimit),
@@ -245,20 +253,48 @@ export default function AccountManagementScreen({
     };
   };
 
-  const handleSave = async () => {
-    const input = validateAndBuildInput();
-    if (!input) return;
-
+  const saveValidatedInput = async (input: AccountInput) => {
     setIsSaving(true);
     try {
       await onSaveAccount(input);
       Alert.alert(input.id ? "账户已更新" : "账户已新增", "账户管理和记一笔账户选择已同步刷新。");
-      openCategoryDetail(input.type);
+      openCategoryDetail(normalizeAccountType(input.type));
     } catch {
       Alert.alert("保存失败", "无法保存这个账户。");
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleSave = () => {
+    const input = validateAndBuildInput();
+    if (!input) return;
+
+    const nextAmount =
+      input.type === "creditCard" ? input.currentDebt ?? Math.max(0, input.balance) : input.balance;
+    const hasAmountChanged =
+      form.id !== undefined &&
+      form.originalAmount !== undefined &&
+      Math.abs(nextAmount - form.originalAmount) > 0.01;
+
+    if (!hasAmountChanged) {
+      void saveValidatedInput(input);
+      return;
+    }
+
+    const isCreditCard = input.type === "creditCard";
+    Alert.alert(
+      isCreditCard ? "确认修改欠款" : "确认修改余额",
+      isCreditCard ? "您是否确定更改此欠款？这会影响到总负债。" : "您是否确定更改此余额？这会影响到总资产。",
+      [
+        { text: "取消", style: "cancel" },
+        {
+          text: "确认修改",
+          style: "destructive",
+          onPress: () => void saveValidatedInput(input),
+        },
+      ],
+    );
   };
 
   const handleDisable = (account: Account) => {
@@ -391,12 +427,13 @@ export default function AccountManagementScreen({
 }
 
 interface TopBarProps {
+  actionLabel?: string;
   onBack: () => void;
   onAdd: () => void;
   title: string;
 }
 
-function TopBar({ onBack, onAdd, title }: TopBarProps) {
+function TopBar({ actionLabel = "新增", onBack, onAdd, title }: TopBarProps) {
   return (
     <View style={styles.headerRow}>
       <Pressable onPress={onBack} style={styles.backButton}>
@@ -404,7 +441,7 @@ function TopBar({ onBack, onAdd, title }: TopBarProps) {
       </Pressable>
       <Text style={styles.pageTitle}>{title}</Text>
       <Pressable onPress={onAdd} style={styles.addButton}>
-        <Text style={styles.addButtonText}>新增</Text>
+        <Text style={styles.addButtonText}>{actionLabel}</Text>
       </Pressable>
     </View>
   );
@@ -477,9 +514,12 @@ interface AccountFormPageProps {
 }
 
 function AccountFormPage({ form, isSaving, onBack, onSave, updateForm }: AccountFormPageProps) {
+  const isAccountDetail = form.id !== undefined;
+  const accountTypeLabel = getAccountTypeLabel(form.type);
+
   return (
     <View style={styles.stack}>
-      <TopBar onBack={onBack} onAdd={onSave} title={form.id ? "编辑账户" : "新增账户"} />
+      <TopBar actionLabel="保存" onBack={onBack} onAdd={onSave} title={isAccountDetail ? "账户详情" : "新增账户"} />
       <View style={[sharedStyles.card, styles.formCard]}>
         <Text style={styles.fieldLabel}>账户名称</Text>
         <TextInput
@@ -491,20 +531,26 @@ function AccountFormPage({ form, isSaving, onBack, onSave, updateForm }: Account
         />
 
         <Text style={styles.fieldLabel}>账户类型</Text>
-        <View style={styles.chipWrap}>
-          {accountCategories.map((option) => {
-            const active = form.type === option.type;
-            return (
-              <Pressable
-                key={option.type}
-                onPress={() => updateForm({ type: option.type })}
-                style={[sharedStyles.chip, active && sharedStyles.chipActiveDark]}
-              >
-                <Text style={[sharedStyles.chipText, active && sharedStyles.chipTextInverse]}>{option.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        {isAccountDetail ? (
+          <View style={styles.readonlyTypePill}>
+            <Text style={styles.readonlyTypeText}>{accountTypeLabel}</Text>
+          </View>
+        ) : (
+          <View style={styles.chipWrap}>
+            {accountCategories.map((option) => {
+              const active = form.type === option.type;
+              return (
+                <Pressable
+                  key={option.type}
+                  onPress={() => updateForm({ type: option.type })}
+                  style={[sharedStyles.chip, active && sharedStyles.chipActiveDark]}
+                >
+                  <Text style={[sharedStyles.chipText, active && sharedStyles.chipTextInverse]}>{option.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
 
         <Text style={styles.fieldLabel}>{form.type === "creditCard" ? "当前欠款" : "当前余额"}</Text>
         <TextInput
@@ -785,6 +831,20 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: -0.5,
     textAlign: "center",
+  },
+  readonlyTypePill: {
+    alignSelf: "flex-start",
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  readonlyTypeText: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    fontWeight: "800",
   },
   rowActionGroup: {
     flexDirection: "row",
