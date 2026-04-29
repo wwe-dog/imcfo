@@ -1,6 +1,18 @@
 import { useMemo, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import type { LayoutAnimationConfig } from "react-native";
+import {
+  LayoutAnimation,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  UIManager,
+  View,
+} from "react-native";
 import AppIcon from "../components/AppIcon";
 import type { Account, AccountType, Asset, Liability, Transaction, TransactionType } from "../domain/models";
 import { sharedStyles, theme } from "../styles/theme";
@@ -16,6 +28,29 @@ interface TransactionRecordsScreenProps {
 
 const UNKNOWN_VALUE = "无";
 const RULE_BASED_VALUE = "按当前规则计算";
+
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const monthCollapseAnimation = {
+  duration: 210,
+  update: {
+    duration: 210,
+    property: LayoutAnimation.Properties.opacity,
+    type: LayoutAnimation.Types.easeInEaseOut,
+  },
+  delete: {
+    duration: 170,
+    property: LayoutAnimation.Properties.opacity,
+    type: LayoutAnimation.Types.easeInEaseOut,
+  },
+  create: {
+    duration: 190,
+    property: LayoutAnimation.Properties.opacity,
+    type: LayoutAnimation.Types.easeInEaseOut,
+  },
+} satisfies LayoutAnimationConfig;
 
 type TimeFilter = "all" | "currentMonth" | "last7Days" | "last3Months" | "thisYear" | "custom";
 type AccountFilter = "all" | "bank" | "wechat" | "alipay" | "securities" | "fund" | "creditCard" | "other";
@@ -492,6 +527,7 @@ export default function TransactionRecordsScreen({
   };
 
   const toggleMonthCollapse = (month: string) => {
+    LayoutAnimation.configureNext(monthCollapseAnimation);
     setCollapsedMonths((current) => ({
       ...current,
       [month]: !current[month],
@@ -537,24 +573,26 @@ export default function TransactionRecordsScreen({
         />
       ) : null}
 
-      {filteredGroups.map((group) => (
-        <View key={group.month} style={styles.monthGroup}>
-          <MonthHeader
-            isCollapsed={Boolean(collapsedMonths[group.month])}
-            month={group.month}
-            onPress={() => toggleMonthCollapse(group.month)}
-          />
-          {collapsedMonths[group.month]
-            ? null
-            : group.items.map((transaction) => (
-                <TransactionRow
-                  key={transaction.id}
-                  onPress={() => setSelectedTransaction(transaction)}
-                  transaction={transaction}
-                />
-              ))}
-        </View>
-      ))}
+      <View style={styles.monthList}>
+        {filteredGroups.map((group) => (
+          <View key={group.month} style={styles.monthGroup}>
+            <MonthHeader
+              isCollapsed={Boolean(collapsedMonths[group.month])}
+              month={group.month}
+              onPress={() => toggleMonthCollapse(group.month)}
+            />
+            {collapsedMonths[group.month]
+              ? null
+              : group.items.map((transaction) => (
+                  <TransactionRow
+                    key={transaction.id}
+                    onPress={() => setSelectedTransaction(transaction)}
+                    transaction={transaction}
+                  />
+                ))}
+          </View>
+        ))}
+      </View>
 
       <FilterPanel
         draftFilters={draftFilters}
@@ -1234,6 +1272,9 @@ const styles = StyleSheet.create({
     width: 58,
   },
   monthGroup: {
+    gap: 0,
+  },
+  monthList: {
     gap: 0,
   },
   monthHeaderRow: {
