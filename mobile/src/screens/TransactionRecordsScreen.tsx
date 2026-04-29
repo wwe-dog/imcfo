@@ -1,42 +1,14 @@
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { Account, Transaction, TransactionType } from "../domain/models";
 import { sharedStyles, theme } from "../styles/theme";
 import { formatCurrency } from "../utils/formatters";
-
-type TransactionFilter =
-  | "all"
-  | "income"
-  | "expense"
-  | "asset"
-  | "liability"
-  | "investment"
-  | "creditCard"
-  | "reconciliation"
-  | "nonCash";
 
 interface TransactionRecordsScreenProps {
   accounts: Account[];
   transactions: Transaction[];
   onBack: () => void;
 }
-
-interface FilterOption {
-  key: TransactionFilter;
-  label: string;
-}
-
-const filterOptions: FilterOption[] = [
-  { key: "all", label: "全部" },
-  { key: "income", label: "收入" },
-  { key: "expense", label: "支出" },
-  { key: "asset", label: "资产" },
-  { key: "liability", label: "负债" },
-  { key: "investment", label: "投资" },
-  { key: "creditCard", label: "信用卡" },
-  { key: "reconciliation", label: "对账调整" },
-  { key: "nonCash", label: "非现金" },
-];
 
 const transactionTypeLabels: Record<TransactionType, string> = {
   assetDecrease: "资产减少",
@@ -70,47 +42,6 @@ const getAccountName = (accounts: Account[], accountId?: string): string =>
 const getTransactionTitle = (transaction: Transaction): string =>
   transaction.note?.trim() || transaction.category || transactionTypeLabels[transaction.type];
 
-const isReconciliationTransaction = (transaction: Transaction): boolean =>
-  transaction.id.startsWith("tx-reconcile") ||
-  (transaction.note?.includes("对账") ?? false) ||
-  (transaction.note?.includes("调整") ?? false);
-
-const matchesFilter = (transaction: Transaction, filter: TransactionFilter): boolean => {
-  switch (filter) {
-    case "all":
-      return true;
-    case "income":
-      return transaction.type === "income";
-    case "expense":
-      return transaction.type === "expense" || transaction.type === "creditCardExpense";
-    case "asset":
-      return transaction.type === "assetIncrease" || transaction.type === "assetDecrease";
-    case "liability":
-      return (
-        transaction.type === "liabilityIncrease" ||
-        transaction.type === "liabilityDecrease" ||
-        transaction.type === "repayment" ||
-        transaction.type === "payableRecognize" ||
-        transaction.type === "payablePay"
-      );
-    case "investment":
-      return (
-        transaction.type === "investmentBuy" ||
-        transaction.type === "investmentSell" ||
-        transaction.category.includes("投资") ||
-        transaction.category.includes("基金") ||
-        transaction.category.includes("ETF") ||
-        transaction.category.includes("股票")
-      );
-    case "creditCard":
-      return transaction.type === "creditCardExpense" || transaction.type === "creditCardRepayment";
-    case "reconciliation":
-      return isReconciliationTransaction(transaction);
-    case "nonCash":
-      return transaction.cashFlowType === "nonCash";
-  }
-};
-
 const getAmountTone = (transaction: Transaction): "positive" | "negative" | "neutral" => {
   if (transaction.cashFlowType === "nonCash") return "neutral";
 
@@ -140,25 +71,47 @@ const getMonthLabel = (date: string): string => {
   return `${year}年${Number(month)}月`;
 };
 
+const getCashStatusLabel = (transaction: Transaction): string => {
+  if (transaction.cashFlowType === "nonCash") return "非现金";
+  return getAmountTone(transaction) === "positive" ? "现金流入" : "现金流出";
+};
+
+const getTransactionDateTime = (transaction: Transaction): string => {
+  const createdAt = new Date(transaction.createdAt);
+  if (!Number.isNaN(createdAt.getTime())) {
+    const hours = String(createdAt.getHours()).padStart(2, "0");
+    const minutes = String(createdAt.getMinutes()).padStart(2, "0");
+    if (hours !== "00" || minutes !== "00") {
+      return `${transaction.date} ${hours}:${minutes}`;
+    }
+  }
+
+  return transaction.date;
+};
+
 export default function TransactionRecordsScreen({
   accounts,
   transactions,
   onBack,
 }: TransactionRecordsScreenProps) {
   const [query, setQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState<TransactionFilter>("all");
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
   const filteredGroups = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
     const filtered = transactions
-      .filter((transaction) => matchesFilter(transaction, activeFilter))
       .filter((transaction) => {
         if (!normalizedQuery) return true;
 
+        const amountText = [
+          String(transaction.amount),
+          formatCurrency(transaction.amount),
+          formatSignedAmount(transaction),
+        ].join(" ");
         const haystack = [
           getTransactionTitle(transaction),
+          amountText,
           transaction.category,
           transaction.note ?? "",
           transactionTypeLabels[transaction.type],
@@ -185,7 +138,7 @@ export default function TransactionRecordsScreen({
       }
       return groups;
     }, []);
-  }, [accounts, activeFilter, query, transactions]);
+  }, [accounts, query, transactions]);
 
   if (selectedTransaction) {
     const accountName = getAccountName(accounts, selectedTransaction.accountId);
@@ -220,30 +173,22 @@ export default function TransactionRecordsScreen({
     <View style={styles.stack}>
       <TopBar onBack={onBack} title="交易记录" />
 
-      <View style={[sharedStyles.card, styles.searchCard]}>
+      <View style={styles.toolbar}>
+        <Text style={styles.searchIcon}>⌕</Text>
         <TextInput
           onChangeText={setQuery}
-          placeholder="搜索交易、分类、账户、备注"
+          placeholder="搜索交易、金额、备注"
           placeholderTextColor={theme.colors.textMuted}
-          style={sharedStyles.input}
+          style={styles.searchInput}
           value={query}
         />
-        <View style={styles.filterWrap}>
-          {filterOptions.map((option) => {
-            const active = activeFilter === option.key;
-            return (
-              <Pressable
-                key={option.key}
-                onPress={() => setActiveFilter(option.key)}
-                style={[sharedStyles.chip, active && sharedStyles.chipActiveDark]}
-              >
-                <Text style={[sharedStyles.chipText, active && sharedStyles.chipTextInverse]}>
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <Pressable
+          accessibilityLabel="筛选交易"
+          onPress={() => Alert.alert("筛选交易", "筛选功能将在后续版本中完善。", [{ text: "知道了" }])}
+          style={styles.filterButton}
+        >
+          <Text style={styles.filterIcon}>筛</Text>
+        </Pressable>
       </View>
 
       {!hasTransactions ? (
@@ -266,7 +211,6 @@ export default function TransactionRecordsScreen({
           <View style={styles.listStack}>
             {group.items.map((transaction) => (
               <TransactionRow
-                accountName={getAccountName(accounts, transaction.accountId)}
                 key={transaction.id}
                 onPress={() => setSelectedTransaction(transaction)}
                 transaction={transaction}
@@ -292,11 +236,9 @@ function TopBar({ onBack, title }: { onBack: () => void; title: string }) {
 }
 
 function TransactionRow({
-  accountName,
   transaction,
   onPress,
 }: {
-  accountName: string;
   transaction: Transaction;
   onPress: () => void;
 }) {
@@ -308,15 +250,9 @@ function TransactionRow({
         <Text numberOfLines={1} style={styles.transactionTitle}>
           {getTransactionTitle(transaction)}
         </Text>
-        <Text numberOfLines={2} style={styles.transactionMeta}>
-          {transactionTypeLabels[transaction.type]} · {transaction.category} · {accountName}
+        <Text numberOfLines={1} style={styles.transactionMeta}>
+          {getTransactionDateTime(transaction)} · {getCashStatusLabel(transaction)}
         </Text>
-        <View style={styles.tagRow}>
-          <Text style={styles.dateText}>{transaction.date}</Text>
-          <Text style={[styles.cashFlowBadge, transaction.cashFlowType === "nonCash" && styles.nonCashBadge]}>
-            {cashFlowLabels[transaction.cashFlowType]}
-          </Text>
-        </View>
       </View>
       <Text style={[styles.transactionAmount, styles[`amount_${tone}`]]}>{formatSignedAmount(transaction)}</Text>
     </Pressable>
@@ -364,21 +300,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800",
   },
-  cashFlowBadge: {
-    backgroundColor: theme.colors.surfaceSoft,
-    borderRadius: theme.radius.pill,
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    fontWeight: "700",
-    overflow: "hidden",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  dateText: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    fontWeight: "700",
-  },
   detailAmount: {
     fontSize: 28,
     fontWeight: "900",
@@ -421,10 +342,18 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "900",
   },
-  filterWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: theme.spacing.sm,
+  filterButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.primarySoft,
+    borderRadius: theme.radius.pill,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+  },
+  filterIcon: {
+    color: theme.colors.primaryDeep,
+    fontSize: 14,
+    fontWeight: "900",
   },
   headerRow: {
     alignItems: "center",
@@ -436,20 +365,20 @@ const styles = StyleSheet.create({
     width: 58,
   },
   listStack: {
-    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    overflow: "hidden",
   },
   monthGroup: {
-    gap: theme.spacing.sm,
+    gap: 6,
   },
   monthTitle: {
     color: theme.colors.textSecondary,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "900",
     paddingHorizontal: 2,
-  },
-  nonCashBadge: {
-    backgroundColor: theme.colors.warningSoft,
-    color: theme.colors.warning,
   },
   pageTitle: {
     color: theme.colors.textPrimary,
@@ -459,18 +388,33 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     textAlign: "center",
   },
-  searchCard: {
-    gap: theme.spacing.md,
+  searchIcon: {
+    color: theme.colors.textMuted,
+    fontSize: 20,
+    fontWeight: "800",
+  },
+  searchInput: {
+    color: theme.colors.textPrimary,
+    flex: 1,
+    fontSize: 15,
+    minHeight: 40,
+    paddingHorizontal: theme.spacing.sm,
   },
   stack: {
-    gap: theme.spacing.lg,
+    gap: theme.spacing.md,
+    paddingBottom: theme.spacing.xl,
   },
-  tagRow: {
+  toolbar: {
     alignItems: "center",
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: theme.spacing.sm,
-    marginTop: theme.spacing.sm,
+    minHeight: 48,
+    paddingLeft: theme.spacing.md,
+    paddingRight: 6,
   },
   transactionAmount: {
     fontSize: 16,
@@ -479,22 +423,22 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   transactionCard: {
-    alignItems: "flex-start",
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
+    alignItems: "center",
+    borderBottomColor: theme.colors.border,
+    borderBottomWidth: 1,
     flexDirection: "row",
     gap: theme.spacing.md,
     justifyContent: "space-between",
-    padding: theme.spacing.md,
+    minHeight: 62,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 10,
   },
   transactionMain: {
     flex: 1,
     gap: 4,
   },
   transactionMeta: {
-    color: theme.colors.textSecondary,
+    color: theme.colors.textMuted,
     fontSize: 13,
     lineHeight: 19,
   },
