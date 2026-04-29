@@ -4,7 +4,14 @@ export type LiabilityCategory =
   | "loan"
   | "borrowing"
   | "payable"
-  | "other";
+  | "other"
+  | "房贷"
+  | "车贷"
+  | "信用卡"
+  | "消费分期"
+  | "融资负债"
+  | "应付款"
+  | "借款";
 
 export interface Liability {
   id: string;

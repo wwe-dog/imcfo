@@ -78,6 +78,7 @@ const MAX_CHART_ITEMS = 15;
 const OTHER_CHART_ITEM_COLOR = chartColors[MAX_CHART_ITEMS - 1];
 
 const assetCategoryLabels: Record<Asset["category"], string> = {
+  "A股股票": "A股股票",
   bankDeposit: "银行卡",
   cash: "现金",
   fixedAsset: "固定资产",
@@ -85,6 +86,24 @@ const assetCategoryLabels: Record<Asset["category"], string> = {
   other: "其他资产",
   paymentAccount: "支付账户",
   receivable: "应收款",
+  "保险现金价值": "保险现金价值",
+  "公募基金": "公募基金",
+  "大额存单": "大额存单",
+  "外币资产": "外币资产",
+  "宽基ETF": "宽基ETF",
+  "应收款": "应收款",
+  "房产": "房产",
+  "支付账户": "支付账户",
+  "现金": "现金",
+  "短债工具": "短债工具",
+  "行业ETF": "行业ETF",
+  "货币基金": "货币基金",
+  "车辆": "车辆",
+  "银行卡": "银行卡",
+  "项目权益": "项目权益",
+  "债券基金": "债券基金",
+  "港美股": "港美股",
+  "黄金": "黄金",
 };
 
 const liabilityCategoryLabels: Record<Liability["category"], string> = {
@@ -94,6 +113,13 @@ const liabilityCategoryLabels: Record<Liability["category"], string> = {
   loan: "贷款",
   other: "其他负债",
   payable: "应付款",
+  "借款": "借款",
+  "信用卡": "信用卡",
+  "应付款": "应付款",
+  "房贷": "房贷",
+  "消费分期": "消费分期",
+  "融资负债": "融资负债",
+  "车贷": "车贷",
 };
 
 const formatCompactCurrency = (value: number): string => {
