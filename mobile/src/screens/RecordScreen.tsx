@@ -84,6 +84,7 @@ export default function RecordScreen({
   const [successMessage, setSuccessMessage] = useState("");
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [modalState, setModalState] = useState<ModalState>("draft");
+  const [isMoreMenuVisible, setIsMoreMenuVisible] = useState(false);
 
   const selectedOption = findOption(type);
   const selectedMeta = transactionTypeMeta[type];
@@ -122,12 +123,26 @@ export default function RecordScreen({
   };
 
   const openMoreMenu = () => {
-    Alert.alert("更多", "请选择要进入的管理页。", [
-      { text: "账户管理", onPress: onOpenAccounts },
-      { text: "资产负债管理", onPress: onOpenAssets },
-      { text: "交易记录", onPress: () => Alert.alert("提示", "该功能将在后续版本中完善。") },
-      { text: "取消", style: "cancel" },
-    ]);
+    setIsMoreMenuVisible(true);
+  };
+
+  const closeMoreMenu = () => {
+    setIsMoreMenuVisible(false);
+  };
+
+  const handleOpenAccounts = () => {
+    closeMoreMenu();
+    onOpenAccounts();
+  };
+
+  const handleOpenAssets = () => {
+    closeMoreMenu();
+    onOpenAssets();
+  };
+
+  const handleOpenTransactions = () => {
+    closeMoreMenu();
+    Alert.alert("交易记录", "该功能将在后续版本中完善。");
   };
 
   const handleTypeChange = (nextType: NaturalLanguageTransactionType) => {
@@ -514,7 +529,64 @@ export default function RecordScreen({
           </View>
         </View>
       </Modal>
+
+      <Modal animationType="fade" onRequestClose={closeMoreMenu} transparent visible={isMoreMenuVisible}>
+        <View style={styles.moreModalRoot}>
+          <Pressable
+            accessibilityLabel="关闭管理中心"
+            onPress={closeMoreMenu}
+            style={styles.moreModalBackdrop}
+          />
+          <View style={styles.moreSheet}>
+            <View style={styles.moreHandle} />
+            <View style={styles.moreHeader}>
+              <Text style={styles.moreTitle}>管理中心</Text>
+              <Text style={styles.moreSubtitle}>选择你要维护的数据。</Text>
+            </View>
+
+            <View style={styles.moreOptionList}>
+              <MoreMenuOption
+                description="维护银行卡、微信、支付宝、证券账户、基金账户和信用卡。"
+                onPress={handleOpenAccounts}
+                title="账户管理"
+              />
+              <MoreMenuOption
+                description="维护当前资产、负债和个人净资产基础数据。"
+                onPress={handleOpenAssets}
+                title="资产负债管理"
+              />
+              <MoreMenuOption
+                description="查看、编辑和追踪历史入账记录。"
+                onPress={handleOpenTransactions}
+                title="交易记录"
+              />
+            </View>
+
+            <Pressable onPress={closeMoreMenu} style={styles.moreCloseButton}>
+              <Text style={styles.moreCloseText}>关闭</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
+  );
+}
+
+interface MoreMenuOptionProps {
+  description: string;
+  onPress: () => void;
+  title: string;
+}
+
+function MoreMenuOption({ description, onPress, title }: MoreMenuOptionProps) {
+  return (
+    <Pressable onPress={onPress} style={styles.moreOptionRow}>
+      <View style={styles.moreOptionContent}>
+        <Text style={styles.moreOptionTitle}>{title}</Text>
+        <Text style={styles.moreOptionDescription}>{description}</Text>
+      </View>
+      <Text style={styles.moreOptionArrow}>›</Text>
+    </Pressable>
   );
 }
 
@@ -640,6 +712,99 @@ const styles = StyleSheet.create({
     color: theme.colors.primaryDeep,
     fontSize: 14,
     fontWeight: "600",
+  },
+  moreCloseButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: theme.touch.minHeight,
+    paddingHorizontal: theme.spacing.md,
+  },
+  moreCloseText: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.typography.body,
+    fontWeight: "800",
+  },
+  moreHandle: {
+    alignSelf: "center",
+    backgroundColor: theme.colors.borderStrong,
+    borderRadius: theme.radius.pill,
+    height: 4,
+    width: 44,
+  },
+  moreHeader: {
+    gap: 5,
+  },
+  moreModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(24, 16, 44, 0.26)",
+  },
+  moreModalRoot: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  moreOptionArrow: {
+    color: theme.colors.primaryDeep,
+    fontSize: 28,
+    fontWeight: "300",
+    lineHeight: 28,
+  },
+  moreOptionContent: {
+    flex: 1,
+    gap: 5,
+  },
+  moreOptionDescription: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  moreOptionList: {
+    gap: theme.spacing.sm,
+  },
+  moreOptionRow: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: theme.spacing.md,
+    minHeight: 78,
+    padding: theme.spacing.md,
+  },
+  moreOptionTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  moreSheet: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderTopLeftRadius: theme.radius.xl,
+    borderTopRightRadius: theme.radius.xl,
+    borderWidth: 1,
+    gap: theme.spacing.md,
+    padding: theme.spacing.container,
+    paddingBottom: 28,
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 1,
+    shadowRadius: 28,
+    elevation: 8,
+  },
+  moreSubtitle: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  moreTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 22,
+    fontWeight: "900",
+    letterSpacing: -0.5,
   },
   naturalInput: {
     borderColor: theme.colors.primaryDeep,
