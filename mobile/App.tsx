@@ -194,6 +194,8 @@ function AppShell() {
         return (
           <RecordScreen
             accounts={data.accounts}
+            assets={data.assets}
+            liabilities={data.liabilities}
             onOpenAccounts={() => setActiveScreen("accounts")}
             onOpenAssets={() => setActiveScreen("assets")}
             onOpenReports={() => setActiveScreen("reports")}

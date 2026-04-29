@@ -41,7 +41,8 @@ const calculateCashFlowByType = (
         transaction.type === "income" ||
         transaction.type === "investmentSell" ||
         transaction.type === "assetIncrease" ||
-        transaction.type === "liabilityIncrease"
+        transaction.type === "liabilityIncrease" ||
+        transaction.type === "receivableCollect"
       ) {
         return sum + transaction.amount;
       }

@@ -918,7 +918,7 @@ const transactions: Transaction[] = [
     id: "tx-2026-04-accrue-tax-payable",
     date: "2026-04-30",
     amount: 12000,
-    type: "liabilityIncrease",
+    type: "payableRecognize",
     category: "应付款",
     accountId: "account-cmb-bank",
     relatedLiabilityId: "liability-tax-payable",

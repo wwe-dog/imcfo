@@ -13,6 +13,12 @@ export const getDefaultCashFlowType = (transactionType: TransactionType): CashFl
     case "repayment":
     case "creditCardRepayment":
       return "financing";
+    case "receivableRecognize":
+    case "payableRecognize":
+      return "nonCash";
+    case "receivableCollect":
+    case "payablePay":
+      return "operating";
     case "creditCardExpense":
       return "nonCash";
     case "assetIncrease":

@@ -8,6 +8,10 @@ export type NaturalLanguageTransactionType = Extract<
   | "assetDecrease"
   | "liabilityIncrease"
   | "liabilityDecrease"
+  | "receivableRecognize"
+  | "receivableCollect"
+  | "payableRecognize"
+  | "payablePay"
   | "investmentBuy"
   | "investmentSell"
   | "creditCardExpense"
@@ -69,6 +73,30 @@ export const transactionTypeMeta: Record<NaturalLanguageTransactionType, Transac
     cashFlowType: "financing",
     cashFlowLabel: "筹资活动现金流出",
     impactText: "负债减少，现金减少，计入债务偿还现金流出。",
+  },
+  receivableRecognize: {
+    defaultCategory: "应收款",
+    cashFlowType: "nonCash",
+    cashFlowLabel: "非现金变动",
+    impactText: "应收资产增加，现金不增加，不产生现金流。",
+  },
+  receivableCollect: {
+    defaultCategory: "应收款",
+    cashFlowType: "operating",
+    cashFlowLabel: "经营活动现金流入",
+    impactText: "现金增加，应收资产减少，不重复确认收入。",
+  },
+  payableRecognize: {
+    defaultCategory: "应付款",
+    cashFlowType: "nonCash",
+    cashFlowLabel: "非现金变动",
+    impactText: "应付负债增加，现金不变，不产生现金流。",
+  },
+  payablePay: {
+    defaultCategory: "应付款",
+    cashFlowType: "operating",
+    cashFlowLabel: "经营活动现金流出",
+    impactText: "现金减少，应付负债减少，不重复确认费用。",
   },
   investmentBuy: {
     defaultCategory: "投资资产",
@@ -181,6 +209,22 @@ const extractDate = (text: string, baseDate: Date): string => {
 const detectType = (
   text: string,
 ): { type: NaturalLanguageTransactionType; warning?: string } => {
+  if (/公司报销到账|报销到账|朋友还我|别人还我/.test(text)) {
+    return { type: "receivableCollect" };
+  }
+
+  if (/确认报销款|朋友欠我|应收确认/.test(text)) {
+    return { type: "receivableRecognize" };
+  }
+
+  if (/计提应付|确认.*应付款|应付确认/.test(text)) {
+    return { type: "payableRecognize" };
+  }
+
+  if (/缴纳应付|支付.*应付款|应付支付/.test(text)) {
+    return { type: "payablePay" };
+  }
+
   if (/朋友还我|别人还我/.test(text)) {
     return {
       type: "income",

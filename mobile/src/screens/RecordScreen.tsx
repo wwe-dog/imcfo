@@ -7,11 +7,13 @@ import {
   type ParsedTransactionDraft,
 } from "../domain/accounting/naturalLanguageParser";
 import type { TransactionInput } from "../domain/accounting/transactionRules";
-import type { Account } from "../domain/models";
+import type { Account, Asset, Liability } from "../domain/models";
 import { sharedStyles, theme } from "../styles/theme";
 
 interface RecordScreenProps {
   accounts: Account[];
+  assets: Asset[];
+  liabilities: Liability[];
   onSave: (input: TransactionInput) => Promise<void>;
   onOpenAccounts: () => void;
   onOpenReports: () => void;
@@ -36,6 +38,10 @@ const transactionTypeOptions: TransactionTypeOption[] = [
   { type: "assetDecrease", label: "资产减少", defaultCategory: "资产减少", requiresAccount: true },
   { type: "liabilityIncrease", label: "负债增加", defaultCategory: "借款", requiresAccount: true },
   { type: "liabilityDecrease", label: "负债减少", defaultCategory: "还款", requiresAccount: true },
+  { type: "receivableRecognize", label: "应收确认", defaultCategory: "应收款", requiresAccount: false },
+  { type: "receivableCollect", label: "应收收回", defaultCategory: "应收款", requiresAccount: true },
+  { type: "payableRecognize", label: "应付确认", defaultCategory: "应付款", requiresAccount: false },
+  { type: "payablePay", label: "应付支付", defaultCategory: "应付款", requiresAccount: true },
   { type: "investmentBuy", label: "投资买入", defaultCategory: "投资资产", requiresAccount: true },
   { type: "investmentSell", label: "投资卖出", defaultCategory: "投资资产", requiresAccount: true },
   { type: "creditCardExpense", label: "信用卡消费", defaultCategory: "信用卡", requiresAccount: true },
@@ -67,6 +73,8 @@ const isAccountEnabled = (account: Account): boolean => account.isEnabled ?? acc
 
 export default function RecordScreen({
   accounts,
+  assets,
+  liabilities,
   onSave,
   onOpenAccounts,
   onOpenReports,
@@ -81,6 +89,8 @@ export default function RecordScreen({
   const [creditCardAccountId, setCreditCardAccountId] = useState(
     accounts.find((account) => account.type === "creditCard")?.id ?? "",
   );
+  const [relatedAssetId, setRelatedAssetId] = useState("");
+  const [relatedLiabilityId, setRelatedLiabilityId] = useState("");
   const [date, setDate] = useState(today());
   const [note, setNote] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -100,8 +110,25 @@ export default function RecordScreen({
     () => activeAccounts.filter((account) => account.type === "creditCard"),
     [activeAccounts],
   );
+  const receivableAssets = useMemo(
+    () =>
+      assets.filter(
+        (asset) => asset.currentValue > 0 && (asset.category === "receivable" || String(asset.category).includes("应收")),
+      ),
+    [assets],
+  );
+  const payableLiabilities = useMemo(
+    () =>
+      liabilities.filter(
+        (liability) =>
+          liability.amount > 0 && (liability.category === "payable" || String(liability.category).includes("应付")),
+      ),
+    [liabilities],
+  );
   const selectedAccount = activeAccounts.find((account) => account.id === accountId);
   const selectedCreditCardAccount = creditCardAccounts.find((account) => account.id === creditCardAccountId);
+  const selectedReceivableAsset = receivableAssets.find((asset) => asset.id === relatedAssetId);
+  const selectedPayableLiability = payableLiabilities.find((liability) => liability.id === relatedLiabilityId);
 
   const pickAccountId = (nextType: NaturalLanguageTransactionType): string => {
     const currentAccount = activeAccounts.find((account) => account.id === accountId);
@@ -120,6 +147,14 @@ export default function RecordScreen({
     return currentCreditCardAccount?.id ?? creditCardAccounts[0]?.id ?? "";
   };
 
+  const pickReceivableAssetId = (): string =>
+    receivableAssets.some((asset) => asset.id === relatedAssetId) ? relatedAssetId : receivableAssets[0]?.id ?? "";
+
+  const pickPayableLiabilityId = (): string =>
+    payableLiabilities.some((liability) => liability.id === relatedLiabilityId)
+      ? relatedLiabilityId
+      : payableLiabilities[0]?.id ?? "";
+
   useEffect(() => {
     if (activeAccounts.length === 0) {
       setAccountId("");
@@ -133,7 +168,31 @@ export default function RecordScreen({
     if (type === "creditCardRepayment" && !creditCardAccounts.some((account) => account.id === creditCardAccountId)) {
       setCreditCardAccountId(pickCreditCardAccountId());
     }
-  }, [accountId, activeAccounts, creditCardAccountId, creditCardAccounts, type]);
+
+    if (
+      (type === "receivableRecognize" || type === "receivableCollect") &&
+      !receivableAssets.some((asset) => asset.id === relatedAssetId)
+    ) {
+      setRelatedAssetId(pickReceivableAssetId());
+    }
+
+    if (
+      (type === "payableRecognize" || type === "payablePay") &&
+      !payableLiabilities.some((liability) => liability.id === relatedLiabilityId)
+    ) {
+      setRelatedLiabilityId(pickPayableLiabilityId());
+    }
+  }, [
+    accountId,
+    activeAccounts,
+    creditCardAccountId,
+    creditCardAccounts,
+    payableLiabilities,
+    receivableAssets,
+    relatedAssetId,
+    relatedLiabilityId,
+    type,
+  ]);
 
   const clearEntryFields = () => {
     setAmount("");
@@ -174,6 +233,12 @@ export default function RecordScreen({
     if (nextType === "creditCardRepayment") {
       setCreditCardAccountId(pickCreditCardAccountId());
     }
+    if (nextType === "receivableRecognize" || nextType === "receivableCollect") {
+      setRelatedAssetId(pickReceivableAssetId());
+    }
+    if (nextType === "payableRecognize" || nextType === "payablePay") {
+      setRelatedLiabilityId(pickPayableLiabilityId());
+    }
     setSuccessMessage("");
   };
 
@@ -185,6 +250,12 @@ export default function RecordScreen({
     setAccountId(pickAccountId(parsedDraft.type));
     if (parsedDraft.type === "creditCardRepayment") {
       setCreditCardAccountId(pickCreditCardAccountId());
+    }
+    if (parsedDraft.type === "receivableRecognize" || parsedDraft.type === "receivableCollect") {
+      setRelatedAssetId(pickReceivableAssetId());
+    }
+    if (parsedDraft.type === "payableRecognize" || parsedDraft.type === "payablePay") {
+      setRelatedLiabilityId(pickPayableLiabilityId());
     }
     setNote(parsedDraft.rawText.trim());
     setDraft(parsedDraft);
@@ -250,6 +321,30 @@ export default function RecordScreen({
       }
     }
 
+    if (type === "receivableRecognize" || type === "receivableCollect") {
+      if (!selectedReceivableAsset) {
+        Alert.alert("请选择应收项目", "请先选择一个已有应收项目，避免系统随机修改资产。");
+        return null;
+      }
+
+      if (type === "receivableCollect" && numericAmount > selectedReceivableAsset.currentValue) {
+        Alert.alert("金额不能超过当前应收余额", "应收收回不能超过当前应收余额。");
+        return null;
+      }
+    }
+
+    if (type === "payableRecognize" || type === "payablePay") {
+      if (!selectedPayableLiability) {
+        Alert.alert("请选择应付项目", "请先选择一个已有应付项目，避免系统随机修改负债。");
+        return null;
+      }
+
+      if (type === "payablePay" && numericAmount > selectedPayableLiability.amount) {
+        Alert.alert("金额不能超过当前应付余额", "应付支付不能超过当前应付余额。");
+        return null;
+      }
+    }
+
     if (!date.trim()) {
       Alert.alert("请填写日期", "日期是必填项，格式建议为 YYYY-MM-DD。");
       return null;
@@ -272,6 +367,10 @@ export default function RecordScreen({
         category,
         accountId,
         counterAccountId: type === "creditCardRepayment" ? creditCardAccountId : undefined,
+        relatedAssetId:
+          type === "receivableRecognize" || type === "receivableCollect" ? relatedAssetId : undefined,
+        relatedLiabilityId:
+          type === "payableRecognize" || type === "payablePay" ? relatedLiabilityId : undefined,
         date,
         note: note.trim() || selectedMeta.impactText,
       });
@@ -471,6 +570,68 @@ export default function RecordScreen({
           </>
         ) : null}
 
+        {type === "receivableRecognize" || type === "receivableCollect" ? (
+          <>
+            <Text style={styles.fieldLabel}>应收项目</Text>
+            {receivableAssets.length > 0 ? (
+              <View style={styles.chipWrap}>
+                {receivableAssets.map((asset) => {
+                  const isActive = relatedAssetId === asset.id;
+                  return (
+                    <Pressable
+                      key={asset.id}
+                      onPress={() => {
+                        setRelatedAssetId(asset.id);
+                        setSuccessMessage("");
+                      }}
+                      style={[sharedStyles.chip, isActive && sharedStyles.chipActiveDark]}
+                    >
+                      <Text style={[sharedStyles.chipText, isActive && sharedStyles.chipTextInverse]}>
+                        {asset.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : (
+              <View style={styles.messageBox}>
+                <Text style={sharedStyles.warningText}>当前没有可用应收项目，请先在资产负债管理中新增应收款。</Text>
+              </View>
+            )}
+          </>
+        ) : null}
+
+        {type === "payableRecognize" || type === "payablePay" ? (
+          <>
+            <Text style={styles.fieldLabel}>应付项目</Text>
+            {payableLiabilities.length > 0 ? (
+              <View style={styles.chipWrap}>
+                {payableLiabilities.map((liability) => {
+                  const isActive = relatedLiabilityId === liability.id;
+                  return (
+                    <Pressable
+                      key={liability.id}
+                      onPress={() => {
+                        setRelatedLiabilityId(liability.id);
+                        setSuccessMessage("");
+                      }}
+                      style={[sharedStyles.chip, isActive && sharedStyles.chipActiveDark]}
+                    >
+                      <Text style={[sharedStyles.chipText, isActive && sharedStyles.chipTextInverse]}>
+                        {liability.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : (
+              <View style={styles.messageBox}>
+                <Text style={sharedStyles.warningText}>当前没有可用应付项目，请先在资产负债管理中新增应付款。</Text>
+              </View>
+            )}
+          </>
+        ) : null}
+
         <Text style={styles.fieldLabel}>日期</Text>
         <TextInput
           onChangeText={(value) => {
@@ -545,6 +706,18 @@ export default function RecordScreen({
                   <View style={styles.modalRow}>
                     <Text style={styles.modalLabel}>信用卡账户</Text>
                     <Text style={styles.modalValue}>{selectedCreditCardAccount?.name ?? "未选择"}</Text>
+                  </View>
+                ) : null}
+                {type === "receivableRecognize" || type === "receivableCollect" ? (
+                  <View style={styles.modalRow}>
+                    <Text style={styles.modalLabel}>应收项目</Text>
+                    <Text style={styles.modalValue}>{selectedReceivableAsset?.name ?? "未选择"}</Text>
+                  </View>
+                ) : null}
+                {type === "payableRecognize" || type === "payablePay" ? (
+                  <View style={styles.modalRow}>
+                    <Text style={styles.modalLabel}>应付项目</Text>
+                    <Text style={styles.modalValue}>{selectedPayableLiability?.name ?? "未选择"}</Text>
                   </View>
                 ) : null}
                 <View style={styles.modalRow}>

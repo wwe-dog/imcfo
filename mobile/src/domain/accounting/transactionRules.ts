@@ -96,6 +96,30 @@ export const transactionRules: TransactionRule[] = [
     accountingEffect: "负债减少，通常对应筹资活动现金流出。",
   },
   {
+    type: "receivableRecognize",
+    label: "应收确认",
+    cashFlowType: "nonCash",
+    accountingEffect: "应收资产增加，现金不增加，不产生现金流。",
+  },
+  {
+    type: "receivableCollect",
+    label: "应收收回",
+    cashFlowType: "operating",
+    accountingEffect: "现金增加，应收资产减少，不重复确认收入。",
+  },
+  {
+    type: "payableRecognize",
+    label: "应付确认",
+    cashFlowType: "nonCash",
+    accountingEffect: "应付负债增加，现金不变，不产生现金流。",
+  },
+  {
+    type: "payablePay",
+    label: "应付支付",
+    cashFlowType: "operating",
+    accountingEffect: "现金减少，应付负债减少，不重复确认费用。",
+  },
+  {
     type: "transfer",
     label: "转账",
     cashFlowType: "nonCash",
@@ -252,6 +276,24 @@ const updateLiabilityById = (
   );
 };
 
+const updateLiabilityByIdStrict = (
+  liabilities: Liability[],
+  liabilityId: string | undefined,
+  delta: number,
+): Liability[] => {
+  if (!liabilityId || !liabilities.some((liability) => liability.id === liabilityId)) return liabilities;
+
+  return liabilities.map((liability) =>
+    liability.id === liabilityId
+      ? {
+          ...liability,
+          amount: Math.max(0, liability.amount + delta),
+          updatedAt: new Date().toISOString(),
+        }
+      : liability,
+  );
+};
+
 const findLiabilityAccountId = (liabilities: Liability[], liabilityId: string | undefined): string | undefined =>
   liabilities.find((liability) => liability.id === liabilityId)?.accountId;
 
@@ -384,6 +426,29 @@ export const applyTransactionToFinancialState = <T extends FinancialState>(
         transaction.counterAccountId ?? transaction.accountId,
         -transaction.amount,
       );
+      break;
+    case "receivableRecognize":
+      assets = updateAssetById(assets, transaction.relatedAssetId, transaction.amount);
+      break;
+    case "receivableCollect":
+      if (transaction.relatedAssetId && assets.some((asset) => asset.id === transaction.relatedAssetId)) {
+        accounts = updateAccountBalance(accounts, transaction.accountId, transaction.amount);
+        assets = updateAssetByAccount(assets, transaction.accountId, transaction.amount);
+        assets = updateAssetById(assets, transaction.relatedAssetId, -transaction.amount);
+      }
+      break;
+    case "payableRecognize":
+      liabilities = updateLiabilityByIdStrict(liabilities, transaction.relatedLiabilityId, transaction.amount);
+      break;
+    case "payablePay":
+      if (
+        transaction.relatedLiabilityId &&
+        liabilities.some((liability) => liability.id === transaction.relatedLiabilityId)
+      ) {
+        accounts = updateAccountBalance(accounts, transaction.accountId, -transaction.amount);
+        assets = updateAssetByAccount(assets, transaction.accountId, -transaction.amount);
+        liabilities = updateLiabilityByIdStrict(liabilities, transaction.relatedLiabilityId, -transaction.amount);
+      }
       break;
     case "creditCardRepayment": {
       const creditCardAccountId =
