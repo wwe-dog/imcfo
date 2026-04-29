@@ -5,7 +5,7 @@
 更新时间：2026-04-29  
 当前主分支：`main`  
 当前开发模式：trunk-based development，直接在 `main` 上小步提交。  
-本次快照原因：完成交易记录页紧凑账本布局优化后刷新上下文。
+本次快照原因：完成 Arco Design Pro 2.0 参考下的移动端全局视觉 polish 后刷新上下文。
 
 ## 1. 项目定位与关键决策
 
@@ -38,7 +38,6 @@ V0.1 只服务普通自然人，核心闭环是：
 - React Native
 - TypeScript
 - AsyncStorage
-- 本地状态与本地存储
 - `react-native-svg` 用于首页图表
 
 开发规则：
@@ -48,24 +47,17 @@ V0.1 只服务普通自然人，核心闭环是：
 - 报表计算函数保持纯函数，不依赖 UI，不读写存储。
 - 会计 / 报表逻辑与 UI 分离。
 - 用户可见文案使用中文，技术命名可用英文。
+- 不引入 Arco Web/Admin 依赖；Arco Design Pro 2.0 仅作视觉参考。
 
-## 3. 已完成部分
+## 3. 已完成工作
 
 文档与规则：
 
 - `AGENTS.md`
 - `.codex/agents/*.toml`
-- `docs/00-project-constitution.md`
-- `docs/01-v0.1-product-scope.md`
-- `docs/02-v0.1-page-structure.md`
-- `docs/03-v0.1-data-model.md`
-- `docs/04-v0.1-accounting-rules.md`
-- `docs/05-v0.1-report-rules.md`
-- `docs/06-v0.1-transaction-mapping.md`
-- `docs/07-v0.1-implementation-roadmap.md`
-- `docs/08-mobile-app-migration-plan.md`
-- `docs/09-branch-merge-checklist.md`
+- `docs/00-project-constitution.md` 至 `docs/09-branch-merge-checklist.md`
 - `docs/10-current-project-context.md`
+- `references/arco-design-pro-2/*` 本地 Arco Design Pro 2.0 视觉参考归档
 
 移动端基础：
 
@@ -78,17 +70,14 @@ V0.1 只服务普通自然人，核心闭环是：
 核心功能：
 
 - 首页为紧凑双视图仪表盘：`资产负债结构` 和 `收支现金流`。
-- 首页默认显示 `资产负债结构`。
-- 首页资产/负债/净资产支持 drilldown。
-- 资产/负债详情页 donut 图表支持外部标签、引导线和稳定 15 色配色。
+- 首页支持资产、负债、净资产 drilldown。
+- 资产/负债详情 donut 图表支持外部标签、引导线和稳定 15 色配色。
 - 管理页支持自然语言记账、识别结果 modal、确认入账、成功 modal。
 - 管理页保留手动修改 / 高级填写。
 - 管理页“更多”使用自定义管理中心 modal。
 - 账户管理为大类总览 -> 某类账户详情 -> 新增账户 / 账户详情三层结构。
-- 账户大类包含现金账户、银行卡、微信钱包、支付宝、证券账户、基金账户、信用卡、其他账户。
-- 账户详情页锁定账户类型，只允许修改名称、余额/欠款、启用状态和备注/用途。
+- 账户详情锁定账户类型，只允许修改名称、余额/欠款、启用状态和备注/用途。
 - 修改普通账户余额会确认“影响总资产”；修改信用卡欠款会确认“影响总负债”。
-- 账户保存只同步已存在的一对一账户/资产或信用卡负债映射，不自动创建资产/负债。
 - 信用卡 `creditLimit` 只作信息展示，不计入资产或负债。
 - 信用卡 `currentDebt` 作为负债处理。
 - 记一笔账户选择只展示启用账户。
@@ -97,8 +86,8 @@ V0.1 只服务普通自然人，核心闭环是：
 - 报表页支持资产负债表、现金流量表、利润表切换。
 - 报表页支持简易版 / 专业版切换。
 - 我的页支持本地数据导出、导入、恢复示例数据、清空本地数据、账户管理入口和交易记录入口。
-- 交易记录 Phase 1 已完成：支持从管理页“更多”和我的页进入，只读查看交易列表、搜索、按月分组和交易详情。
-- 交易记录页已优化为紧凑账本行布局，不再使用快捷筛选 chips 或分离卡片式列表。
+- 交易记录 Phase 1 已完成：只读查看交易列表、搜索、按月分组、账本式行布局和交易详情。
+- 对账 / 资产盘点已支持账户余额和资产估值的安全调整。
 
 已完成的账务安全规则：
 
@@ -111,158 +100,116 @@ V0.1 只服务普通自然人，核心闭环是：
 - 应收确认、应收收回、应付确认、应付支付已支持。
 - 应收/应付生命周期规则缺少 `relatedAssetId` 或 `relatedLiabilityId` 时不 fallback 到随机资产/负债。
 
-本次新增：
+## 4. 本次最新变更
 
-- `mobile/src/screens/TransactionRecordsScreen.tsx`：只读交易记录中心。
-- App 新增隐藏二级页面 `transactions`，不新增底部 Tab。
-- 管理页“更多”中的 `交易记录` 已从占位 Alert 改为进入交易记录中心。
-- 我的页新增 `交易记录` 入口。
-- 交易记录支持搜索交易标题/备注、金额、分类、账户名、交易类型标签。
-- 已移除快捷筛选 chips；顶部使用搜索栏 + 筛选占位按钮。
-- 交易按日期倒序并按月份分组显示。
-- 点击交易卡片进入只读 `交易详情`，不提供编辑、删除或冲销。
+最新功能提交：
 
-前一轮新增：
+- `bab72b8 style: apply arco inspired mobile visual polish`
 
-- `mobile/src/domain/accounting/reconciliationRules.ts`：手动对账 / 资产盘点领域规则。
-- 账户详情页新增 `对账 / 更新余额`。
-- 资产列表新增 `更新当前价值`。
-- 管理页更多菜单新增 `对账 / 资产盘点` 入口，目前进入资产负债管理页。
-- 对账调整统一通过 `useAppData.saveReconciliation` 保存，不直接访问 AsyncStorage。
+本次只做视觉层调整，未修改账务公式、交易规则、存储 schema、种子数据或报表计算。
 
-对账处理规则：
+读取的 Arco 本地参考：
 
-- 银行利息到账：账户余额增加，收入增加，经营活动现金流入。
-- 投资收益到账 / 基金股票分红到账：V0.1 按个人财务口径计入收入和经营活动现金流入，代码中保留注释，后续可切换更严格现金流分类。
-- 资产估值上涨 / 下降：只更新目标资产，不计收入、不计费用、不进现金流。
-- 漏记转入 / 漏记转出：按内部转移或余额调整处理，不影响利润。
-- 漏记支出 / 手续费扣费：减少账户余额，增加费用，经营活动现金流出。
-- 信用卡漏记消费 / 利息手续费：增加信用卡欠款和对应负债，增加费用，现金流为非现金。
-- 信用卡漏记还款：需要选择付款账户，减少付款账户现金、信用卡欠款和对应负债，现金流为筹资流出。
-- 信用卡退款/冲正：减少信用卡欠款和对应负债，不重复确认费用。
+- `references/arco-design-pro-2/README.md`
+- `references/arco-design-pro-2/design-guidelines-for-imcfo.md`
+- `references/arco-design-pro-2/reference-pages.md`
+- `references/arco-design-pro-2/imcfo-usage-rules.md`
 
-高复杂度示例数据：
+本次 polish 覆盖：
 
-- `mobile/src/storage/seedData.ts` 当前为高净值自然人压力测试数据集。
-- 测试日期：2026-04-30。
-- 账户数：13。
-- 资产数：22。
-- 负债数：7。
-- 交易数：30。
-- 资产合计：5,000,000。
-- 负债合计：1,186,000。
-- 所有者权益（个人净资产）：3,814,000。
-- 2026 年 4 月收入：93,500。
-- 2026 年 4 月费用：45,600。
-- 2026 年 4 月利润：47,900。
-- 经营活动现金流：56,900。
-- 投资活动现金流：-64,000。
-- 筹资活动现金流：-69,200。
-- 现金净变化：-76,300。
-- 该数据专门测试“利润为正但现金净变化为负”的场景。
+- `mobile/src/styles/theme.ts`：增加 `surfaceElevated`、`divider`、浅蓝 token，收敛卡片、按钮、输入框、chip、文字层级和阴影。
+- `mobile/App.tsx`：根内容边距、顶部品牌栏、底部导航密度和阴影更轻。
+- `mobile/src/screens/DashboardScreen.tsx`：首页指标 pill、图表卡片、趋势区和详情页表格密度更统一。
+- `mobile/src/screens/RecordScreen.tsx`：一句话记账、表单、成功/提示框和管理中心 modal 更紧凑。
+- `mobile/src/screens/TransactionRecordsScreen.tsx`：账本行、搜索工具栏、分组列表视觉更接近紧凑 ledger。
+- `mobile/src/screens/AccountManagementScreen.tsx`：账户分类、账户列表、详情表单和 modal 视觉统一。
+- `mobile/src/screens/AssetsLiabilitiesScreen.tsx`：资产/负债列表、摘要面板和操作按钮统一。
+- `mobile/src/screens/ReportsScreen.tsx` 与 `mobile/src/components/ReportBlock.tsx`：报表卡片、报表行和模式切换更像结构化财务数据卡。
+- `mobile/src/screens/SettingsScreen.tsx`：我的页入口列表、数据管理面板和头像区更紧凑。
 
-## 4. 重要文件修改记录
+## 5. 高复杂度示例数据
+
+`mobile/src/storage/seedData.ts` 当前为高净值自然人压力测试数据集。
+
+测试日期：2026-04-30。
+
+期望值：
+
+- 资产合计：5,000,000
+- 负债合计：1,186,000
+- 所有者权益（个人净资产）：3,814,000
+- 2026 年 4 月收入：93,500
+- 2026 年 4 月费用：45,600
+- 2026 年 4 月利润：47,900
+- 经营活动现金流：56,900
+- 投资活动现金流：-64,000
+- 筹资活动现金流：-69,200
+- 现金净变化：-76,300
+
+本次视觉 polish 后已重新核对，以上值仍然匹配。
+
+## 6. 重要文件职责
 
 `mobile/App.tsx`
 
 - App 入口、页面切换、底部导航、全局数据回调。
-- 当前底部导航：首页、管理、报表、我的。
 - 隐藏二级页面包括资产负债管理、账户管理和交易记录。
-- 已接入 safe area。
-- 已向账户管理和资产负债管理传入 `onSaveReconciliation`。
-- 已向管理页和我的页传入交易记录入口。
 
 `mobile/src/app/useAppData.ts`
 
 - App 数据状态中心。
 - 负责 load/save/reset/clear/export/import/transaction/account/asset/liability/reconciliation 更新。
-- 新增 `saveReconciliation`，通过领域规则生成安全对账调整。
-
-`mobile/src/domain/accounting/reconciliationRules.ts`
-
-- 手动对账 / 资产盘点领域规则。
-- 负责计算差额、给出差额原因选项、生成调整交易、同步账户/资产/负债。
-- 估值调整不影响收入、费用或现金流。
-- 账户同步资产仍遵守一对一保护。
 
 `mobile/src/domain/accounting/transactionRules.ts`
 
 - 交易类型映射、交易入账、账户/资产/负债 upsert/delete/disable helper。
 - 保持核心交易规则，不直接处理 UI。
 
+`mobile/src/domain/accounting/reconciliationRules.ts`
+
+- 手动对账 / 资产盘点领域规则。
+- 负责差额计算、差额原因、调整交易生成和安全同步。
+
 `mobile/src/domain/accounting/calculations.ts`
 
 - 核心报表计算函数。
 - 必须保持纯函数。
 
-`mobile/src/screens/AccountManagementScreen.tsx`
+`mobile/src/screens/DashboardScreen.tsx`
 
-- 账户管理三层结构。
-- 账户详情支持 `对账 / 更新余额` modal。
-- 普通账户对账显示当前账面值、实际余额、差额、差额原因和备注。
-- 信用卡对账显示当前账面欠款、实际欠款、差额、差额原因和备注。
-- 漏记信用卡还款要求选择付款账户。
-
-`mobile/src/screens/AssetsLiabilitiesScreen.tsx`
-
-- 资产和负债 CRUD。
-- 资产列表支持 `更新当前价值` modal。
-- 资产估值更新生成非现金资产调整。
+- 首页双视图、资产/负债/净资产 drilldown、图表展示。
 
 `mobile/src/screens/RecordScreen.tsx`
 
 - 当前“管理”根页面。
-- 管理中心 modal 增加 `对账 / 资产盘点` 入口。
-- 入口暂时打开资产负债管理页；账户对账从账户详情页进入。
-- 管理中心 modal 的 `交易记录` 已进入只读交易记录中心。
+- 自然语言记账、手动高级填写和管理中心 modal。
+
+`mobile/src/screens/AccountManagementScreen.tsx`
+
+- 账户管理三层结构和账户对账入口。
+
+`mobile/src/screens/AssetsLiabilitiesScreen.tsx`
+
+- 资产和负债 CRUD，资产估值更新入口。
 
 `mobile/src/screens/TransactionRecordsScreen.tsx`
 
 - 只读交易记录中心。
 - 支持搜索、按月分组、账本式交易行和只读详情。
-- 顶部为紧凑搜索 / 筛选 toolbar；筛选按钮当前只显示占位提示。
-- 列表行只显示交易标题、金额、日期和现金状态；类型、分类、账户等详细信息保留在交易详情页。
-- 不实现编辑、删除、冲销、批量操作或导出交易记录。
 
 `mobile/src/storage/seedData.ts`
 
-- 当前示例数据为 5,000,000 资产、1,186,000 负债、3,814,000 净资产的高复杂度测试集。
+- 当前高复杂度示例账套。
 - 用户需要在“我的”页执行“恢复示例数据”才能加载最新示例数据。
 
-## 5. 当前 Git 状态与近期提交
-
-当前分支：`main`
-
-最近提交：
-
-- `059c660 style: compact transaction records ledger layout`
-- `f5d19de docs: refresh current project context snapshot`
-- `3193ae5 feat: add transaction records list`
-- `816c6e9 docs: refresh current project context snapshot`
-- `22dd155 feat: add manual reconciliation adjustments`
-- `f0b4f00 docs: refresh current project context snapshot`
-- `d06b76b feat: add receivable payable lifecycle rules`
-- `9a344e9 docs: refresh current project context snapshot`
-- `0cc13ad fix: harden accounting transaction rules`
-- `0e55eec docs: refresh current project context snapshot`
-- `89004d4 fix: treat credit card debt as liability`
-- `195998d docs: refresh current project context snapshot`
-
-继续开发前先运行：
-
-```powershell
-cd D:\imcfo
-git status
-```
-
-## 6. 待办事项与风险
+## 7. 待办事项与风险
 
 高优先级：
 
 - 给核心报表计算函数补最小自动化测试。
-- 给交易映射和对账规则补关键样例测试。
-- 梳理交易记录页是否进入 V0.1。
-- 后续完善账户余额与资产/负债明细的更完整双向同步规则。
+- 给交易映射、应收/应付、对账规则补关键样例测试。
+- 梳理交易记录编辑/删除/冲销是否进入 V0.1。
+- 完善账户余额与资产/负债明细的更完整双向同步规则。
 
 中优先级：
 
@@ -270,30 +217,16 @@ git status
 - 增加数据版本迁移机制。
 - 增加默认分类模板。
 - 首页净资产趋势后续接入真实历史资产负债快照。
-- 对账 / 资产盘点可做独立管理页，目前入口主要在账户详情和资产列表。
+- 对账 / 资产盘点可做独立管理页，目前主要入口在账户详情和资产列表。
 
 风险：
 
 - 当前主要依赖 `npm.cmd run typecheck` 保底，自动化测试不足。
 - 趋势图没有独立历史快照 schema，当前主要基于交易或当前值近似生成。
-- 对账规则已经避免随机 fallback，但如果资产/负债缺少明确关联，系统只会更新可确认的目标。
-- 账户对账中普通账户若关联多个资产，不会自动覆盖多个资产，需用户到资产明细中分别更新。
+- 对账规则已经避免随机 fallback，但如果资产/负债缺少明确关联，系统只会更新可确认目标。
+- 普通账户若关联多个资产，不会自动覆盖多个资产，用户需要到资产明细中分别更新。
 - 投资分红现金流当前按 V0.1 个人财务适配口径计入经营活动现金流，未来可按更严格准则扩展。
 - 信用卡退款/冲正当前作为安全负债调减处理，尚未实现费用冲减模型。
-
-## 7. 架构与数据流摘要
-
-数据流：
-
-用户操作屏幕 -> 调用 App/useAppData 回调 -> domain/accounting 生成安全状态更新 -> storage adapter 保存 -> App state 更新 -> Dashboard/Reports 基于最新数据重新计算并渲染。
-
-边界：
-
-- UI 层只展示和触发回调。
-- `useAppData` 管理应用状态和本地持久化入口。
-- storage adapter 负责 AsyncStorage。
-- domain/accounting 和 domain/reports 负责纯计算与映射，不读写存储。
-- 屏幕不得直接调用 AsyncStorage。
 
 ## 8. 本次验证结果
 
@@ -304,7 +237,7 @@ cd D:\imcfo\mobile
 npm.cmd run typecheck
 ```
 
-结果：通过。最近一次功能提交前已通过。
+结果：通过。
 
 已核对高复杂度示例账套：
 
@@ -318,13 +251,6 @@ npm.cmd run typecheck
 - 投资活动现金流：-64,000，匹配。
 - 筹资活动现金流：-69,200，匹配。
 - 现金净变化：-76,300，匹配。
-
-已模拟：
-
-- 自住房估值调增：只改目标资产，不改招商银行账户，交易为 `assetIncrease + nonCash`。
-- 招商银行利息到账：账户和一对一资产同步增加，交易为 `income + operating`。
-- 招商信用卡欠款调增：信用卡欠款和对应负债增加，交易为 `creditCardExpense + nonCash`。
-- 招商信用卡漏记还款：付款账户减少、信用卡欠款减少、负债减少，交易为 `creditCardRepayment + financing`。
 
 ## 9. 常用命令
 
