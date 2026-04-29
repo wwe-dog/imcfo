@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, G, Polyline, Text as SvgText } from "react-native-svg";
 import { theme } from "../../styles/theme";
@@ -14,7 +14,6 @@ interface DonutChartProps {
   detailMode?: boolean;
   emptyText: string;
   labelMinPercent?: number;
-  onChartPress?: () => void;
   showCalloutLabels?: boolean;
   showAmountInLabel?: boolean;
   size?: number;
@@ -166,14 +165,12 @@ export default function DonutChart({
   detailMode = false,
   emptyText,
   labelMinPercent,
-  onChartPress,
   showCalloutLabels = true,
   showAmountInLabel = false,
   size = 112,
   strokeWidth = 18,
 }: DonutChartProps) {
   const rotateValue = useRef(new Animated.Value(-90)).current;
-  const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
   const items = useMemo(() => normalizeData(data, detailMode), [data, detailMode]);
   const totalValue = items.reduce((sum, item) => sum + item.value, 0);
   const radius = (size - strokeWidth) / 2;
@@ -246,7 +243,6 @@ export default function DonutChart({
       <View style={[styles.chartStage, { height: chartHeight }]}>
         <Svg height={chartHeight} viewBox={`0 0 ${chartWidth} ${chartHeight}`} width="100%">
           {labelLayouts.map((item) => {
-            const isSelected = selectedLabel === item.label;
             const percentText = `${Math.round(((item.endRatio - item.startRatio) || 0) * 100)}%`;
             const labelText = `${item.label} ${percentText}`;
 
@@ -255,15 +251,15 @@ export default function DonutChart({
                 <Polyline
                   fill="none"
                   points={item.points}
-                  stroke={isSelected ? theme.colors.textPrimary : item.color}
+                  stroke={item.color}
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  strokeWidth={isSelected ? 1.8 : 1.2}
+                  strokeWidth={1.2}
                 />
                 <SvgText
-                  fill={isSelected ? theme.colors.textPrimary : theme.colors.textSecondary}
+                  fill={theme.colors.textSecondary}
                   fontSize={detailMode ? "11" : "10"}
-                  fontWeight={isSelected ? "800" : "700"}
+                  fontWeight="700"
                   textAnchor={item.isRightSide ? "end" : "start"}
                   x={item.labelX}
                   y={item.labelY - (showAmountInLabel ? 3 : 0)}
@@ -272,7 +268,7 @@ export default function DonutChart({
                 </SvgText>
                 {showAmountInLabel ? (
                   <SvgText
-                    fill={isSelected ? theme.colors.primaryDeep : theme.colors.textMuted}
+                    fill={theme.colors.textMuted}
                     fontSize="10"
                     fontWeight="700"
                     textAnchor={item.isRightSide ? "end" : "start"}
@@ -309,7 +305,6 @@ export default function DonutChart({
                 strokeWidth={strokeWidth}
               />
               {visibleItems.map((item) => {
-                const isSelected = selectedLabel === item.label;
                 const dashLength = (item.endRatio - item.startRatio) * circumference;
                 const dashOffset = -item.startRatio * circumference;
 
@@ -319,17 +314,12 @@ export default function DonutChart({
                     cx={center}
                     cy={center}
                     fill="transparent"
-                    onPress={() => {
-                      setSelectedLabel((current) => (current === item.label ? null : item.label));
-                      onChartPress?.();
-                    }}
                     r={radius}
                     stroke={item.color}
                     strokeDasharray={`${dashLength} ${circumference - dashLength}`}
                     strokeDashoffset={dashOffset}
                     strokeLinecap="round"
-                    strokeOpacity={selectedLabel && !isSelected ? 0.54 : 1}
-                    strokeWidth={isSelected ? strokeWidth + 4 : strokeWidth}
+                    strokeWidth={strokeWidth}
                   />
                 );
               })}
@@ -338,9 +328,6 @@ export default function DonutChart({
         </Animated.View>
       </View>
 
-      <View style={styles.tapHint}>
-        <Text style={styles.tapHintText}>点按扇区高亮</Text>
-      </View>
     </View>
   );
 }
@@ -364,16 +351,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: theme.spacing.xs,
     width: "100%",
-  },
-  tapHint: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  tapHintText: {
-    color: theme.colors.textMuted,
-    fontSize: 10,
-    fontWeight: "600",
   },
 });

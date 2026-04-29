@@ -893,7 +893,7 @@ function CompositionChartCard({ emptyText, items, label, onPress, primaryText }:
     <Pressable onPress={onPress} style={styles.chartCard}>
       <Text style={styles.sectionLabel}>{label}</Text>
       <Text style={styles.chartValue}>{primaryText}</Text>
-      <DonutChart data={items} emptyText={emptyText} onChartPress={onPress} size={92} strokeWidth={15} />
+      <DonutChart data={items} emptyText={emptyText} size={92} strokeWidth={15} />
     </Pressable>
   );
 }
