@@ -5,7 +5,7 @@
 更新时间：2026-04-29  
 当前主分支：`main`  
 当前开发模式：trunk-based development，直接在 `main` 上小步提交。  
-本次快照原因：完成账户余额/欠款与资产负债明细同步修复后，按上下文压缩恢复规则刷新。
+本次快照原因：完成信用卡债务会计处理修复后，按上下文压缩恢复规则刷新。
 
 ## 1. 项目定位与关键决策
 
@@ -92,8 +92,12 @@ V0.1 只服务普通自然人，核心闭环是：
 - 账户详情页锁定账户类型，只允许修改账户名称、余额/欠款、启用状态和备注/用途；余额/欠款变化会先弹确认。
 - 账户详情修改普通账户余额会同步已有 `asset.accountId === account.id` 的资产金额。
 - 账户详情修改信用卡当前欠款会同步已有 `liability.accountId === account.id` 的负债金额。
+- 信用卡账户的 `creditLimit` 只作为信息展示，不计入资产或负债。
+- 信用卡账户的 `currentDebt` 作为负债处理；信用卡账户 `balance` 不作为正资产使用。
 - 同步规则不会自动创建缺失资产/负债，避免隐式改变资产负债表结构。
 - 交易入账更新负债时优先使用 `transaction.relatedLiabilityId`，没有关联 ID 时才使用旧 fallback。
+- 信用卡消费会增加费用、增加信用卡欠款和对应负债，不减少现金，现金流为 `nonCash`。
+- 信用卡还款会减少付款账户现金、减少信用卡欠款和对应负债，不重复确认费用。
 - 记一笔账户选择只展示启用账户。
 - 资产负债管理支持资产和负债新增、编辑、删除。
 - 报表页支持资产负债表、现金流量表、利润表切换。
@@ -180,6 +184,9 @@ V0.1 只服务普通自然人，核心闭环是：
 - 负债类交易优先按 `relatedLiabilityId` 更新目标负债，避免误改第一条负债。
 - 保存账户时会同步已有 `accountId` 关联资产或信用卡负债。
 - 不会自动创建缺失资产/负债映射。
+- 信用卡账户保存时 `balance` 固定不作为资产余额使用，债务来源是 `currentDebt`。
+- 信用卡消费优先按 `relatedLiabilityId` 或信用卡账户关联负债增加负债。
+- 信用卡还款会同步减少信用卡账户 `currentDebt` 和关联负债，同时减少付款账户现金。
 
 `mobile/src/domain/accounting/naturalLanguageParser.ts`
 
@@ -221,6 +228,8 @@ V0.1 只服务普通自然人，核心闭环是：
 
 最近提交：
 
+- `89004d4 fix: treat credit card debt as liability`
+- `195998d docs: refresh current project context snapshot`
 - `9cc7714 fix: sync account balances with financial records`
 - `d377fb5 style: optimize management more modal`
 - `ce031c0 docs: refresh current project context snapshot`
@@ -265,6 +274,7 @@ git status
 - 账户保存同步只更新已存在的关联资产/负债；如果用户新增账户但没有创建对应资产/负债，系统不会自动生成资产/负债明细。
 - 没有 `relatedLiabilityId` 的旧交易仍保留 first-liability fallback，这是为了兼容旧数据，但仍存在误更新风险。
 - 融资融券账户当前为 `securities` 类型且带 `currentDebt`，账户保存同步负债只对信用卡欠款做明确处理；融资负债仍建议通过负债明细或交易规则维护。
+- 记一笔暂未实现完整双账户信用卡还款 UI；当前规则可通过 `counterAccountId` 或关联负债定位信用卡账户，没有显式选择时会回退到第一个信用卡账户。
 
 ## 7. 架构与数据流摘要
 
