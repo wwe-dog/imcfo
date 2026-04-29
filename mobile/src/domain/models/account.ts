@@ -1,9 +1,9 @@
 export type AccountType =
-  | "cash"
   | "bank"
   | "wechat"
   | "alipay"
-  | "investment"
+  | "securities"
+  | "fund"
   | "creditCard"
   | "other";
 
