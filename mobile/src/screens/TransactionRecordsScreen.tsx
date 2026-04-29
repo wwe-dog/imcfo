@@ -174,20 +174,25 @@ export default function TransactionRecordsScreen({
       <TopBar onBack={onBack} title="交易记录" />
 
       <View style={styles.toolbar}>
-        <Text style={styles.searchIcon}>⌕</Text>
-        <TextInput
-          onChangeText={setQuery}
-          placeholder="搜索交易、金额、备注"
-          placeholderTextColor={theme.colors.textMuted}
-          style={styles.searchInput}
-          value={query}
-        />
+        <View style={styles.searchBox}>
+          <Text style={styles.searchIcon}>⌕</Text>
+          <TextInput
+            onChangeText={setQuery}
+            placeholder="搜索交易、金额、备注"
+            placeholderTextColor={theme.colors.textMuted}
+            style={styles.searchInput}
+            value={query}
+          />
+        </View>
         <Pressable
           accessibilityLabel="筛选交易"
           onPress={() => Alert.alert("筛选交易", "筛选功能将在后续版本中完善。", [{ text: "知道了" }])}
           style={styles.filterButton}
         >
-          <Text style={styles.filterIcon}>筛</Text>
+          <View style={styles.funnelIcon}>
+            <View style={styles.funnelTop} />
+            <View style={styles.funnelStem} />
+          </View>
         </Pressable>
       </View>
 
@@ -345,21 +350,41 @@ const styles = StyleSheet.create({
   filterButton: {
     alignItems: "center",
     backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.border,
+    borderWidth: 1,
     borderRadius: theme.radius.pill,
-    height: 40,
+    height: 44,
     justifyContent: "center",
-    width: 40,
-  },
-  filterIcon: {
-    color: theme.colors.primaryDeep,
-    fontSize: 14,
-    fontWeight: "900",
+    width: 44,
   },
   headerRow: {
     alignItems: "center",
     flexDirection: "row",
     gap: theme.spacing.sm,
     justifyContent: "space-between",
+  },
+  funnelIcon: {
+    alignItems: "center",
+    height: 18,
+    justifyContent: "center",
+    width: 18,
+  },
+  funnelStem: {
+    backgroundColor: theme.colors.primaryDeep,
+    borderRadius: theme.radius.pill,
+    height: 7,
+    marginTop: -1,
+    width: 4,
+  },
+  funnelTop: {
+    borderLeftColor: "transparent",
+    borderLeftWidth: 7,
+    borderRightColor: "transparent",
+    borderRightWidth: 7,
+    borderTopColor: theme.colors.primaryDeep,
+    borderTopWidth: 9,
+    height: 0,
+    width: 0,
   },
   headerSpacer: {
     width: 58,
@@ -393,6 +418,19 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "800",
   },
+  searchBox: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    minHeight: 48,
+    paddingLeft: theme.spacing.md,
+    paddingRight: theme.spacing.sm,
+  },
   searchInput: {
     color: theme.colors.textPrimary,
     flex: 1,
@@ -406,15 +444,9 @@ const styles = StyleSheet.create({
   },
   toolbar: {
     alignItems: "center",
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
     flexDirection: "row",
     gap: theme.spacing.sm,
     minHeight: 48,
-    paddingLeft: theme.spacing.md,
-    paddingRight: 6,
   },
   transactionAmount: {
     fontSize: 16,
