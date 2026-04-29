@@ -30,6 +30,7 @@ interface CompositionItem {
 }
 
 interface DetailTableRow {
+  color?: string;
   key: string;
   label: string;
   percent: number;
@@ -54,7 +55,25 @@ const viewOptions: Array<{ key: DashboardView; label: string }> = [
 ];
 
 const periodOptions: PeriodLabel[] = ["周线", "月线", "季度线", "年线"];
-const chartColors = [theme.colors.primary, "#A8D6F4", theme.colors.warning, "#D1B5EA"];
+const chartColors = [
+  "#7C6CFF",
+  "#8DD7F7",
+  "#B88A00",
+  "#FF6B6B",
+  "#34D399",
+  "#F97316",
+  "#14B8A6",
+  "#E879F9",
+  "#6366F1",
+  "#A3E635",
+  "#F43F5E",
+  "#0EA5E9",
+  "#92400E",
+  "#64748B",
+  "#FACC15",
+];
+const MAX_CHART_ITEMS = 15;
+const OTHER_CHART_ITEM_COLOR = chartColors[MAX_CHART_ITEMS - 1];
 
 const assetCategoryLabels: Record<Asset["category"], string> = {
   bankDeposit: "银行卡",
@@ -272,51 +291,55 @@ const buildCompositionItems = <T extends { category: string }>(
     }))
     .sort((left, right) => right.value - left.value);
 
-  return sortedItems.map((item, index) => ({
+  return assignChartColors(sortedItems);
+};
+
+const assignChartColors = <T extends Omit<CompositionItem, "color">>(items: T[]): CompositionItem[] => {
+  const positiveItems = items.filter((item) => item.value > 0).sort((left, right) => right.value - left.value);
+  const visibleItems = positiveItems.length > MAX_CHART_ITEMS ? positiveItems.slice(0, MAX_CHART_ITEMS - 1) : positiveItems;
+  const overflowItems = positiveItems.slice(MAX_CHART_ITEMS - 1);
+  const normalizedItems =
+    overflowItems.length > 0
+      ? [
+          ...visibleItems,
+          {
+            key: "other-overflow",
+            label: "其他",
+            value: overflowItems.reduce((sum, item) => sum + item.value, 0),
+          },
+        ]
+      : visibleItems;
+
+  return normalizedItems.map((item, index) => ({
     ...item,
-    color: chartColors[index % chartColors.length],
+    color: index === MAX_CHART_ITEMS - 1 ? OTHER_CHART_ITEM_COLOR : chartColors[index],
   }));
 };
 
 const buildDetailRows = (items: CompositionItem[], totalValue: number): DetailTableRow[] =>
   items.map((item) => ({
+    color: item.color,
     key: item.key,
     label: item.label,
     percent: totalValue > 0 ? item.value / totalValue : 0,
     value: item.value,
   }));
 
-const buildAssetItemRows = (assets: Asset[], category: Asset["category"], categoryTotal: number): DetailTableRow[] =>
-  assets
-    .filter((asset) => asset.category === category && getAssetValue(asset) > 0)
-    .map((asset) => {
-      const value = getAssetValue(asset);
-      return {
-        key: asset.id,
-        label: asset.name || "未命名资产",
-        percent: categoryTotal > 0 ? value / categoryTotal : 0,
-        value,
-      };
-    })
-    .sort((left, right) => right.value - left.value);
-
-const buildLiabilityItemRows = (
-  liabilities: Liability[],
-  category: Liability["category"],
-  categoryTotal: number,
-): DetailTableRow[] =>
-  liabilities
-    .filter((liability) => liability.category === category && getLiabilityValue(liability) > 0)
-    .map((liability) => {
-      const value = getLiabilityValue(liability);
-      return {
-        key: liability.id,
-        label: liability.name || "未命名负债",
-        percent: categoryTotal > 0 ? value / categoryTotal : 0,
-        value,
-      };
-    })
-    .sort((left, right) => right.value - left.value);
+const buildRecordCompositionItems = <T,>(
+  records: T[],
+  getKey: (record: T) => string,
+  getLabel: (record: T) => string,
+  getValue: (record: T) => number,
+): CompositionItem[] =>
+  assignChartColors(
+    records
+      .map((record) => ({
+        key: getKey(record),
+        label: getLabel(record),
+        value: getValue(record),
+      }))
+      .filter((item) => item.value > 0),
+  );
 
 export default function DashboardScreen({ assets, liabilities, summary, transactions }: DashboardScreenProps) {
   const [selectedView, setSelectedView] = useState<DashboardView>("balance");
@@ -573,13 +596,13 @@ function AssetCategoryDetailScreen({ assets, category, onBack, totalAssets }: As
   const categoryName = assetCategoryLabels[category] ?? "其他资产";
   const categoryAssets = assets.filter((asset) => asset.category === category && getAssetValue(asset) > 0);
   const categoryTotal = categoryAssets.reduce((sum, asset) => sum + getAssetValue(asset), 0);
-  const itemComposition = categoryAssets.map((asset, index) => ({
-    color: chartColors[index % chartColors.length],
-    key: asset.id,
-    label: asset.name || "未命名资产",
-    value: getAssetValue(asset),
-  }));
-  const rows = buildAssetItemRows(assets, category, categoryTotal);
+  const itemComposition = buildRecordCompositionItems(
+    categoryAssets,
+    (asset) => asset.id,
+    (asset) => asset.name || "未命名资产",
+    getAssetValue,
+  );
+  const rows = buildDetailRows(itemComposition, categoryTotal);
 
   return (
     <View style={styles.detailStack}>
@@ -654,13 +677,13 @@ function LiabilityCategoryDetailScreen({
     (liability) => liability.category === category && getLiabilityValue(liability) > 0,
   );
   const categoryTotal = categoryLiabilities.reduce((sum, liability) => sum + getLiabilityValue(liability), 0);
-  const itemComposition = categoryLiabilities.map((liability, index) => ({
-    color: chartColors[index % chartColors.length],
-    key: liability.id,
-    label: liability.name || "未命名负债",
-    value: getLiabilityValue(liability),
-  }));
-  const rows = buildLiabilityItemRows(liabilities, category, categoryTotal);
+  const itemComposition = buildRecordCompositionItems(
+    categoryLiabilities,
+    (liability) => liability.id,
+    (liability) => liability.name || "未命名负债",
+    getLiabilityValue,
+  );
+  const rows = buildDetailRows(itemComposition, categoryTotal);
 
   return (
     <View style={styles.detailStack}>
@@ -736,6 +759,7 @@ function DetailChartCard({ emptyText, items, title }: DetailChartCardProps) {
         detailMode
         emptyText={emptyText}
         labelMinPercent={0.01}
+        showCalloutLabels
         showAmountInLabel
         size={140}
         strokeWidth={20}
@@ -772,9 +796,12 @@ function DetailTable({ description, emptyText, nameHeader, onRowPress, rows, tit
               onPress={onRowPress ? () => onRowPress(row) : undefined}
               style={styles.tableRow}
             >
-              <Text style={[styles.tableCellText, styles.tableNameColumn]} numberOfLines={1}>
-                {row.label}
-              </Text>
+              <View style={[styles.tableNameCell, styles.tableNameColumn]}>
+                {row.color ? <View style={[styles.tableColorDot, { backgroundColor: row.color }]} /> : null}
+                <Text style={styles.tableNameText} numberOfLines={1}>
+                  {row.label}
+                </Text>
+              </View>
               <Text style={styles.tableCellText}>{formatPercent(row.percent)}</Text>
               <Text style={[styles.tableCellTextStrong, styles.tableAmountColumn]}>
                 {formatCompactCurrency(row.value)}
@@ -966,6 +993,7 @@ const styles = StyleSheet.create({
   detailChartCard: {
     alignItems: "center",
     gap: theme.spacing.sm,
+    width: "100%",
   },
   detailHeader: {
     alignItems: "center",
@@ -1170,6 +1198,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "900",
   },
+  tableColorDot: {
+    borderRadius: 5,
+    height: 10,
+    width: 10,
+  },
   tableHeader: {
     borderBottomColor: theme.colors.border,
     borderBottomWidth: 1,
@@ -1184,6 +1217,18 @@ const styles = StyleSheet.create({
   },
   tableNameColumn: {
     flex: 1.4,
+  },
+  tableNameCell: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 7,
+    minWidth: 0,
+  },
+  tableNameText: {
+    color: theme.colors.textSecondary,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
   },
   tableRow: {
     alignItems: "center",

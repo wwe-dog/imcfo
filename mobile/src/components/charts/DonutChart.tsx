@@ -15,6 +15,7 @@ interface DonutChartProps {
   emptyText: string;
   labelMinPercent?: number;
   onChartPress?: () => void;
+  showCalloutLabels?: boolean;
   showAmountInLabel?: boolean;
   size?: number;
   strokeWidth?: number;
@@ -166,6 +167,7 @@ export default function DonutChart({
   emptyText,
   labelMinPercent,
   onChartPress,
+  showCalloutLabels = true,
   showAmountInLabel = false,
   size = 112,
   strokeWidth = 18,
@@ -209,8 +211,11 @@ export default function DonutChart({
   }, [items, totalValue]);
 
   const labelLayouts = useMemo(
-    () => getLabelLayouts(visibleItems, donutCenterX, donutCenterY, radius, chartWidth, chartHeight, calloutMinRatio),
-    [calloutMinRatio, chartHeight, chartWidth, donutCenterX, donutCenterY, radius, visibleItems],
+    () =>
+      showCalloutLabels
+        ? getLabelLayouts(visibleItems, donutCenterX, donutCenterY, radius, chartWidth, chartHeight, calloutMinRatio)
+        : [],
+    [calloutMinRatio, chartHeight, chartWidth, donutCenterX, donutCenterY, radius, showCalloutLabels, visibleItems],
   );
 
   const animatedRotation = rotateValue.interpolate({
@@ -358,6 +363,7 @@ const styles = StyleSheet.create({
   root: {
     alignItems: "center",
     gap: theme.spacing.xs,
+    width: "100%",
   },
   tapHint: {
     backgroundColor: theme.colors.surface,
