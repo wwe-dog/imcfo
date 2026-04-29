@@ -5,7 +5,7 @@
 更新时间：2026-04-29  
 当前主分支：`main`  
 当前开发模式：trunk-based development，直接在 `main` 上小步提交。  
-本次快照原因：完成交易记录筛选弹层与日历日期范围筛选后刷新上下文。
+本次快照原因：完成交易记录月份分组折叠后刷新上下文。
 
 ## 1. 项目定位与关键决策
 
@@ -86,7 +86,7 @@ V0.1 只服务普通自然人，核心闭环是：
 - 报表页支持资产负债表、现金流量表、利润表切换。
 - 报表页支持简易版 / 专业版切换。
 - 我的页支持本地数据导出、导入、恢复示例数据、清空本地数据、账户管理入口和交易记录入口。
-- 交易记录 Phase 1 已完成：只读查看交易列表、搜索、按月分组、账本式行布局、交易详情和筛选弹层。
+- 交易记录 Phase 1 已完成：只读查看交易列表、搜索、按月分组、月份折叠、账本式行布局、交易详情和筛选弹层。
 - 对账 / 资产盘点已支持账户余额和资产估值的安全调整。
 
 已完成的账务安全规则：
@@ -104,13 +104,14 @@ V0.1 只服务普通自然人，核心闭环是：
 
 最新功能提交：
 
+- `b8318a5 feat: add collapsible transaction month sections`
 - `90cdc59 feat: add transaction calendar filters`
 - `cef48c7 style: soften back button appearance`
 - `a6d0533 style: add arco inspired mobile icon system`
 - `51764c0 feat: add read-only transaction detail page`
 - `bab72b8 style: apply arco inspired mobile visual polish`
 
-本次只做交易记录筛选 UI 与本地列表过滤，未修改账务公式、交易规则、现金流规则、存储 schema、种子数据或报表计算。
+本次只做交易记录月份分组折叠 UI，未修改账务公式、交易规则、现金流规则、存储 schema、种子数据或报表计算。
 
 读取的 Arco 本地参考：
 
@@ -121,6 +122,8 @@ V0.1 只服务普通自然人，核心闭环是：
 
 本次最新交易记录筛选覆盖：
 
+- `mobile/src/screens/TransactionRecordsScreen.tsx`：月份分组标题改为全宽浅灰可点击行，右侧用展开/折叠符号提示状态。
+- `mobile/src/screens/TransactionRecordsScreen.tsx`：新增 `collapsedMonths` 本地状态，每个月份可独立折叠；新出现月份默认展开，搜索/筛选后的月份分组继续正常更新。
 - `mobile/src/screens/TransactionRecordsScreen.tsx`：漏斗按钮从原生 Alert 占位改为自定义筛选面板，支持 backdrop 和 Android back 关闭。
 - `mobile/src/screens/TransactionRecordsScreen.tsx`：新增时间筛选（全部、本月、近7天、自定义）、自定义月历范围选择、账户类别筛选和资金方向筛选。
 - `mobile/src/screens/TransactionRecordsScreen.tsx`：自定义日历支持先选起始日、再选结束日、反向选择自动重排、同日二次点击清空、完整范围后再次点击重开新范围。
@@ -218,7 +221,7 @@ V0.1 只服务普通自然人，核心闭环是：
 `mobile/src/screens/TransactionRecordsScreen.tsx`
 
 - 只读交易记录中心。
-- 支持搜索、筛选弹层、自定义日期范围、账户类别筛选、资金方向筛选、按月分组、账本式交易行和只读详情。
+- 支持搜索、筛选弹层、自定义日期范围、账户类别筛选、资金方向筛选、按月分组、月份折叠、账本式交易行和只读详情。
 
 `mobile/src/storage/seedData.ts`
 
