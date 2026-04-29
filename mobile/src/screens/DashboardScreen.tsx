@@ -731,7 +731,15 @@ function DetailChartCard({ emptyText, items, title }: DetailChartCardProps) {
   return (
     <View style={[sharedStyles.card, styles.detailChartCard]}>
       <Text style={styles.sectionLabel}>{title}</Text>
-      <DonutChart data={items} emptyText={emptyText} size={128} strokeWidth={18} />
+      <DonutChart
+        data={items}
+        detailMode
+        emptyText={emptyText}
+        labelMinPercent={0.01}
+        showAmountInLabel
+        size={140}
+        strokeWidth={20}
+      />
     </View>
   );
 }
