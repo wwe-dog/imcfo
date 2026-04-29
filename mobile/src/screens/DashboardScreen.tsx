@@ -19,6 +19,7 @@ type DashboardRoute =
   | { name: "dashboard" }
   | { name: "assetCompositionDetail" }
   | { name: "liabilityCompositionDetail" }
+  | { name: "netWorthDetail" }
   | { category: Asset["category"]; name: "assetCategoryDetail" }
   | { category: Liability["category"]; name: "liabilityCategoryDetail" };
 
@@ -55,6 +56,7 @@ const viewOptions: Array<{ key: DashboardView; label: string }> = [
 ];
 
 const periodOptions: PeriodLabel[] = ["周线", "月线", "季度线", "年线"];
+const netWorthPeriodOptions: PeriodLabel[] = ["月线", "季度线", "年线"];
 const chartColors = [
   "#7C6CFF",
   "#8DD7F7",
@@ -382,6 +384,16 @@ export default function DashboardScreen({ assets, liabilities, summary, transact
     );
   }
 
+  if (route.name === "netWorthDetail") {
+    return (
+      <NetWorthDetailScreen
+        onBack={() => setRoute({ name: "dashboard" })}
+        summary={summary}
+        transactions={transactions}
+      />
+    );
+  }
+
   if (route.name === "assetCategoryDetail") {
     return (
       <AssetCategoryDetailScreen
@@ -427,6 +439,7 @@ export default function DashboardScreen({ assets, liabilities, summary, transact
           liabilities={liabilities}
           onOpenAssetDetail={() => setRoute({ name: "assetCompositionDetail" })}
           onOpenLiabilityDetail={() => setRoute({ name: "liabilityCompositionDetail" })}
+          onOpenNetWorthDetail={() => setRoute({ name: "netWorthDetail" })}
           periodLabel={periodLabel}
           summary={summary}
           transactions={transactions}
@@ -489,6 +502,7 @@ export default function DashboardScreen({ assets, liabilities, summary, transact
 interface BalanceStructureCardProps extends DashboardScreenProps {
   onOpenAssetDetail: () => void;
   onOpenLiabilityDetail: () => void;
+  onOpenNetWorthDetail: () => void;
   periodLabel: PeriodLabel;
 }
 
@@ -497,6 +511,7 @@ function BalanceStructureCard({
   liabilities,
   onOpenAssetDetail,
   onOpenLiabilityDetail,
+  onOpenNetWorthDetail,
   periodLabel,
   summary,
   transactions,
@@ -520,7 +535,12 @@ function BalanceStructureCard({
           tone="muted"
           value={formatCompactCurrency(summary.totalLiabilities)}
         />
-        <MetricPill label="净资产" tone="blue" value={formatCompactCurrency(summary.ownerEquity)} />
+        <MetricPill
+          label="净资产"
+          onPress={onOpenNetWorthDetail}
+          tone="blue"
+          value={formatCompactCurrency(summary.ownerEquity)}
+        />
       </View>
 
       <View style={styles.chartGrid}>
@@ -702,6 +722,115 @@ function LiabilityCategoryDetailScreen({
         title={`${categoryName}详情`}
         valueHeader="金额"
       />
+    </View>
+  );
+}
+
+interface NetWorthDetailScreenProps {
+  onBack: () => void;
+  summary: ReportSummary;
+  transactions: Transaction[];
+}
+
+function NetWorthDetailScreen({ onBack, summary, transactions }: NetWorthDetailScreenProps) {
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodLabel>("月线");
+  const [isPeriodSelectorVisible, setIsPeriodSelectorVisible] = useState(false);
+  const trendPoints = buildEquityTrend(transactions, selectedPeriod, summary.ownerEquity);
+  const endingNetWorth = summary.ownerEquity;
+  const currentNetInflow = summary.cashNetChange;
+  // V0.1 has no persisted historical net worth snapshot yet, so beginning net worth is approximated from current cash net change.
+  const beginningNetWorth = endingNetWorth - currentNetInflow;
+  const changeRows = [
+    { label: "期初净资产", value: beginningNetWorth },
+    { label: "本期净流入", value: currentNetInflow },
+    { label: "资产调整", value: 0 },
+    { label: "负债变化", value: 0 },
+    { label: "期末净资产", value: endingNetWorth },
+  ];
+
+  const handleClosePeriodSelector = () => {
+    setIsPeriodSelectorVisible(false);
+  };
+
+  const handleSelectPeriod = (period: PeriodLabel) => {
+    setSelectedPeriod(period);
+    setIsPeriodSelectorVisible(false);
+  };
+
+  return (
+    <View style={styles.detailStack}>
+      <DetailHeader onBack={onBack} rightText="截至今日" title="净资产详情" />
+
+      <View style={styles.netWorthPill}>
+        <Text style={styles.netWorthPillLabel}>净资产</Text>
+        <Text style={styles.netWorthPillValue}>{formatCompactCurrency(endingNetWorth)}</Text>
+      </View>
+
+      <View style={[sharedStyles.card, styles.netWorthTrendCard]}>
+        <View style={styles.trendHeader}>
+          <Text style={styles.sectionLabel}>净资产趋势</Text>
+          <Pressable onPress={() => setIsPeriodSelectorVisible(true)} style={styles.periodButton}>
+            <Text style={styles.periodButtonText}>{selectedPeriod}</Text>
+            <Text style={styles.periodIcon}>日历</Text>
+          </Pressable>
+        </View>
+        <LineChart emptyText="暂无净资产趋势数据" points={trendPoints} />
+      </View>
+
+      <View style={[sharedStyles.card, styles.changeCard]}>
+        <Text style={styles.sectionLabel}>本期变化</Text>
+        <View style={styles.changeRowList}>
+          {changeRows.map((row) => (
+            <View key={row.label} style={styles.changeRow}>
+              <Text style={styles.changeLabel}>{row.label}</Text>
+              <Text style={styles.changeValue}>{formatCompactCurrency(row.value)}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {isPeriodSelectorVisible ? (
+        <Modal
+          animationType="fade"
+          onRequestClose={handleClosePeriodSelector}
+          transparent
+          visible={isPeriodSelectorVisible}
+        >
+          <View style={styles.periodModalRoot}>
+            <Pressable
+              accessibilityLabel="关闭净资产趋势周期选择器"
+              onPress={handleClosePeriodSelector}
+              style={styles.periodModalBackdrop}
+            />
+            <View style={[sharedStyles.card, styles.periodModalCard]}>
+              <View style={styles.periodModalHeader}>
+                <Text style={styles.periodModalTitle}>选择净资产趋势周期</Text>
+                <Text style={styles.periodModalSubtitle}>趋势会按所选周期重新展示。</Text>
+              </View>
+
+              <View style={styles.periodOptionList}>
+                {netWorthPeriodOptions.map((period) => {
+                  const isSelected = selectedPeriod === period;
+
+                  return (
+                    <Pressable
+                      key={period}
+                      onPress={() => handleSelectPeriod(period)}
+                      style={[styles.periodOptionButton, isSelected && styles.periodOptionButtonActive]}
+                    >
+                      <Text style={[styles.periodOptionText, isSelected && styles.periodOptionTextActive]}>{period}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <Pressable onPress={handleClosePeriodSelector} style={sharedStyles.secondaryButton}>
+                <Text style={sharedStyles.secondaryButtonText}>取消</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+      ) : null}
     </View>
   );
 }
@@ -975,6 +1104,31 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: -0.3,
   },
+  changeCard: {
+    gap: theme.spacing.sm,
+  },
+  changeLabel: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  changeRow: {
+    alignItems: "center",
+    borderBottomColor: theme.colors.border,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 42,
+    paddingVertical: 8,
+  },
+  changeRowList: {
+    gap: 2,
+  },
+  changeValue: {
+    color: theme.colors.textPrimary,
+    fontSize: 14,
+    fontWeight: "900",
+  },
   dataTag: {
     backgroundColor: theme.colors.successSoft,
     borderRadius: theme.radius.pill,
@@ -1095,6 +1249,32 @@ const styles = StyleSheet.create({
   },
   metricValueBlue: {
     color: "#17384F",
+  },
+  netWorthPill: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "#EAF6FF",
+    borderColor: "#B7DDF8",
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  netWorthPillLabel: {
+    color: "#375A6F",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  netWorthPillValue: {
+    color: "#17384F",
+    fontSize: 15,
+    fontWeight: "900",
+    letterSpacing: -0.2,
+  },
+  netWorthTrendCard: {
+    gap: theme.spacing.sm,
   },
   periodButton: {
     alignItems: "center",
