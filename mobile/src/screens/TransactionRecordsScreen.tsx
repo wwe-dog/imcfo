@@ -438,6 +438,7 @@ export default function TransactionRecordsScreen({
   const [isFilterVisible, setIsFilterVisible] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(() => createDefaultFilters(transactions));
   const [draftFilters, setDraftFilters] = useState<FilterState>(() => createDefaultFilters(transactions));
+  const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
 
   const filteredGroups = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -476,6 +477,13 @@ export default function TransactionRecordsScreen({
   const openFilterPanel = () => {
     setDraftFilters(appliedFilters);
     setIsFilterVisible(true);
+  };
+
+  const toggleMonthCollapse = (month: string) => {
+    setCollapsedMonths((current) => ({
+      ...current,
+      [month]: !current[month],
+    }));
   };
 
   return (
@@ -519,14 +527,20 @@ export default function TransactionRecordsScreen({
 
       {filteredGroups.map((group) => (
         <View key={group.month} style={styles.monthGroup}>
-          <Text style={styles.monthTitle}>{group.month}</Text>
-          {group.items.map((transaction) => (
-            <TransactionRow
-              key={transaction.id}
-              onPress={() => setSelectedTransaction(transaction)}
-              transaction={transaction}
-            />
-          ))}
+          <MonthHeader
+            isCollapsed={Boolean(collapsedMonths[group.month])}
+            month={group.month}
+            onPress={() => toggleMonthCollapse(group.month)}
+          />
+          {collapsedMonths[group.month]
+            ? null
+            : group.items.map((transaction) => (
+                <TransactionRow
+                  key={transaction.id}
+                  onPress={() => setSelectedTransaction(transaction)}
+                  transaction={transaction}
+                />
+              ))}
         </View>
       ))}
 
@@ -637,6 +651,27 @@ function TransactionRow({
         </Text>
       </View>
       <Text style={[styles.transactionAmount, styles[`amount_${tone}`]]}>{formatSignedAmount(transaction)}</Text>
+    </Pressable>
+  );
+}
+
+function MonthHeader({
+  isCollapsed,
+  month,
+  onPress,
+}: {
+  isCollapsed: boolean;
+  month: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={`${month}${isCollapsed ? "已折叠" : "已展开"}`}
+      onPress={onPress}
+      style={styles.monthHeaderRow}
+    >
+      <Text style={styles.monthTitle}>{month}</Text>
+      <Text style={styles.monthChevron}>{isCollapsed ? "›" : "˅"}</Text>
     </Pressable>
   );
 }
@@ -1187,13 +1222,31 @@ const styles = StyleSheet.create({
     width: 58,
   },
   monthGroup: {
-    gap: 4,
+    gap: 0,
+  },
+  monthHeaderRow: {
+    alignItems: "center",
+    backgroundColor: "#F3F4F6",
+    borderBottomColor: theme.colors.divider,
+    borderBottomWidth: 1,
+    borderTopColor: theme.colors.divider,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 38,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 8,
   },
   monthTitle: {
     color: theme.colors.textSecondary,
     fontSize: 14,
     fontWeight: "900",
-    paddingHorizontal: theme.spacing.md,
+  },
+  monthChevron: {
+    color: theme.colors.textMuted,
+    fontSize: 20,
+    fontWeight: "900",
+    lineHeight: 22,
   },
   pageTitle: {
     color: theme.colors.textPrimary,
