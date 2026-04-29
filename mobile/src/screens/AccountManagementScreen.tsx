@@ -30,7 +30,7 @@ interface AccountFormState {
 type AccountRoute =
   | { name: "overview" }
   | { name: "categoryDetail"; type: AccountType }
-  | { name: "form"; type?: AccountType; account?: Account; returnTo?: AccountType };
+  | { name: "form"; type?: AccountType; returnTo?: AccountType };
 
 interface AccountCategoryMeta {
   type: AccountType;
@@ -148,6 +148,11 @@ export default function AccountManagementScreen({
   const enabledAssetBalance = getEnabledAssetBalance(accounts);
   const enabledCreditCardDebt = getEnabledCreditCardDebt(accounts);
 
+  const openCategoryDetail = (type: AccountType) => {
+    setForm(emptyForm(type));
+    setRoute({ name: "categoryDetail", type });
+  };
+
   const openCreateForm = (type?: AccountType, returnTo?: AccountType) => {
     setForm(emptyForm(type));
     setRoute({ name: "form", returnTo, type });
@@ -155,7 +160,7 @@ export default function AccountManagementScreen({
 
   const openEditForm = (account: Account, returnTo: AccountType) => {
     setForm(buildFormFromAccount(account));
-    setRoute({ account, name: "form", returnTo, type: normalizeAccountType(account.type) });
+    setRoute({ name: "form", returnTo, type: normalizeAccountType(account.type) });
   };
 
   const updateForm = (patch: Partial<AccountFormState>) => {
@@ -174,7 +179,7 @@ export default function AccountManagementScreen({
     }
 
     if (route.returnTo) {
-      setRoute({ name: "categoryDetail", type: route.returnTo });
+      openCategoryDetail(route.returnTo);
       return;
     }
 
@@ -248,7 +253,7 @@ export default function AccountManagementScreen({
     try {
       await onSaveAccount(input);
       Alert.alert(input.id ? "账户已更新" : "账户已新增", "账户管理和记一笔账户选择已同步刷新。");
-      setRoute({ name: "categoryDetail", type: input.type });
+      openCategoryDetail(input.type);
     } catch {
       Alert.alert("保存失败", "无法保存这个账户。");
     } finally {
@@ -364,7 +369,7 @@ export default function AccountManagementScreen({
           return (
             <Pressable
               key={category.type}
-              onPress={() => setRoute({ name: "categoryDetail", type: category.type })}
+              onPress={() => openCategoryDetail(category.type)}
               style={styles.categoryRow}
             >
               <View style={styles.categoryMain}>
