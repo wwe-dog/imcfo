@@ -42,6 +42,19 @@ export interface LiabilityInput {
   note?: string;
 }
 
+export interface AccountInput {
+  id?: string;
+  name: string;
+  type: Account["type"];
+  balance: number;
+  isEnabled: boolean;
+  note?: string;
+  creditLimit?: number;
+  currentDebt?: number;
+  billDay?: number;
+  repaymentDay?: number;
+}
+
 export const transactionRules: TransactionRule[] = [
   {
     type: "income",
@@ -150,6 +163,19 @@ const updateAccountBalance = (accounts: Account[], accountId: string, delta: num
       : account,
   );
 
+const updateCreditCardDebt = (accounts: Account[], accountId: string, delta: number): Account[] =>
+  accounts.map((account) => {
+    if (account.id !== accountId || account.type !== "creditCard") return account;
+
+    const currentDebt = Math.max(0, (account.currentDebt ?? Math.max(0, -account.balance)) + delta);
+    return {
+      ...account,
+      balance: -currentDebt,
+      currentDebt,
+      updatedAt: new Date().toISOString(),
+    };
+  });
+
 const updateAssetByAccount = (assets: Asset[], accountId: string, delta: number): Asset[] =>
   assets.map((asset) =>
     asset.accountId === accountId
@@ -227,6 +253,7 @@ export const applyTransactionToFinancialState = <T extends FinancialState>(
       liabilities = updateFirstLiability(liabilities, -transaction.amount);
       break;
     case "creditCardExpense":
+      accounts = updateCreditCardDebt(accounts, transaction.accountId, transaction.amount);
       liabilities = updateFirstLiability(liabilities, transaction.amount);
       break;
     case "transfer":
@@ -277,6 +304,62 @@ export const upsertAssetInFinancialState = <T extends FinancialState>(
 export const deleteAssetFromFinancialState = <T extends FinancialState>(state: T, assetId: string): T => ({
   ...state,
   assets: state.assets.filter((asset) => asset.id !== assetId),
+});
+
+export const upsertAccountInFinancialState = <T extends FinancialState>(
+  state: T,
+  input: AccountInput,
+): T => {
+  const timestamp = new Date().toISOString();
+  const existingAccount = input.id ? state.accounts.find((account) => account.id === input.id) : undefined;
+  const normalizedDebt =
+    input.type === "creditCard"
+      ? Math.max(0, input.currentDebt ?? Math.max(0, -input.balance))
+      : undefined;
+  const account: Account = {
+    id: input.id ?? `account-${Date.now()}`,
+    name: input.name.trim(),
+    type: input.type,
+    balance: input.type === "creditCard" && normalizedDebt !== undefined ? -normalizedDebt : input.balance,
+    currency: existingAccount?.currency ?? "CNY",
+    isEnabled: input.isEnabled,
+    isActive: input.isEnabled,
+    note: input.note?.trim() || undefined,
+    creditLimit: input.type === "creditCard" ? input.creditLimit : undefined,
+    currentDebt: input.type === "creditCard" ? normalizedDebt : undefined,
+    billDay: input.type === "creditCard" ? input.billDay : undefined,
+    repaymentDay: input.type === "creditCard" ? input.repaymentDay : undefined,
+    createdAt: existingAccount?.createdAt ?? timestamp,
+    updatedAt: timestamp,
+  };
+
+  const accounts = existingAccount
+    ? state.accounts.map((currentAccount) => (currentAccount.id === account.id ? account : currentAccount))
+    : [account, ...state.accounts];
+
+  return {
+    ...state,
+    accounts,
+  };
+};
+
+export const disableAccountInFinancialState = <T extends FinancialState>(state: T, accountId: string): T => ({
+  ...state,
+  accounts: state.accounts.map((account) =>
+    account.id === accountId
+      ? {
+          ...account,
+          isActive: false,
+          isEnabled: false,
+          updatedAt: new Date().toISOString(),
+        }
+      : account,
+  ),
+});
+
+export const deleteAccountFromFinancialState = <T extends FinancialState>(state: T, accountId: string): T => ({
+  ...state,
+  accounts: state.accounts.filter((account) => account.id !== accountId),
 });
 
 export const upsertLiabilityInFinancialState = <T extends FinancialState>(

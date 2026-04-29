@@ -69,6 +69,8 @@ const createEmptyLiabilityForm = (): LiabilityFormState => ({
   note: "",
 });
 
+const isAccountEnabled = (account: Account): boolean => account.isEnabled ?? account.isActive ?? true;
+
 export default function AssetsLiabilitiesScreen({
   accounts,
   assets,
@@ -84,7 +86,7 @@ export default function AssetsLiabilitiesScreen({
   const [isSavingAsset, setIsSavingAsset] = useState(false);
   const [isSavingLiability, setIsSavingLiability] = useState(false);
 
-  const activeAccounts = useMemo(() => accounts.filter((account) => account.isActive), [accounts]);
+  const activeAccounts = useMemo(() => accounts.filter(isAccountEnabled), [accounts]);
 
   const resetAssetForm = () => setAssetForm(createEmptyAssetForm());
   const resetLiabilityForm = () => setLiabilityForm(createEmptyLiabilityForm());

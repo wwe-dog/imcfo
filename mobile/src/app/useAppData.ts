@@ -3,10 +3,14 @@ import { buildDashboardSummary } from "../domain/accounting/calculations";
 import {
   applyTransactionToFinancialState,
   createTransactionFromInput,
+  deleteAccountFromFinancialState,
   deleteAssetFromFinancialState,
   deleteLiabilityFromFinancialState,
+  disableAccountInFinancialState,
+  upsertAccountInFinancialState,
   upsertAssetInFinancialState,
   upsertLiabilityInFinancialState,
+  type AccountInput,
   type AssetInput,
   type LiabilityInput,
   type TransactionInput,
@@ -26,6 +30,9 @@ interface UseAppDataResult {
   isSaving: boolean;
   reloadData: () => Promise<void>;
   saveTransaction: (input: TransactionInput) => Promise<void>;
+  saveAccount: (input: AccountInput) => Promise<AppData>;
+  disableAccount: (accountId: string) => Promise<AppData>;
+  deleteAccount: (accountId: string) => Promise<AppData>;
   saveAsset: (input: AssetInput) => Promise<AppData>;
   deleteAsset: (assetId: string) => Promise<AppData>;
   saveLiability: (input: LiabilityInput) => Promise<AppData>;
@@ -106,6 +113,21 @@ export function useAppData(storage: StorageAdapter = asyncStorageAdapter): UseAp
 
   const saveAsset = useCallback(
     async (input: AssetInput) => replaceData((currentData) => upsertAssetInFinancialState(currentData, input)),
+    [replaceData],
+  );
+
+  const saveAccount = useCallback(
+    async (input: AccountInput) => replaceData((currentData) => upsertAccountInFinancialState(currentData, input)),
+    [replaceData],
+  );
+
+  const disableAccount = useCallback(
+    async (accountId: string) => replaceData((currentData) => disableAccountInFinancialState(currentData, accountId)),
+    [replaceData],
+  );
+
+  const deleteAccount = useCallback(
+    async (accountId: string) => replaceData((currentData) => deleteAccountFromFinancialState(currentData, accountId)),
     [replaceData],
   );
 
@@ -202,6 +224,9 @@ export function useAppData(storage: StorageAdapter = asyncStorageAdapter): UseAp
     isSaving: status === "saving",
     reloadData: loadFromStorage,
     saveTransaction,
+    saveAccount,
+    disableAccount,
+    deleteAccount,
     saveAsset,
     deleteAsset,
     saveLiability,

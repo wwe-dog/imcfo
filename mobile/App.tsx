@@ -12,10 +12,12 @@ import {
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppData } from "./src/app/useAppData";
 import type {
+  AccountInput,
   AssetInput,
   LiabilityInput,
   TransactionInput,
 } from "./src/domain/accounting/transactionRules";
+import AccountManagementScreen from "./src/screens/AccountManagementScreen";
 import AssetsLiabilitiesScreen from "./src/screens/AssetsLiabilitiesScreen";
 import DashboardScreen from "./src/screens/DashboardScreen";
 import RecordScreen from "./src/screens/RecordScreen";
@@ -23,7 +25,7 @@ import ReportsScreen from "./src/screens/ReportsScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import { theme } from "./src/styles/theme";
 
-type ScreenKey = "dashboard" | "record" | "assets" | "reports" | "settings";
+type ScreenKey = "dashboard" | "record" | "assets" | "accounts" | "reports" | "settings";
 
 const tabs: Array<{ key: Exclude<ScreenKey, "assets">; label: string }> = [
   { key: "dashboard", label: "首页" },
@@ -49,6 +51,9 @@ function AppShell() {
     errorMessage,
     isLoading,
     saveTransaction,
+    saveAccount,
+    disableAccount,
+    deleteAccount,
     saveAsset,
     deleteAsset,
     saveLiability,
@@ -88,6 +93,34 @@ function AppShell() {
       await saveTransaction(input);
     } catch {
       throw new Error("无法保存这笔记录。");
+    }
+  };
+
+  const handleSaveAccount = async (input: AccountInput) => {
+    try {
+      await saveAccount(input);
+    } catch {
+      throw new Error("无法保存这个账户。");
+    }
+  };
+
+  const handleDisableAccount = async (accountId: string) => {
+    try {
+      await disableAccount(accountId);
+      Alert.alert("账户已停用", "该账户不会再出现在日常记账账户选择中。");
+    } catch {
+      Alert.alert("停用失败", "无法停用这个账户。");
+      throw new Error("无法停用这个账户。");
+    }
+  };
+
+  const handleDeleteAccount = async (accountId: string) => {
+    try {
+      await deleteAccount(accountId);
+      Alert.alert("账户已删除", "账户列表已更新。");
+    } catch {
+      Alert.alert("删除失败", "无法删除这个账户。");
+      throw new Error("无法删除这个账户。");
     }
   };
 
@@ -161,9 +194,21 @@ function AppShell() {
         return (
           <RecordScreen
             accounts={data.accounts}
+            onOpenAccounts={() => setActiveScreen("accounts")}
             onOpenAssets={() => setActiveScreen("assets")}
             onOpenReports={() => setActiveScreen("reports")}
             onSave={handleSaveTransaction}
+          />
+        );
+      case "accounts":
+        return (
+          <AccountManagementScreen
+            accounts={data.accounts}
+            transactions={data.transactions}
+            onBack={() => setActiveScreen("record")}
+            onDeleteAccount={handleDeleteAccount}
+            onDisableAccount={handleDisableAccount}
+            onSaveAccount={handleSaveAccount}
           />
         );
       case "assets":
@@ -192,6 +237,7 @@ function AppShell() {
         return (
           <SettingsScreen
             appVersion={data.version}
+            onOpenAccounts={() => setActiveScreen("accounts")}
             onClear={handleClear}
             onExport={handleExport}
             onImport={handleImport}

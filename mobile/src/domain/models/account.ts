@@ -5,7 +5,6 @@ export type AccountType =
   | "alipay"
   | "investment"
   | "creditCard"
-  | "loan"
   | "other";
 
 export interface Account {
@@ -14,7 +13,13 @@ export interface Account {
   type: AccountType;
   balance: number;
   currency: string;
-  isActive: boolean;
+  isEnabled: boolean;
+  isActive?: boolean;
+  note?: string;
+  creditLimit?: number;
+  currentDebt?: number;
+  billDay?: number;
+  repaymentDay?: number;
   createdAt: string;
   updatedAt: string;
 }

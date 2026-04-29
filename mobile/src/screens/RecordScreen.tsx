@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   parseNaturalLanguageTransaction,
@@ -13,6 +13,7 @@ import { sharedStyles, theme } from "../styles/theme";
 interface RecordScreenProps {
   accounts: Account[];
   onSave: (input: TransactionInput) => Promise<void>;
+  onOpenAccounts: () => void;
   onOpenReports: () => void;
   onOpenAssets: () => void;
 }
@@ -62,9 +63,12 @@ const formatAmount = (value: string): string => {
   return `${amount} 元`;
 };
 
+const isAccountEnabled = (account: Account): boolean => account.isEnabled ?? account.isActive ?? true;
+
 export default function RecordScreen({
   accounts,
   onSave,
+  onOpenAccounts,
   onOpenReports,
   onOpenAssets,
 }: RecordScreenProps) {
@@ -83,7 +87,7 @@ export default function RecordScreen({
 
   const selectedOption = findOption(type);
   const selectedMeta = transactionTypeMeta[type];
-  const activeAccounts = useMemo(() => accounts.filter((account) => account.isActive), [accounts]);
+  const activeAccounts = useMemo(() => accounts.filter(isAccountEnabled), [accounts]);
   const selectedAccount = activeAccounts.find((account) => account.id === accountId);
 
   const pickAccountId = (nextType: NaturalLanguageTransactionType): string => {
@@ -98,6 +102,17 @@ export default function RecordScreen({
     return cashAccount?.id ?? currentAccount?.id ?? activeAccounts[0]?.id ?? "";
   };
 
+  useEffect(() => {
+    if (activeAccounts.length === 0) {
+      setAccountId("");
+      return;
+    }
+
+    if (!activeAccounts.some((account) => account.id === accountId)) {
+      setAccountId(pickAccountId(type));
+    }
+  }, [accountId, activeAccounts, type]);
+
   const clearEntryFields = () => {
     setAmount("");
     setNote("");
@@ -108,7 +123,7 @@ export default function RecordScreen({
 
   const openMoreMenu = () => {
     Alert.alert("更多", "请选择要进入的管理页。", [
-      { text: "账户管理", onPress: () => Alert.alert("提示", "该功能将在后续版本中完善。") },
+      { text: "账户管理", onPress: onOpenAccounts },
       { text: "资产负债管理", onPress: onOpenAssets },
       { text: "交易记录", onPress: () => Alert.alert("提示", "该功能将在后续版本中完善。") },
       { text: "取消", style: "cancel" },
@@ -231,7 +246,9 @@ export default function RecordScreen({
   };
 
   const handleManageAssets = () => {
-    Alert.alert("提示", "账户管理功能将在后续版本中完善。你也可以先使用资产负债管理。");
+    setIsModalVisible(false);
+    clearEntryFields();
+    onOpenAccounts();
   };
 
   return (
@@ -358,7 +375,7 @@ export default function RecordScreen({
         ) : (
           <View style={styles.messageBox}>
             <Text style={sharedStyles.warningText}>
-              当前没有可用账户，请先在“我的”页恢复示例数据；后续版本会提供账户管理能力。
+              当前没有可用账户，请先通过“更多 - 账户管理”新增或启用账户。
             </Text>
           </View>
         )}
