@@ -13,8 +13,10 @@ export interface TransactionInput {
   amount: number;
   category: string;
   accountId: string;
+  counterAccountId?: string;
   date: string;
   note?: string;
+  relatedLiabilityId?: string;
 }
 
 export interface FinancialState {
@@ -145,8 +147,10 @@ export const createTransactionFromInput = (input: TransactionInput): Transaction
     type: input.type,
     category: input.category.trim(),
     accountId: input.accountId,
+    counterAccountId: input.counterAccountId,
     cashFlowType: rule.cashFlowType,
     note: input.note?.trim() || rule.limitation,
+    relatedLiabilityId: input.relatedLiabilityId,
     createdAt: timestamp,
     updatedAt: timestamp,
   };
@@ -170,7 +174,7 @@ const updateCreditCardDebt = (accounts: Account[], accountId: string, delta: num
     const currentDebt = Math.max(0, (account.currentDebt ?? Math.max(0, -account.balance)) + delta);
     return {
       ...account,
-      balance: -currentDebt,
+      balance: 0,
       currentDebt,
       updatedAt: new Date().toISOString(),
     };
@@ -229,6 +233,37 @@ const updateLiabilityById = (
         }
       : liability,
   );
+};
+
+const findLiabilityAccountId = (liabilities: Liability[], liabilityId: string | undefined): string | undefined =>
+  liabilities.find((liability) => liability.id === liabilityId)?.accountId;
+
+const findFirstCreditCardAccountId = (accounts: Account[]): string | undefined =>
+  accounts.find((account) => account.type === "creditCard")?.id;
+
+const updateLiabilityByIdOrAccount = (
+  liabilities: Liability[],
+  liabilityId: string | undefined,
+  accountId: string | undefined,
+  delta: number,
+): Liability[] => {
+  if (liabilityId && liabilities.some((liability) => liability.id === liabilityId)) {
+    return updateLiabilityById(liabilities, liabilityId, delta);
+  }
+
+  if (accountId && liabilities.some((liability) => liability.accountId === accountId)) {
+    return liabilities.map((liability) =>
+      liability.accountId === accountId
+        ? {
+            ...liability,
+            amount: Math.max(0, liability.amount + delta),
+            updatedAt: new Date().toISOString(),
+          }
+        : liability,
+    );
+  }
+
+  return updateFirstLiability(liabilities, delta);
 };
 
 const syncAssetsByAccountBalance = (assets: Asset[], accountId: string, balance: number): Asset[] =>
@@ -290,18 +325,50 @@ export const applyTransactionToFinancialState = <T extends FinancialState>(
     case "liabilityIncrease":
       accounts = updateAccountBalance(accounts, transaction.accountId, transaction.amount);
       assets = updateAssetByAccount(assets, transaction.accountId, transaction.amount);
-      liabilities = updateLiabilityById(liabilities, transaction.relatedLiabilityId, transaction.amount);
+      liabilities = updateLiabilityByIdOrAccount(
+        liabilities,
+        transaction.relatedLiabilityId,
+        transaction.counterAccountId ?? transaction.accountId,
+        transaction.amount,
+      );
       break;
     case "liabilityDecrease":
     case "repayment":
-    case "creditCardRepayment":
       accounts = updateAccountBalance(accounts, transaction.accountId, -transaction.amount);
       assets = updateAssetByAccount(assets, transaction.accountId, -transaction.amount);
-      liabilities = updateLiabilityById(liabilities, transaction.relatedLiabilityId, -transaction.amount);
+      liabilities = updateLiabilityByIdOrAccount(
+        liabilities,
+        transaction.relatedLiabilityId,
+        transaction.counterAccountId ?? transaction.accountId,
+        -transaction.amount,
+      );
       break;
+    case "creditCardRepayment": {
+      const creditCardAccountId =
+        transaction.counterAccountId ??
+        findLiabilityAccountId(liabilities, transaction.relatedLiabilityId) ??
+        findFirstCreditCardAccountId(accounts);
+      accounts = updateAccountBalance(accounts, transaction.accountId, -transaction.amount);
+      assets = updateAssetByAccount(assets, transaction.accountId, -transaction.amount);
+      if (creditCardAccountId) {
+        accounts = updateCreditCardDebt(accounts, creditCardAccountId, -transaction.amount);
+      }
+      liabilities = updateLiabilityByIdOrAccount(
+        liabilities,
+        transaction.relatedLiabilityId,
+        creditCardAccountId,
+        -transaction.amount,
+      );
+      break;
+    }
     case "creditCardExpense":
       accounts = updateCreditCardDebt(accounts, transaction.accountId, transaction.amount);
-      liabilities = updateLiabilityById(liabilities, transaction.relatedLiabilityId, transaction.amount);
+      liabilities = updateLiabilityByIdOrAccount(
+        liabilities,
+        transaction.relatedLiabilityId,
+        transaction.accountId,
+        transaction.amount,
+      );
       break;
     case "transfer":
       break;
@@ -367,7 +434,7 @@ export const upsertAccountInFinancialState = <T extends FinancialState>(
     id: input.id ?? `account-${Date.now()}`,
     name: input.name.trim(),
     type: input.type,
-    balance: input.type === "creditCard" && normalizedDebt !== undefined ? -normalizedDebt : input.balance,
+    balance: input.type === "creditCard" ? 0 : input.balance,
     currency: existingAccount?.currency ?? "CNY",
     isEnabled: input.isEnabled,
     isActive: input.isEnabled,
