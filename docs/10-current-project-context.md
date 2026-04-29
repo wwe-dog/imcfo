@@ -5,7 +5,7 @@
 更新时间：2026-04-29  
 当前主分支：`main`  
 当前开发模式：trunk-based development，直接在 `main` 上小步提交。  
-本次快照原因：完成 Arco 风格移动端图标系统后刷新上下文。
+本次快照原因：完成交易详情 V0.1 只读页后刷新上下文。
 
 ## 1. 项目定位与关键决策
 
@@ -105,9 +105,10 @@ V0.1 只服务普通自然人，核心闭环是：
 最新功能提交：
 
 - `a6d0533 style: add arco inspired mobile icon system`
+- `51764c0 feat: add read-only transaction detail page`
 - `bab72b8 style: apply arco inspired mobile visual polish`
 
-本次只做 UI 图标层调整，未修改账务公式、交易规则、存储 schema、种子数据或报表计算。
+本次只做交易记录只读详情展示，未修改账务公式、交易规则、现金流规则、存储 schema、种子数据或报表计算。
 
 读取的 Arco 本地参考：
 
@@ -118,6 +119,8 @@ V0.1 只服务普通自然人，核心闭环是：
 
 本次 polish 覆盖：
 
+- `mobile/src/screens/TransactionRecordsScreen.tsx`：交易记录行点击后进入 `交易详情` 只读页，支持基础信息、会计影响、现金流、关联对象四个分区；不提供编辑、删除、撤销或冲销操作。
+- `mobile/App.tsx`：向交易记录页传入 `assets` 和 `liabilities`，用于只读解析关联资产和关联负债名称。
 - `mobile/src/components/AppIcon.tsx`：新增基于 `react-native-svg` 的项目内语义化线性图标组件，不引入 Arco Web 或 Expo 图标依赖。
 - `references/arco-design-pro-2/icon-usage-notes.md`：记录图标使用边界，说明当前没有直接复制 Arco 图标包运行时代码。
 - `mobile/App.tsx`：底部导航接入首页、管理、报表、我的图标。
