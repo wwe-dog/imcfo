@@ -1,15 +1,21 @@
 import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import type { Account, Transaction, TransactionType } from "../domain/models";
 import AppIcon from "../components/AppIcon";
+import type { Account, Asset, Liability, Transaction, TransactionType } from "../domain/models";
 import { sharedStyles, theme } from "../styles/theme";
 import { formatCurrency } from "../utils/formatters";
 
 interface TransactionRecordsScreenProps {
   accounts: Account[];
+  assets: Asset[];
+  liabilities: Liability[];
   transactions: Transaction[];
   onBack: () => void;
 }
+
+const UNKNOWN_VALUE = "无";
+const RULE_BASED_VALUE = "按当前规则计算";
 
 const transactionTypeLabels: Record<TransactionType, string> = {
   assetDecrease: "资产减少",
@@ -27,55 +33,22 @@ const transactionTypeLabels: Record<TransactionType, string> = {
   receivableCollect: "应收收回",
   receivableRecognize: "应收确认",
   repayment: "还款",
-  transfer: "转账 / 内部调整",
+  transfer: "转账 / 内部转换",
 };
 
-const cashFlowLabels = {
-  financing: "筹资活动现金流",
-  investing: "投资活动现金流",
-  nonCash: "非现金",
-  operating: "经营活动现金流",
-} as const;
+const getTypeLabel = (type: Transaction["type"]): string => transactionTypeLabels[type] ?? "未知类型";
 
-const getAccountName = (accounts: Account[], accountId?: string): string =>
-  accounts.find((account) => account.id === accountId)?.name ?? "未关联账户";
+const getAccountName = (accounts: Account[], accountId?: string): string | undefined =>
+  accountId ? accounts.find((account) => account.id === accountId)?.name ?? "未知账户" : undefined;
+
+const getAssetName = (assets: Asset[], assetId?: string): string | undefined =>
+  assetId ? assets.find((asset) => asset.id === assetId)?.name ?? "未知资产" : undefined;
+
+const getLiabilityName = (liabilities: Liability[], liabilityId?: string): string | undefined =>
+  liabilityId ? liabilities.find((liability) => liability.id === liabilityId)?.name ?? "未知负债" : undefined;
 
 const getTransactionTitle = (transaction: Transaction): string =>
-  transaction.note?.trim() || transaction.category || transactionTypeLabels[transaction.type];
-
-const getAmountTone = (transaction: Transaction): "positive" | "negative" | "neutral" => {
-  if (transaction.cashFlowType === "nonCash") return "neutral";
-
-  if (
-    transaction.type === "income" ||
-    transaction.type === "investmentSell" ||
-    transaction.type === "assetIncrease" ||
-    transaction.type === "liabilityIncrease" ||
-    transaction.type === "receivableCollect"
-  ) {
-    return "positive";
-  }
-
-  return "negative";
-};
-
-const formatSignedAmount = (transaction: Transaction): string => {
-  const tone = getAmountTone(transaction);
-  if (tone === "positive") return `+${formatCurrency(transaction.amount)}`;
-  if (tone === "negative") return `-${formatCurrency(transaction.amount)}`;
-  return formatCurrency(transaction.amount);
-};
-
-const getMonthLabel = (date: string): string => {
-  const [year, month] = date.split("-");
-  if (!year || !month) return "未分组";
-  return `${year}年${Number(month)}月`;
-};
-
-const getCashStatusLabel = (transaction: Transaction): string => {
-  if (transaction.cashFlowType === "nonCash") return "非现金";
-  return getAmountTone(transaction) === "positive" ? "现金流入" : "现金流出";
-};
+  transaction.note?.trim() || transaction.category || getTypeLabel(transaction.type);
 
 const getTransactionDateTime = (transaction: Transaction): string => {
   const createdAt = new Date(transaction.createdAt);
@@ -90,8 +63,133 @@ const getTransactionDateTime = (transaction: Transaction): string => {
   return transaction.date;
 };
 
+const getMonthLabel = (date: string): string => {
+  const [year, month] = date.split("-");
+  if (!year || !month) return "未分组";
+  return `${year}年${Number(month)}月`;
+};
+
+const isCashInflow = (transaction: Transaction): boolean => {
+  switch (transaction.type) {
+    case "assetIncrease":
+    case "income":
+    case "investmentSell":
+    case "liabilityIncrease":
+    case "receivableCollect":
+      return true;
+    default:
+      return false;
+  }
+};
+
+const getAmountTone = (transaction: Transaction): "positive" | "negative" | "neutral" => {
+  if (transaction.cashFlowType === "nonCash") return "neutral";
+  if (transaction.type === "transfer") return "neutral";
+  return isCashInflow(transaction) ? "positive" : "negative";
+};
+
+const formatSignedAmount = (transaction: Transaction): string => {
+  const tone = getAmountTone(transaction);
+  if (tone === "positive") return `+${formatCurrency(transaction.amount)}`;
+  if (tone === "negative") return `-${formatCurrency(transaction.amount)}`;
+  return formatCurrency(transaction.amount);
+};
+
+const formatImpact = (value: number): string => {
+  if (Math.abs(value) < 0.01) return formatCurrency(0);
+  return `${value > 0 ? "+" : "-"}${formatCurrency(Math.abs(value))}`;
+};
+
+const getCashStatusLabel = (transaction: Transaction): string => {
+  if (transaction.cashFlowType === "nonCash") return "非现金";
+  if (transaction.type === "transfer") return "无";
+  return isCashInflow(transaction) ? "现金流入" : "现金流出";
+};
+
+const getCashFlowLabel = (transaction: Transaction): string => {
+  if (transaction.cashFlowType === "nonCash") return "非现金";
+  if (transaction.type === "transfer") return "无";
+
+  const direction = isCashInflow(transaction) ? "流入" : "流出";
+
+  switch (transaction.cashFlowType) {
+    case "operating":
+      return `经营活动现金${direction}`;
+    case "investing":
+      return `投资活动现金${direction}`;
+    case "financing":
+      return `筹资活动现金${direction}`;
+    default:
+      return "无";
+  }
+};
+
+const getIncomeExpenseImpact = (transaction: Transaction): string => {
+  switch (transaction.type) {
+    case "income":
+      return formatImpact(transaction.amount);
+    case "expense":
+    case "creditCardExpense":
+      return formatImpact(-transaction.amount);
+    case "assetDecrease":
+    case "assetIncrease":
+    case "creditCardRepayment":
+    case "investmentBuy":
+    case "investmentSell":
+    case "liabilityDecrease":
+    case "liabilityIncrease":
+    case "payablePay":
+    case "payableRecognize":
+    case "receivableCollect":
+    case "receivableRecognize":
+    case "repayment":
+    case "transfer":
+      return formatCurrency(0);
+    default:
+      return RULE_BASED_VALUE;
+  }
+};
+
+const getNetWorthImpact = (transaction: Transaction): string => {
+  switch (transaction.type) {
+    case "income":
+    case "receivableRecognize":
+      return formatImpact(transaction.amount);
+    case "expense":
+    case "creditCardExpense":
+    case "payableRecognize":
+      return formatImpact(-transaction.amount);
+    case "assetIncrease":
+      return transaction.cashFlowType === "nonCash" ? formatImpact(transaction.amount) : RULE_BASED_VALUE;
+    case "assetDecrease":
+      return transaction.cashFlowType === "nonCash" ? formatImpact(-transaction.amount) : RULE_BASED_VALUE;
+    case "creditCardRepayment":
+    case "investmentBuy":
+    case "investmentSell":
+    case "liabilityDecrease":
+    case "receivableCollect":
+    case "repayment":
+    case "transfer":
+    case "payablePay":
+      return formatCurrency(0);
+    case "liabilityIncrease":
+      return transaction.cashFlowType === "nonCash" ? formatImpact(-transaction.amount) : formatCurrency(0);
+    default:
+      return RULE_BASED_VALUE;
+  }
+};
+
+const resolveAccountDisplay = (accounts: Account[], transaction: Transaction): string => {
+  const accountName = getAccountName(accounts, transaction.accountId);
+  const counterAccountName = getAccountName(accounts, transaction.counterAccountId);
+  if (accountName && counterAccountName) return `${accountName} → ${counterAccountName}`;
+  return accountName ?? counterAccountName ?? UNKNOWN_VALUE;
+};
+
 export default function TransactionRecordsScreen({
   accounts,
+  assets,
+  liabilities,
   transactions,
   onBack,
 }: TransactionRecordsScreenProps) {
@@ -115,9 +213,8 @@ export default function TransactionRecordsScreen({
           amountText,
           transaction.category,
           transaction.note ?? "",
-          transactionTypeLabels[transaction.type],
-          getAccountName(accounts, transaction.accountId),
-          getAccountName(accounts, transaction.counterAccountId),
+          getTypeLabel(transaction.type),
+          resolveAccountDisplay(accounts, transaction),
         ]
           .join(" ")
           .toLowerCase();
@@ -142,28 +239,14 @@ export default function TransactionRecordsScreen({
   }, [accounts, query, transactions]);
 
   if (selectedTransaction) {
-    const accountName = getAccountName(accounts, selectedTransaction.accountId);
-    const counterAccountName = selectedTransaction.counterAccountId
-      ? getAccountName(accounts, selectedTransaction.counterAccountId)
-      : "";
-
     return (
-      <View style={styles.stack}>
-        <TopBar onBack={() => setSelectedTransaction(null)} title="交易详情" />
-        <View style={[sharedStyles.card, styles.detailCard]}>
-          <Text style={styles.detailTitle}>{getTransactionTitle(selectedTransaction)}</Text>
-          <Text style={[styles.detailAmount, styles[`amount_${getAmountTone(selectedTransaction)}`]]}>
-            {formatSignedAmount(selectedTransaction)}
-          </Text>
-          <DetailRow label="类型" value={transactionTypeLabels[selectedTransaction.type]} />
-          <DetailRow label="日期" value={selectedTransaction.date} />
-          <DetailRow label="分类" value={selectedTransaction.category} />
-          <DetailRow label="账户" value={accountName} />
-          {counterAccountName ? <DetailRow label="关联账户" value={counterAccountName} /> : null}
-          <DetailRow label="现金流" value={cashFlowLabels[selectedTransaction.cashFlowType]} />
-          <DetailRow label="备注" value={selectedTransaction.note || "无"} />
-        </View>
-      </View>
+      <TransactionDetail
+        accounts={accounts}
+        assets={assets}
+        liabilities={liabilities}
+        onBack={() => setSelectedTransaction(null)}
+        transaction={selectedTransaction}
+      />
     );
   }
 
@@ -226,6 +309,60 @@ export default function TransactionRecordsScreen({
   );
 }
 
+function TransactionDetail({
+  accounts,
+  assets,
+  liabilities,
+  onBack,
+  transaction,
+}: {
+  accounts: Account[];
+  assets: Asset[];
+  liabilities: Liability[];
+  onBack: () => void;
+  transaction: Transaction;
+}) {
+  const amountTone = getAmountTone(transaction);
+  const accountDisplay = resolveAccountDisplay(accounts, transaction);
+  const assetName = getAssetName(assets, transaction.relatedAssetId) ?? UNKNOWN_VALUE;
+  const liabilityName = getLiabilityName(liabilities, transaction.relatedLiabilityId) ?? UNKNOWN_VALUE;
+
+  return (
+    <View style={styles.stack}>
+      <TopBar onBack={onBack} title="交易详情" />
+
+      <View style={styles.detailHero}>
+        <Text style={styles.detailTitle}>{getTransactionTitle(transaction)}</Text>
+        <Text style={[styles.detailAmount, styles[`amount_${amountTone}`]]}>{formatSignedAmount(transaction)}</Text>
+        <Text style={styles.detailDate}>{getTransactionDateTime(transaction)}</Text>
+      </View>
+
+      <DetailSection title="基础信息">
+        <DetailRow label="类型" value={getTypeLabel(transaction.type)} />
+        <DetailRow label="分类" value={transaction.category || UNKNOWN_VALUE} />
+        <DetailRow label="账户" value={accountDisplay} />
+        <DetailRow label="现金状态" value={getCashStatusLabel(transaction)} />
+        <DetailRow label="备注" value={transaction.note?.trim() || UNKNOWN_VALUE} />
+      </DetailSection>
+
+      <DetailSection title="会计影响">
+        <DetailRow label="收入/费用" value={getIncomeExpenseImpact(transaction)} />
+        <DetailRow label="净资产" value={getNetWorthImpact(transaction)} />
+      </DetailSection>
+
+      <DetailSection title="现金流">
+        <DetailRow label="现金流" value={getCashFlowLabel(transaction)} />
+      </DetailSection>
+
+      <DetailSection title="关联对象">
+        <DetailRow label="关联账户" value={accountDisplay} />
+        <DetailRow label="关联资产" value={assetName} />
+        <DetailRow label="关联负债" value={liabilityName} />
+      </DetailSection>
+    </View>
+  );
+}
+
 function TopBar({ onBack, title }: { onBack: () => void; title: string }) {
   return (
     <View style={styles.headerRow}>
@@ -260,6 +397,15 @@ function TransactionRow({
       </View>
       <Text style={[styles.transactionAmount, styles[`amount_${tone}`]]}>{formatSignedAmount(transaction)}</Text>
     </Pressable>
+  );
+}
+
+function DetailSection({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <View style={styles.detailSection}>
+      <Text style={styles.detailSectionTitle}>{title}</Text>
+      <View style={styles.detailRows}>{children}</View>
+    </View>
   );
 }
 
@@ -308,30 +454,56 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   detailAmount: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: "900",
-    letterSpacing: -0.5,
+    letterSpacing: -0.6,
+    lineHeight: 38,
+    textAlign: "center",
   },
-  detailCard: {
-    gap: 14,
+  detailDate: {
+    color: theme.colors.textMuted,
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  detailHero: {
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
   },
   detailLabel: {
     color: theme.colors.textMuted,
     fontSize: 14,
-    width: 78,
+    width: 86,
   },
   detailRow: {
     borderBottomColor: theme.colors.divider,
     borderBottomWidth: 1,
     flexDirection: "row",
     gap: theme.spacing.md,
-    paddingBottom: theme.spacing.sm,
+    minHeight: 40,
+    paddingVertical: 8,
+  },
+  detailRows: {
+    borderTopColor: theme.colors.divider,
+    borderTopWidth: 1,
+  },
+  detailSection: {
+    gap: 8,
+  },
+  detailSectionTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 17,
+    fontWeight: "900",
+    letterSpacing: -0.2,
   },
   detailTitle: {
     color: theme.colors.textPrimary,
-    fontSize: 20,
+    fontSize: 21,
     fontWeight: "900",
     lineHeight: 28,
+    textAlign: "center",
   },
   detailValue: {
     color: theme.colors.textPrimary,
@@ -353,8 +525,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.colors.primarySoft,
     borderColor: theme.colors.border,
-    borderWidth: 1,
     borderRadius: theme.radius.pill,
+    borderWidth: 1,
     height: 42,
     justifyContent: "center",
     width: 42,

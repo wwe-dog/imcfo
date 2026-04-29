@@ -232,6 +232,8 @@ function AppShell() {
         return (
           <TransactionRecordsScreen
             accounts={data.accounts}
+            assets={data.assets}
+            liabilities={data.liabilities}
             transactions={data.transactions}
             onBack={() => setActiveScreen("record")}
           />
