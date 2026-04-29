@@ -5,7 +5,7 @@
 更新时间：2026-04-29  
 当前主分支：`main`  
 当前开发模式：trunk-based development，直接在 `main` 上小步提交。  
-本次快照原因：完成交易记录月份分组折叠后刷新上下文。
+本次快照原因：完成 2023-05 至 2026-04 三年高复杂度历史示例账套后刷新上下文。
 
 ## 1. 项目定位与关键决策
 
@@ -87,6 +87,7 @@ V0.1 只服务普通自然人，核心闭环是：
 - 报表页支持简易版 / 专业版切换。
 - 我的页支持本地数据导出、导入、恢复示例数据、清空本地数据、账户管理入口和交易记录入口。
 - 交易记录 Phase 1 已完成：只读查看交易列表、搜索、按月分组、月份折叠、账本式行布局、交易详情和筛选弹层。
+- 交易记录筛选支持全部、本月、近7天、近3个月、今年、自定义日期、账户类别和资金方向。
 - 对账 / 资产盘点已支持账户余额和资产估值的安全调整。
 
 已完成的账务安全规则：
@@ -104,6 +105,7 @@ V0.1 只服务普通自然人，核心闭环是：
 
 最新功能提交：
 
+- `54d04f7 chore: add three year high complexity demo data`
 - `b8318a5 feat: add collapsible transaction month sections`
 - `90cdc59 feat: add transaction calendar filters`
 - `cef48c7 style: soften back button appearance`
@@ -111,7 +113,7 @@ V0.1 只服务普通自然人，核心闭环是：
 - `51764c0 feat: add read-only transaction detail page`
 - `bab72b8 style: apply arco inspired mobile visual polish`
 
-本次只做交易记录月份分组折叠 UI，未修改账务公式、交易规则、现金流规则、存储 schema、种子数据或报表计算。
+本次新增三年历史示例交易数据和当前期间交易过滤输入，未修改账务公式、交易规则、现金流规则、存储 schema 或报表计算函数。
 
 读取的 Arco 本地参考：
 
@@ -122,6 +124,11 @@ V0.1 只服务普通自然人，核心闭环是：
 
 本次最新交易记录筛选覆盖：
 
+- `mobile/src/storage/historicalDemoData.ts`：新增 36 个月历史快照（2023-05 至 2026-04）和历史交易生成器；生成 2023-05 至 2026-03 历史交易，保留 2026-04 原始高复杂度交易。
+- `mobile/src/storage/seedData.ts`：恢复示例数据现在加载三年历史交易，共 36 个月、约 1054 笔交易；2026-04 资产、负债、利润表和现金流期望值保持不变。
+- `mobile/src/domain/accounting/periodFilters.ts`：新增按 `currentPeriod` 过滤交易的 helper，供摘要和报表输入使用，避免历史交易污染当前月报表。
+- `mobile/src/app/useAppData.ts` 与 `mobile/App.tsx`：仪表盘摘要和报表页使用当前期间交易输入；交易记录页仍显示完整历史交易。
+- `mobile/src/screens/TransactionRecordsScreen.tsx`：时间筛选新增“近3个月”和“今年”，便于验证三年历史账套。
 - `mobile/src/screens/TransactionRecordsScreen.tsx`：月份分组标题改为全宽浅灰可点击行，右侧用展开/折叠符号提示状态。
 - `mobile/src/screens/TransactionRecordsScreen.tsx`：新增 `collapsedMonths` 本地状态，每个月份可独立折叠；新出现月份默认展开，搜索/筛选后的月份分组继续正常更新。
 - `mobile/src/screens/TransactionRecordsScreen.tsx`：漏斗按钮从原生 Alert 占位改为自定义筛选面板，支持 backdrop 和 Android back 关闭。
@@ -155,9 +162,10 @@ V0.1 只服务普通自然人，核心闭环是：
 
 ## 5. 高复杂度示例数据
 
-`mobile/src/storage/seedData.ts` 当前为高净值自然人压力测试数据集。
+`mobile/src/storage/seedData.ts` 与 `mobile/src/storage/historicalDemoData.ts` 当前组成高净值自然人压力测试数据集。
 
-测试日期：2026-04-30。
+覆盖期间：2023-05 至 2026-04，共 36 个月、约 1054 笔交易。  
+最终测试日期：2026-04-30。
 
 期望值：
 
@@ -172,7 +180,7 @@ V0.1 只服务普通自然人，核心闭环是：
 - 筹资活动现金流：-69,200
 - 现金净变化：-76,300
 
-本次视觉 polish 后已重新核对，以上值仍然匹配。
+本次三年历史数据扩展后已重新核对，以上 2026-04 当前期间值仍然匹配。
 
 ## 6. 重要文件职责
 
@@ -185,6 +193,11 @@ V0.1 只服务普通自然人，核心闭环是：
 
 - App 数据状态中心。
 - 负责 load/save/reset/clear/export/import/transaction/account/asset/liability/reconciliation 更新。
+- 摘要计算前会按 `currentPeriod` 过滤交易，避免多年历史交易污染当前期间利润表和现金流量表。
+
+`mobile/src/domain/accounting/periodFilters.ts`
+
+- 只负责按报表期间过滤交易输入，不改变报表计算公式。
 
 `mobile/src/domain/accounting/transactionRules.ts`
 
@@ -221,12 +234,17 @@ V0.1 只服务普通自然人，核心闭环是：
 `mobile/src/screens/TransactionRecordsScreen.tsx`
 
 - 只读交易记录中心。
-- 支持搜索、筛选弹层、自定义日期范围、账户类别筛选、资金方向筛选、按月分组、月份折叠、账本式交易行和只读详情。
+- 支持搜索、筛选弹层、本月/近7天/近3个月/今年/自定义日期范围、账户类别筛选、资金方向筛选、按月分组、月份折叠、账本式交易行和只读详情。
 
 `mobile/src/storage/seedData.ts`
 
-- 当前高复杂度示例账套。
+- 当前高复杂度示例账套，最终资产负债表仍以 2026-04-30 静态资产/负债为准。
 - 用户需要在“我的”页执行“恢复示例数据”才能加载最新示例数据。
+
+`mobile/src/storage/historicalDemoData.ts`
+
+- 三年历史示例账套生成器。
+- 包含 36 个月月度快照和历史交易模板，用于交易记录、筛选、折叠月份和趋势类页面压力测试。
 
 ## 7. 待办事项与风险
 
