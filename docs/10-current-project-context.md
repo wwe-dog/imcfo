@@ -5,7 +5,7 @@
 更新时间：2026-04-29  
 当前主分支：`main`  
 当前开发模式：trunk-based development，直接在 `main` 上小步提交。  
-本次快照原因：完成 V0.1 会计交易规则风险修复后，按上下文压缩恢复规则刷新。
+本次快照原因：完成 V0.1 应收/应付生命周期规则后，按上下文压缩恢复规则刷新。
 
 ## 1. 项目定位与关键决策
 
@@ -103,6 +103,11 @@ V0.1 只服务普通自然人，核心闭环是：
 - 账户余额同步资产时只允许一对一账户/资产自动同步；一个账户关联多个资产时会跳过自动同步，防止覆盖多个资产明细。
 - 管理页在“信用卡还款”类型下显示两个账户选择：付款账户和信用卡账户。
 - 美元换汇示例交易已改为 `transfer + nonCash`，不再使用不安全的 `assetIncrease` workaround。
+- 已新增应收/应付生命周期交易类型：应收确认、应收收回、应付确认、应付支付。
+- 应收确认只增加目标应收资产，不增加现金，不产生现金流。
+- 应收收回增加收款账户现金、减少目标应收资产，不重复确认收入。
+- 应付确认只增加目标应付负债，不改变现金，不产生现金流。
+- 应付支付减少付款账户现金、减少目标应付负债，不重复确认费用。
 - 记一笔账户选择只展示启用账户。
 - 资产负债管理支持资产和负债新增、编辑、删除。
 - 报表页支持资产负债表、现金流量表、利润表切换。
@@ -195,6 +200,7 @@ V0.1 只服务普通自然人，核心闭环是：
 - `assetIncrease/assetDecrease + nonCash` 只按 `relatedAssetId` 调整目标资产，不更新账户余额或账户关联现金资产。
 - `liabilityIncrease/liabilityDecrease + nonCash` 只调整目标负债，不更新账户余额或账户关联资产。
 - `syncAssetsByAccountBalance` 已加一对多保护：同一账户关联多个资产时不自动覆盖资产金额。
+- 应收/应付生命周期规则缺少 `relatedAssetId` 或 `relatedLiabilityId` 时不会 fallback 到随机第一条资产/负债。
 
 `mobile/src/domain/accounting/naturalLanguageParser.ts`
 
@@ -209,6 +215,8 @@ V0.1 只服务普通自然人，核心闭环是：
 - `更多` 提供账户管理、资产负债管理、交易记录入口。
 - 账户选择只显示启用账户。
 - 信用卡还款类型会显示“付款账户”和“信用卡账户”两个选择，保存时通过 `counterAccountId` 传给领域规则。
+- 应收确认/应收收回会显示“应收项目”选择；应付确认/应付支付会显示“应付项目”选择。
+- 应收收回和应付支付会校验金额不能超过当前应收/应付余额。
 
 `mobile/src/screens/ReportsScreen.tsx`
 
@@ -237,6 +245,8 @@ V0.1 只服务普通自然人，核心闭环是：
 
 最近提交：
 
+- `d06b76b feat: add receivable payable lifecycle rules`
+- `9a344e9 docs: refresh current project context snapshot`
 - `0cc13ad fix: harden accounting transaction rules`
 - `0e55eec docs: refresh current project context snapshot`
 - `89004d4 fix: treat credit card debt as liability`
@@ -286,6 +296,7 @@ git status
 - 没有 `relatedLiabilityId` 的旧交易仍保留 first-liability fallback，这是为了兼容旧数据，但仍存在误更新风险。
 - 融资融券账户当前为 `securities` 类型且带 `currentDebt`，账户保存同步负债只对信用卡欠款做明确处理；融资负债仍建议通过负债明细或交易规则维护。
 - 记一笔已实现信用卡还款双账户选择，但自然语言解析仍只是规则型解析，复杂句子仍可能需要用户手动确认。
+- 应收确认/应付确认当前要求选择已有应收资产或应付负债，不自动创建新项目；新增项目仍需先到资产负债管理维护。
 
 ## 7. 架构与数据流摘要
 
