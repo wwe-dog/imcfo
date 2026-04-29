@@ -3,7 +3,7 @@
 更新时间：2026-04-29  
 当前分支：`main`  
 开发模式：trunk-based development，直接在 `main` 上小步提交。  
-本次快照原因：完成交易记录页首屏打开性能优化后刷新上下文，便于后续压缩/恢复。
+本次快照原因：完成交易记录页入口卡顿消除优化后刷新上下文，便于后续压缩/恢复。
 
 ## 1. 项目定位与边界
 
@@ -54,19 +54,20 @@ git log --oneline --decorate -10
 ## 4. 最近完成的工作
 
 最新提交：
+- `839da79 perf: precompute transaction records index`
+- `364ff22 docs: refresh current project context snapshot`
 - `1be2dc1 perf: reduce transaction records initial load lag`
 - `ec6dbe5 perf: optimize transaction records list rendering`
 - `7c6cddc style: animate transaction month collapse`
-- `54d04f7 chore: add three year high complexity demo data`
 
 本次性能优化范围：
-- 文件：`mobile/src/screens/TransactionRecordsScreen.tsx`
-- 使用 `InteractionManager.runAfterInteractions` 延后构建交易显示记录，避免进入交易记录页前同步排序/分组/格式化 1000+ 条交易。
-- 新增页面级 `TransactionDisplayRecord`，预计算 title、amountText、cashStatus、dateTime、monthKey、monthLabel、searchableText、accountTypeBuckets、timestamp。
-- 首屏先显示标题、搜索栏、筛选按钮和“正在整理交易记录...”占位，再挂载 SectionList。
-- 默认仅最新月份展开，历史月份默认折叠，减少首屏渲染行数。
-- SectionList 首批渲染参数下调：`initialNumToRender=14`、`maxToRenderPerBatch=18`、`updateCellsBatchingPeriod=60`、`windowSize=7`，Android 开启 `removeClippedSubviews`。
-- 搜索、筛选、自定义日期、月份折叠和交易详情入口保持不变。
+- 新增 `mobile/src/domain/transactions/transactionDisplayIndex.ts`：构建 UI 派生的交易记录展示索引，不写入 AsyncStorage。
+- 新增 `mobile/src/hooks/useTransactionRecordsIndex.ts`：App 数据加载后用 `InteractionManager.runAfterInteractions` 预热索引。
+- 更新 `mobile/App.tsx`：在 AppShell 级别预建交易记录索引并传入交易记录页；报表期交易过滤只在进入报表页时执行，避免打开交易记录时做无关遍历。
+- 更新 `mobile/src/screens/TransactionRecordsScreen.tsx`：消费预计算 index，不再在页面打开路径里构建原始交易显示记录。
+- 索引预计算字段包括 title、amountText、amountDirection、cashStatus、cashFlowLabel、typeLabel、categoryText、noteText、accountDisplay、accountTypeBuckets、monthKey、monthLabel、timestamp、searchableText 等。
+- 默认无搜索/无筛选时直接使用预分组 month groups；搜索/筛选时基于预计算 records 和 searchableText 过滤，再按月轻量分组。
+- 最新月份默认展开，历史月份默认折叠，减少首屏渲染行数。
 
 ## 5. 高复杂度示例数据
 
@@ -90,13 +91,15 @@ git log --oneline --decorate -10
 
 ## 6. 重要文件职责
 
-- `mobile/App.tsx`：App 入口、页面切换、底部导航、二级页面入口。
+- `mobile/App.tsx`：App 入口、页面切换、底部导航、二级页面入口、交易记录索引预热挂载点。
 - `mobile/src/app/useAppData.ts`：集中管理 AppData、加载/保存/恢复/导入/导出、交易/账户/资产/负债/对账更新。
 - `mobile/src/domain/accounting/calculations.ts`：核心报表计算，必须保持纯函数。
 - `mobile/src/domain/accounting/transactionRules.ts`：交易入账和账户/资产/负债同步规则。
 - `mobile/src/domain/accounting/reconciliationRules.ts`：对账/资产盘点调整规则。
 - `mobile/src/domain/accounting/periodFilters.ts`：按当前报告期过滤交易，避免历史交易污染当前期报表。
-- `mobile/src/screens/TransactionRecordsScreen.tsx`：交易记录列表、筛选、月份折叠、交易详情和性能优化。
+- `mobile/src/domain/transactions/transactionDisplayIndex.ts`：交易记录页 UI 派生索引构建，负责预排序、预分组、搜索文本和展示字段。
+- `mobile/src/hooks/useTransactionRecordsIndex.ts`：交易记录索引预热 hook。
+- `mobile/src/screens/TransactionRecordsScreen.tsx`：交易记录列表、筛选、月份折叠、交易详情展示。
 - `mobile/src/screens/AccountManagementScreen.tsx`：账户管理层级页面和账户详情。
 - `mobile/src/screens/DashboardScreen.tsx`：首页仪表盘与资产/负债/净资产 drilldown。
 - `mobile/src/screens/RecordScreen.tsx`：管理页、记账和管理中心 modal。
@@ -111,6 +114,7 @@ git log --oneline --decorate -10
 
 已知风险：
 - 当前主要依赖 `npm.cmd run typecheck` 保底，自动化测试不足。
+- 交易记录性能优化已移出打开路径，但尚未做真实 Android profiler 帧率采样。
 - 趋势图尚无独立历史快照 schema，部分趋势仍依赖现有数据或近似。
 - 对账规则不会随机 fallback 到任意资产/负债；缺少明确关联时只更新可确认目标。
 - 普通账户一对多关联资产时不会自动覆盖多个资产，需用户进入资产明细分别更新。
@@ -131,11 +135,11 @@ npm.cmd run typecheck
 刷新本快照前的最近提交：
 
 ```text
+839da79 perf: precompute transaction records index
+364ff22 docs: refresh current project context snapshot
 1be2dc1 perf: reduce transaction records initial load lag
-1edb2a5 docs: refresh current project context snapshot
 ec6dbe5 perf: optimize transaction records list rendering
 7c6cddc style: animate transaction month collapse
-54d04f7 chore: add three year high complexity demo data
 ```
 
 本快照应作为单独文档提交，不应混入功能代码。
