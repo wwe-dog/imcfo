@@ -835,8 +835,8 @@ function SubjectHelpBubble({
 }) {
   return (
     <View style={[styles.helpBubbleWrap, { left, top, width }]}>
-      <View style={[styles.helpBubbleCaret, { marginLeft: caretLeft }]} />
-      <View style={[styles.helpBubble, { width }]}>
+      <View pointerEvents="none" style={[styles.helpBubbleCaret, { left: caretLeft }]} />
+      <View style={[styles.helpBubble, { marginTop: HELP_BUBBLE_CARET_HALF_WIDTH, width }]}>
         <Text style={styles.helpBubbleText}>{text}</Text>
       </View>
     </View>
@@ -1407,6 +1407,8 @@ const styles = StyleSheet.create({
     borderRightColor: "transparent",
     borderRightWidth: 7,
     height: 0,
+    position: "absolute",
+    top: 0,
     width: 0,
   },
   helpBubbleText: {
