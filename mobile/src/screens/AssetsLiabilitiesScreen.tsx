@@ -1,5 +1,15 @@
 import { useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type LayoutChangeEvent,
+} from "react-native";
 import AppIcon from "../components/AppIcon";
 import ScreenTransition from "../components/ScreenTransition";
 import {
@@ -78,6 +88,19 @@ interface LiabilitySubjectGroup {
   items: Liability[];
   subject: AccountingSubject;
 }
+
+interface LayoutBox {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}
+
+const HELP_BUBBLE_MAX_WIDTH = 248;
+const HELP_BUBBLE_MARGIN = 4;
+const HELP_BUBBLE_CARET_HALF_WIDTH = 7;
+
+const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
 
 const assetCategoryOptions: Array<{ label: string; value: Asset["category"] }> = [
   { label: "现金", value: "cash" },
@@ -733,8 +756,30 @@ function SubjectRow({
   onPress: () => void;
   subject: AccountingSubject;
 }) {
+  const [rowWidth, setRowWidth] = useState(0);
+  const [questionLayout, setQuestionLayout] = useState<LayoutBox | null>(null);
+  const bubbleWidth =
+    rowWidth > 0
+      ? Math.min(HELP_BUBBLE_MAX_WIDTH, Math.max(180, rowWidth - HELP_BUBBLE_MARGIN * 2))
+      : HELP_BUBBLE_MAX_WIDTH;
+  const questionCenterX = questionLayout ? questionLayout.x + questionLayout.width / 2 : 64;
+  const bubbleLeft =
+    rowWidth > 0 ? clamp(questionCenterX - bubbleWidth / 2, HELP_BUBBLE_MARGIN, rowWidth - bubbleWidth) : 18;
+  const caretLeft = clamp(
+    questionCenterX - bubbleLeft - HELP_BUBBLE_CARET_HALF_WIDTH,
+    HELP_BUBBLE_CARET_HALF_WIDTH,
+    bubbleWidth - HELP_BUBBLE_CARET_HALF_WIDTH * 3,
+  );
+  const bubbleTop = questionLayout ? questionLayout.y + questionLayout.height + 6 : 30;
+  const handleRowLayout = (event: LayoutChangeEvent) => {
+    setRowWidth(event.nativeEvent.layout.width);
+  };
+  const handleQuestionLayout = (event: LayoutChangeEvent) => {
+    setQuestionLayout(event.nativeEvent.layout);
+  };
+
   return (
-    <View style={[styles.subjectRow, isHelpVisible && styles.subjectRowFloating]}>
+    <View onLayout={handleRowLayout} style={[styles.subjectRow, isHelpVisible && styles.subjectRowFloating]}>
       <Pressable onPress={onPress} style={styles.subjectRowPressable}>
         <View style={styles.subjectRowTop}>
           <View style={styles.subjectNameWrap}>
@@ -742,6 +787,7 @@ function SubjectRow({
             <Pressable
               accessibilityLabel={`解释${subject.displayName}`}
               hitSlop={8}
+              onLayout={handleQuestionLayout}
               onPress={(event) => {
                 event.stopPropagation();
                 onExplain(subject);
@@ -761,18 +807,38 @@ function SubjectRow({
           {subject.rowExamples.join(" / ")}
         </Text>
       </Pressable>
-      {isHelpVisible ? <SubjectHelpBubble text={getSubjectHelpText(subject)} /> : null}
+      {isHelpVisible ? (
+        <SubjectHelpBubble
+          caretLeft={caretLeft}
+          left={bubbleLeft}
+          text={`${subject.displayName}：${getSubjectHelpText(subject)}`}
+          top={bubbleTop}
+          width={bubbleWidth}
+        />
+      ) : null}
     </View>
   );
 }
 
-function SubjectHelpBubble({ text }: { text: string }) {
+function SubjectHelpBubble({
+  caretLeft,
+  left,
+  text,
+  top,
+  width,
+}: {
+  caretLeft: number;
+  left: number;
+  text: string;
+  top: number;
+  width: number;
+}) {
   return (
-    <View style={styles.helpBubbleWrap}>
-      <View style={styles.helpBubble}>
+    <View style={[styles.helpBubbleWrap, { left, top, width }]}>
+      <View style={[styles.helpBubbleCaret, { marginLeft: caretLeft }]} />
+      <View style={[styles.helpBubble, { width }]}>
         <Text style={styles.helpBubbleText}>{text}</Text>
       </View>
-      <View style={styles.helpBubbleCaret} />
     </View>
   );
 }
@@ -1334,14 +1400,13 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
   },
   helpBubbleCaret: {
+    borderBottomColor: theme.colors.surfaceStrong,
+    borderBottomWidth: 7,
     borderLeftColor: "transparent",
     borderLeftWidth: 7,
     borderRightColor: "transparent",
     borderRightWidth: 7,
-    borderTopColor: theme.colors.surfaceStrong,
-    borderTopWidth: 7,
     height: 0,
-    marginLeft: 46,
     width: 0,
   },
   helpBubbleText: {
@@ -1353,9 +1418,7 @@ const styles = StyleSheet.create({
   helpBubbleWrap: {
     alignItems: "flex-start",
     elevation: 12,
-    left: 34,
     position: "absolute",
-    top: -44,
     zIndex: 20,
   },
   infoLabel: {
