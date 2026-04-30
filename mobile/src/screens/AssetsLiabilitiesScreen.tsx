@@ -209,6 +209,43 @@ const doesSubjectGroupMatchSearch = (group: AssetSubjectGroup | LiabilitySubject
   return searchableText.includes(query);
 };
 
+const getSubjectHelpText = (subject: AccountingSubject): string => {
+  switch (subject.id) {
+    case "cash-on-hand":
+      return "手上能直接使用的现金，比如纸币、零钱和备用金。";
+    case "bank-deposit":
+      return "存在银行卡、大额存单等银行账户里的资金。";
+    case "other-monetary-funds":
+      return "微信、支付宝、证券账户可用余额等暂放资金。";
+    case "trading-financial-assets":
+      return "股票、基金、ETF、黄金等用于交易或投资的资产。";
+    case "other-receivables":
+      return "别人还欠你的钱，比如报销款、朋友借款应收。";
+    case "long-term-equity-investment":
+      return "长期持有的项目、公司或合伙权益。";
+    case "fixed-assets":
+      return "房产、车辆、电脑等长期使用的实物资产。";
+    case "other-assets":
+      return "无法归入以上类别的其他个人资产。";
+    case "short-term-borrowings":
+      return "一年内需要偿还的借款或临时周转债务。";
+    case "accounts-payable":
+      return "已经发生但还没有支付的款项。";
+    case "taxes-payable":
+      return "已经计提但还没缴纳的个税、所得税或其他税费。";
+    case "other-payables":
+      return "信用卡账单或其他临时欠款中尚未偿还的负债。";
+    case "long-term-borrowings":
+      return "偿还周期较长的借款，比如房贷、车贷。";
+    case "long-term-payables":
+      return "长期分期或长期付款安排形成的负债。";
+    case "other-liabilities":
+      return "无法归入以上类别的其他应付款项。";
+    default:
+      return subject.personalExample || subject.description;
+  }
+};
+
 export default function AssetsLiabilitiesScreen({
   accounts,
   assets,
@@ -223,7 +260,7 @@ export default function AssetsLiabilitiesScreen({
   const [activeKind, setActiveKind] = useState<LedgerKind>("asset");
   const [subjectSearchQuery, setSubjectSearchQuery] = useState("");
   const [route, setRoute] = useState<LedgerRoute>({ name: "overview" });
-  const [explainedSubject, setExplainedSubject] = useState<AccountingSubject | null>(null);
+  const [openHelpSubjectId, setOpenHelpSubjectId] = useState<string | null>(null);
   const [formMode, setFormMode] = useState<FormMode>(null);
   const [assetForm, setAssetForm] = useState<AssetFormState>(() => createEmptyAssetForm());
   const [liabilityForm, setLiabilityForm] = useState<LiabilityFormState>(() => createEmptyLiabilityForm());
@@ -452,21 +489,36 @@ export default function AssetsLiabilitiesScreen({
   const renderOverview = () => {
     const groups = activeKind === "asset" ? assetGroups : liabilityGroups;
     const visibleGroups = groups.filter((group) => doesSubjectGroupMatchSearch(group, subjectSearchQuery));
+    const handleKindChange = (kind: LedgerKind) => {
+      setOpenHelpSubjectId(null);
+      setActiveKind(kind);
+    };
+    const handleSearchChange = (value: string) => {
+      setOpenHelpSubjectId(null);
+      setSubjectSearchQuery(value);
+    };
+    const handleSubjectHelpPress = (subject: AccountingSubject) => {
+      setOpenHelpSubjectId((current) => (current === subject.id ? null : subject.id));
+    };
 
     return (
       <ScreenTransition animateOnMount transitionKey={`ledger-overview-${activeKind}`} variant="drilldown">
         <View style={styles.stack}>
           <LedgerTopBar onAdd={() => openCreateForm(activeKind)} onBack={onBack} title="资产负债管理" />
           <View style={styles.toggleRow}>
-            <ToggleButton active={activeKind === "asset"} label="资产类" onPress={() => setActiveKind("asset")} />
-            <ToggleButton active={activeKind === "liability"} label="负债类" onPress={() => setActiveKind("liability")} />
+            <ToggleButton active={activeKind === "asset"} label="资产类" onPress={() => handleKindChange("asset")} />
+            <ToggleButton
+              active={activeKind === "liability"}
+              label="负债类"
+              onPress={() => handleKindChange("liability")}
+            />
           </View>
 
           <View style={styles.subjectSearchRow}>
             <View style={styles.subjectSearchBox}>
               <AppIcon color={theme.colors.textMuted} name="search" size={18} />
               <TextInput
-                onChangeText={setSubjectSearchQuery}
+                onChangeText={handleSearchChange}
                 placeholder="搜索科目、金额、备注"
                 placeholderTextColor={theme.colors.textMuted}
                 style={styles.subjectSearchInput}
@@ -479,8 +531,9 @@ export default function AssetsLiabilitiesScreen({
             {visibleGroups.map((group) => (
               <SubjectRow
                 amount={group.amount}
+                isHelpVisible={openHelpSubjectId === group.subject.id}
                 key={group.subject.id}
-                onExplain={setExplainedSubject}
+                onExplain={handleSubjectHelpPress}
                 onPress={() => setRoute({ kind: activeKind, name: "subject", subjectId: group.subject.id })}
                 subject={group.subject}
               />
@@ -617,7 +670,6 @@ export default function AssetsLiabilitiesScreen({
       {route.name === "subject" ? renderSubjectDetail(route.kind, route.subjectId) : null}
       {route.name === "detail" ? renderSpecificDetail(route.kind, route.subjectId, route.id) : null}
 
-      <SubjectExplanationModal onClose={() => setExplainedSubject(null)} subject={explainedSubject} />
       <AssetLiabilityFormModal
         activeAccounts={activeAccounts}
         assetForm={assetForm}
@@ -670,42 +722,58 @@ function LedgerTopBar({ onAdd, onBack, title }: { onAdd?: () => void; onBack: ()
 
 function SubjectRow({
   amount,
+  isHelpVisible,
   onExplain,
   onPress,
   subject,
 }: {
   amount: number;
+  isHelpVisible: boolean;
   onExplain: (subject: AccountingSubject) => void;
   onPress: () => void;
   subject: AccountingSubject;
 }) {
   return (
-    <Pressable onPress={onPress} style={styles.subjectRow}>
-      <View style={styles.subjectRowTop}>
-        <View style={styles.subjectNameWrap}>
-          <Text style={styles.subjectName}>{subject.displayName}</Text>
-          <Pressable
-            accessibilityLabel={`解释${subject.displayName}`}
-            hitSlop={8}
-            onPress={(event) => {
-              event.stopPropagation();
-              onExplain(subject);
-            }}
-          >
-            <View style={styles.questionButton}>
-              <Text style={styles.questionText}>?</Text>
-            </View>
-          </Pressable>
+    <View style={styles.subjectRow}>
+      <Pressable onPress={onPress} style={styles.subjectRowPressable}>
+        <View style={styles.subjectRowTop}>
+          <View style={styles.subjectNameWrap}>
+            <Text style={styles.subjectName}>{subject.displayName}</Text>
+            <Pressable
+              accessibilityLabel={`解释${subject.displayName}`}
+              hitSlop={8}
+              onPress={(event) => {
+                event.stopPropagation();
+                onExplain(subject);
+              }}
+            >
+              <View style={styles.questionButton}>
+                <Text style={styles.questionText}>?</Text>
+              </View>
+            </Pressable>
+          </View>
+          <View style={styles.subjectAmountWrap}>
+            <Text style={styles.subjectAmount}>{formatCurrency(amount)}</Text>
+            <AppIcon color={theme.colors.textMuted} name="chevronRight" size={16} />
+          </View>
         </View>
-        <View style={styles.subjectAmountWrap}>
-          <Text style={styles.subjectAmount}>{formatCurrency(amount)}</Text>
-          <AppIcon color={theme.colors.textMuted} name="chevronRight" size={16} />
-        </View>
+        <Text numberOfLines={1} style={styles.subjectExamples}>
+          {subject.rowExamples.join(" / ")}
+        </Text>
+      </Pressable>
+      {isHelpVisible ? <SubjectHelpBubble text={getSubjectHelpText(subject)} /> : null}
+    </View>
+  );
+}
+
+function SubjectHelpBubble({ text }: { text: string }) {
+  return (
+    <View style={styles.helpBubbleWrap}>
+      <View style={styles.helpBubbleCaret} />
+      <View style={styles.helpBubble}>
+        <Text style={styles.helpBubbleText}>{text}</Text>
       </View>
-      <Text numberOfLines={1} style={styles.subjectExamples}>
-        {subject.rowExamples.join(" / ")}
-      </Text>
-    </Pressable>
+    </View>
   );
 }
 
@@ -774,50 +842,6 @@ function EmptyBox({ description, title }: { description: string; title: string }
     <View style={styles.emptyBox}>
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyText}>{description}</Text>
-    </View>
-  );
-}
-
-function SubjectExplanationModal({
-  onClose,
-  subject,
-}: {
-  onClose: () => void;
-  subject: AccountingSubject | null;
-}) {
-  return (
-    <Modal animationType="fade" onRequestClose={onClose} transparent visible={subject !== null}>
-      <Pressable onPress={onClose} style={styles.explainBackdrop}>
-        <Pressable style={styles.explainPanel}>
-          {subject ? (
-            <>
-              <Text style={styles.explainTitle}>{subject.displayName}</Text>
-              <ExplanationBlock label="科目含义" text={subject.description} />
-              <View style={styles.explainBlock}>
-                <Text style={styles.explainLabel}>本页明细示例</Text>
-                {subject.detailExamples.slice(0, 3).map((example) => (
-                  <Text key={example} style={styles.explainText}>
-                    · {example}
-                  </Text>
-                ))}
-              </View>
-              <ExplanationBlock label="个人化例子" text={subject.personalExample} />
-              <Pressable onPress={onClose} style={styles.explainButton}>
-                <Text style={styles.explainButtonText}>知道了</Text>
-              </Pressable>
-            </>
-          ) : null}
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
-
-function ExplanationBlock({ label, text }: { label: string; text: string }) {
-  return (
-    <View style={styles.explainBlock}>
-      <Text style={styles.explainLabel}>{label}</Text>
-      <Text style={styles.explainText}>{text}</Text>
     </View>
   );
 }
@@ -1288,55 +1312,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "900",
   },
-  explainBackdrop: {
-    alignItems: "center",
-    backgroundColor: "rgba(17, 24, 39, 0.18)",
-    flex: 1,
-    justifyContent: "center",
-    padding: theme.spacing.container,
-  },
-  explainBlock: {
-    gap: 5,
-  },
-  explainButton: {
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    marginTop: 2,
-    paddingVertical: 11,
-  },
-  explainButtonText: {
-    color: theme.colors.textPrimary,
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  explainLabel: {
-    color: theme.colors.textPrimary,
-    fontSize: 13,
-    fontWeight: "900",
-  },
-  explainPanel: {
-    backgroundColor: "#F3F4F6",
-    borderColor: "#E5E7EB",
-    borderRadius: theme.radius.xl,
-    borderWidth: 1,
-    gap: 13,
-    maxWidth: 330,
-    padding: theme.spacing.lg,
-    width: "100%",
-  },
-  explainText: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  explainTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 20,
-    fontWeight: "900",
-  },
   fieldLabel: {
     color: theme.colors.textSecondary,
     fontSize: 14,
@@ -1345,6 +1320,36 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 36,
+  },
+  helpBubble: {
+    backgroundColor: theme.colors.surfaceStrong,
+    borderRadius: theme.radius.lg,
+    maxWidth: 286,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  helpBubbleCaret: {
+    borderBottomColor: theme.colors.surfaceStrong,
+    borderBottomWidth: 7,
+    borderLeftColor: "transparent",
+    borderLeftWidth: 7,
+    borderRightColor: "transparent",
+    borderRightWidth: 7,
+    height: 0,
+    marginLeft: 74,
+    width: 0,
+  },
+  helpBubbleText: {
+    color: theme.colors.textInverse,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 18,
+  },
+  helpBubbleWrap: {
+    alignItems: "flex-start",
+    marginTop: -5,
+    paddingBottom: 10,
+    paddingHorizontal: 2,
   },
   infoLabel: {
     color: theme.colors.textMuted,
@@ -1506,6 +1511,8 @@ const styles = StyleSheet.create({
   subjectRow: {
     borderBottomColor: theme.colors.border,
     borderBottomWidth: 1,
+  },
+  subjectRowPressable: {
     paddingHorizontal: 2,
     paddingVertical: 13,
   },
