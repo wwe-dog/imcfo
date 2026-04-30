@@ -734,7 +734,7 @@ function SubjectRow({
   subject: AccountingSubject;
 }) {
   return (
-    <View style={styles.subjectRow}>
+    <View style={[styles.subjectRow, isHelpVisible && styles.subjectRowFloating]}>
       <Pressable onPress={onPress} style={styles.subjectRowPressable}>
         <View style={styles.subjectRowTop}>
           <View style={styles.subjectNameWrap}>
@@ -769,10 +769,10 @@ function SubjectRow({
 function SubjectHelpBubble({ text }: { text: string }) {
   return (
     <View style={styles.helpBubbleWrap}>
-      <View style={styles.helpBubbleCaret} />
       <View style={styles.helpBubble}>
         <Text style={styles.helpBubbleText}>{text}</Text>
       </View>
+      <View style={styles.helpBubbleCaret} />
     </View>
   );
 }
@@ -1334,12 +1334,12 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
   },
   helpBubbleCaret: {
-    borderBottomColor: theme.colors.surfaceStrong,
-    borderBottomWidth: 7,
     borderLeftColor: "transparent",
     borderLeftWidth: 7,
     borderRightColor: "transparent",
     borderRightWidth: 7,
+    borderTopColor: theme.colors.surfaceStrong,
+    borderTopWidth: 7,
     height: 0,
     marginLeft: 74,
     width: 0,
@@ -1353,9 +1353,9 @@ const styles = StyleSheet.create({
   helpBubbleWrap: {
     alignItems: "flex-start",
     elevation: 12,
-    left: 18,
+    left: 26,
     position: "absolute",
-    top: 31,
+    top: -62,
     zIndex: 20,
   },
   infoLabel: {
@@ -1520,6 +1520,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     position: "relative",
     zIndex: 1,
+  },
+  subjectRowFloating: {
+    zIndex: 30,
   },
   subjectRowPressable: {
     paddingHorizontal: 2,
