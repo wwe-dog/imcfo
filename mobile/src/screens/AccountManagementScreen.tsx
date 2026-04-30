@@ -493,7 +493,7 @@ export default function AccountManagementScreen({
         <View style={styles.stack}>
           <TopBar onBack={handleBack} onAdd={() => openCreateForm(route.type, route.type)} title={meta.detailTitle} />
           <CategorySummaryCard accounts={categoryAccounts} meta={meta} />
-          <View style={[sharedStyles.card, styles.listCard]}>
+          <View style={styles.listSection}>
             <Text style={sharedStyles.sectionTitle}>具体账户</Text>
             {categoryAccounts.length > 0 ? (
               categoryAccounts.map((account) => (
@@ -525,7 +525,7 @@ export default function AccountManagementScreen({
   return (
     <View style={styles.stack}>
       <TopBar onBack={handleBack} onAdd={() => openCreateForm()} title="账户管理" />
-      <View style={[sharedStyles.card, styles.overviewCard]}>
+      <View style={styles.overviewCard}>
         <View>
           <Text style={styles.overviewLabel}>账户余额合计</Text>
           <Text style={styles.overviewValue}>{formatCurrency(enabledAssetBalance)}</Text>
@@ -537,7 +537,7 @@ export default function AccountManagementScreen({
         </View>
       </View>
 
-      <View style={[sharedStyles.card, styles.listCard]}>
+      <View style={styles.listSection}>
         <Text style={sharedStyles.sectionTitle}>账户大类总览</Text>
         {accountCategories.map((category) => {
           const categoryAccounts = accounts.filter((account) => normalizeAccountType(account.type) === category.type);
@@ -604,7 +604,7 @@ function CategorySummaryCard({ accounts, meta }: CategorySummaryCardProps) {
   const creditLimitTotal = accounts.reduce((sum, account) => sum + (account.creditLimit ?? 0), 0);
 
   return (
-    <View style={[sharedStyles.card, styles.summaryCard]}>
+    <View style={styles.summaryCard}>
       <Text style={styles.summaryLabel}>{meta.type === "creditCard" ? "信用卡合计" : `${meta.label}合计`}</Text>
       <Text style={styles.summaryValue}>{formatCategoryAmount(meta.type, total)}</Text>
       {meta.type === "creditCard" ? (
@@ -1126,8 +1126,10 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     justifyContent: "space-between",
   },
-  listCard: {
-    gap: 6,
+  listSection: {
+    borderTopColor: theme.colors.divider,
+    borderTopWidth: 1,
+    gap: 2,
   },
   modalActions: {
     flexDirection: "row",
@@ -1164,8 +1166,13 @@ const styles = StyleSheet.create({
   },
   overviewCard: {
     alignItems: "center",
+    borderBottomColor: theme.colors.divider,
+    borderBottomWidth: 1,
+    borderTopColor: theme.colors.divider,
+    borderTopWidth: 1,
     flexDirection: "row",
     justifyContent: "space-between",
+    paddingVertical: 14,
   },
   overviewHint: {
     color: theme.colors.textMuted,
@@ -1268,7 +1275,12 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceMuted,
   },
   summaryCard: {
+    borderBottomColor: theme.colors.divider,
+    borderBottomWidth: 1,
+    borderTopColor: theme.colors.divider,
+    borderTopWidth: 1,
     gap: 4,
+    paddingVertical: 14,
   },
   summaryHint: {
     color: theme.colors.textMuted,

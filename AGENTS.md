@@ -32,6 +32,12 @@ It is not a normal bookkeeping app. It is a personal operating system based on c
 - Keep changes small and scoped to the task.
 - Report final results in Chinese.
 
+## UI Style Rules
+
+- Second-level and third-level management/detail pages should use the line-separated list style.
+- Avoid large outer rounded list containers and nested cards on management/detail/list pages.
+- Home dashboard and chart/report summary areas may keep card containers when they improve readability.
+
 ## Context Snapshot Rules
 
 - Use the `imcfo-context-snapshot` skill whenever a session resumes from a summary, model switch, compacted context, or handoff.

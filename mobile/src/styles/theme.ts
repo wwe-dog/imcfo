@@ -220,6 +220,42 @@ export const sharedStyles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
   },
+  lineList: {
+    borderTopColor: theme.colors.divider,
+    borderTopWidth: 1,
+  },
+  lineRow: {
+    borderBottomColor: theme.colors.divider,
+    borderBottomWidth: 1,
+    paddingVertical: 12,
+  },
+  lineRowTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  lineRowSubtitle: {
+    color: theme.colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 3,
+  },
+  lineRowValue: {
+    color: theme.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "900",
+    textAlign: "right",
+  },
+  compactSummaryRow: {
+    alignItems: "center",
+    borderBottomColor: theme.colors.divider,
+    borderBottomWidth: 1,
+    borderTopColor: theme.colors.divider,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+  },
   emptyText: {
     color: theme.colors.textMuted,
     fontSize: 14,

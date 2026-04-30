@@ -1277,11 +1277,11 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   detailHero: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.xl,
-    borderWidth: 1,
-    padding: theme.spacing.lg,
+    borderBottomColor: theme.colors.divider,
+    borderBottomWidth: 1,
+    borderTopColor: theme.colors.divider,
+    borderTopWidth: 1,
+    paddingVertical: 14,
   },
   detailHeroAmount: {
     color: theme.colors.textPrimary,
@@ -1315,7 +1315,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     flexDirection: "row",
     gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
     paddingVertical: 12,
   },
   detailItemTitle: {
@@ -1324,11 +1323,8 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   detailPanel: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.xl,
-    borderWidth: 1,
-    paddingHorizontal: theme.spacing.md,
+    borderTopColor: theme.colors.divider,
+    borderTopWidth: 1,
   },
   diffBookValue: {
     color: theme.colors.textPrimary,
@@ -1447,11 +1443,8 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   ledgerList: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.xl,
-    borderWidth: 1,
-    overflow: "hidden",
+    borderTopColor: theme.colors.divider,
+    borderTopWidth: 1,
   },
   modalActions: {
     flexDirection: "row",
@@ -1543,8 +1536,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: 13,
     fontWeight: "900",
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: theme.spacing.md,
+    paddingBottom: 9,
   },
   stack: {
     gap: theme.spacing.md,
@@ -1607,13 +1599,13 @@ const styles = StyleSheet.create({
   },
   subjectTotalRow: {
     alignItems: "center",
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.xl,
-    borderWidth: 1,
+    borderBottomColor: theme.colors.divider,
+    borderBottomWidth: 1,
+    borderTopColor: theme.colors.divider,
+    borderTopWidth: 1,
     flexDirection: "row",
     justifyContent: "space-between",
-    padding: theme.spacing.lg,
+    paddingVertical: 14,
   },
   subjectTotalValue: {
     color: theme.colors.textPrimary,

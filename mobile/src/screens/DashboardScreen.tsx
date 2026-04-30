@@ -631,7 +631,6 @@ function AssetCompositionDetailScreen({
     <View style={styles.detailStack}>
       <DetailHeader onBack={onBack} rightText="截至今日" title="资产构成详情" />
       <SummaryStrip label="总资产" value={formatCompactCurrency(totalAssets)} />
-      <DetailChartCard emptyText="暂无资产构成数据" items={items} title="资产构成" />
       <DetailTable
         description="你可以先在管理页添加资产，用于生成资产构成。"
         emptyText="暂无资产数据"
@@ -672,7 +671,6 @@ function AssetCategoryDetailScreen({ assets, category, onBack, totalAssets }: As
         label={`${categoryName}合计`}
         value={formatCompactCurrency(categoryTotal)}
       />
-      <DetailChartCard emptyText="暂无明细数据" items={itemComposition} title={`${categoryName}构成`} />
       <DetailTable
         description="暂无明细数据"
         emptyText="暂无明细数据"
@@ -705,7 +703,6 @@ function LiabilityCompositionDetailScreen({
     <View style={styles.detailStack}>
       <DetailHeader onBack={onBack} rightText="截至今日" title="负债构成详情" />
       <SummaryStrip label="总负债" value={formatCompactCurrency(totalLiabilities)} />
-      <DetailChartCard emptyText="暂无负债构成数据" items={items} title="负债构成" />
       <DetailTable
         description="你可以先在管理页添加负债，用于生成负债构成。"
         emptyText="暂无负债数据"
@@ -753,7 +750,6 @@ function LiabilityCategoryDetailScreen({
         label={`${categoryName}合计`}
         value={formatCompactCurrency(categoryTotal)}
       />
-      <DetailChartCard emptyText="暂无明细数据" items={itemComposition} title={`${categoryName}构成`} />
       <DetailTable
         description="暂无明细数据"
         emptyText="暂无明细数据"
@@ -904,7 +900,7 @@ interface SummaryStripProps {
 
 function SummaryStrip({ helperText, label, value }: SummaryStripProps) {
   return (
-    <View style={[sharedStyles.card, styles.summaryStrip]}>
+    <View style={styles.summaryStrip}>
       <View>
         <Text style={styles.summaryLabel}>{label}</Text>
         {helperText ? <Text style={styles.summaryHelper}>{helperText}</Text> : null}
@@ -950,7 +946,7 @@ interface DetailTableProps {
 
 function DetailTable({ description, emptyText, nameHeader, onRowPress, rows, title, valueHeader }: DetailTableProps) {
   return (
-    <View style={[sharedStyles.card, styles.tableCard]}>
+    <View style={styles.tableCard}>
       <Text style={styles.sectionLabel}>{title}</Text>
       <View style={styles.tableHeader}>
         <Text style={[styles.tableHeaderText, styles.tableNameColumn]}>{nameHeader}</Text>
@@ -976,6 +972,7 @@ function DetailTable({ description, emptyText, nameHeader, onRowPress, rows, tit
               <Text style={[styles.tableCellTextStrong, styles.tableAmountColumn]}>
                 {formatCompactCurrency(row.value)}
               </Text>
+              {onRowPress ? <AppIcon color={theme.colors.textMuted} name="chevronRight" size={15} /> : null}
             </Container>
           );
         })
@@ -1415,9 +1412,13 @@ const styles = StyleSheet.create({
   },
   summaryStrip: {
     alignItems: "center",
+    borderBottomColor: theme.colors.divider,
+    borderBottomWidth: 1,
+    borderTopColor: theme.colors.divider,
+    borderTopWidth: 1,
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 12,
+    paddingVertical: 14,
   },
   summaryValue: {
     color: theme.colors.textPrimary,
@@ -1430,7 +1431,7 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   tableCard: {
-    gap: theme.spacing.sm,
+    gap: 0,
   },
   tableCellText: {
     color: theme.colors.textSecondary,
@@ -1449,10 +1450,12 @@ const styles = StyleSheet.create({
     width: 10,
   },
   tableHeader: {
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: theme.colors.divider,
     borderBottomWidth: 1,
+    borderTopColor: theme.colors.divider,
+    borderTopWidth: 1,
     flexDirection: "row",
-    paddingBottom: 8,
+    paddingVertical: 9,
   },
   tableHeaderText: {
     color: theme.colors.textMuted,
@@ -1477,11 +1480,11 @@ const styles = StyleSheet.create({
   },
   tableRow: {
     alignItems: "center",
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: theme.colors.divider,
     borderBottomWidth: 1,
     flexDirection: "row",
     minHeight: 46,
-    paddingVertical: 8,
+    paddingVertical: 10,
   },
   segmentButton: {
     alignItems: "center",

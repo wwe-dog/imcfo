@@ -85,7 +85,7 @@ export default function SettingsScreen({
         <Text style={styles.profileSubtitle}>个人经营资料与本地数据管理</Text>
       </View>
 
-      <View style={[sharedStyles.card, styles.listCard]}>
+      <View style={styles.listCard}>
         <Pressable onPress={onOpenAccounts} style={styles.listRow}>
           <SettingsIcon name="account" />
           <View style={styles.listCopy}>
@@ -222,6 +222,8 @@ const styles = StyleSheet.create({
     minHeight: 164,
   },
   listCard: {
+    borderTopColor: theme.colors.divider,
+    borderTopWidth: 1,
     paddingHorizontal: 0,
     paddingVertical: 0,
   },
