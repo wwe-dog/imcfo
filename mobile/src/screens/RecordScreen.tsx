@@ -420,7 +420,7 @@ export default function RecordScreen({
   const handleManageAssets = () => {
     setIsModalVisible(false);
     clearEntryFields();
-    onOpenAccounts();
+    onOpenAssets();
   };
 
   return (
@@ -789,7 +789,7 @@ export default function RecordScreen({
                     <Text style={sharedStyles.secondaryButtonText}>去报表看看</Text>
                   </Pressable>
                   <Pressable onPress={handleManageAssets} style={sharedStyles.secondaryButton}>
-                    <Text style={sharedStyles.secondaryButtonText}>管理账户 / 资产负债</Text>
+                    <Text style={sharedStyles.secondaryButtonText}>去资产负债管理</Text>
                   </Pressable>
                   <Pressable onPress={handleCloseModal} style={styles.ghostButton}>
                     <Text style={styles.ghostButtonText}>关闭</Text>
@@ -1054,12 +1054,6 @@ const styles = StyleSheet.create({
   moreModalRoot: {
     flex: 1,
     justifyContent: "flex-end",
-  },
-  moreOptionArrow: {
-    color: theme.colors.primaryDeep,
-    fontSize: 28,
-    fontWeight: "300",
-    lineHeight: 28,
   },
   moreOptionIcon: {
     alignItems: "center",

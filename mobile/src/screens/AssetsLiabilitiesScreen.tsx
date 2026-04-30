@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Alert, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import AppIcon from "../components/AppIcon";
 import {
   calculateReconciliationDiff,
   getReconciliationReasonOptions,
@@ -16,6 +17,7 @@ interface AssetsLiabilitiesScreenProps {
   assets: Asset[];
   liabilities: Liability[];
   summary: ReportSummary;
+  onBack: () => void;
   onSaveAsset: (input: AssetInput) => Promise<void>;
   onDeleteAsset: (assetId: string) => Promise<void>;
   onSaveReconciliation: (input: ReconciliationInput) => Promise<void>;
@@ -92,6 +94,7 @@ export default function AssetsLiabilitiesScreen({
   assets,
   liabilities,
   summary,
+  onBack,
   onSaveAsset,
   onDeleteAsset,
   onSaveReconciliation,
@@ -294,11 +297,13 @@ export default function AssetsLiabilitiesScreen({
 
   return (
     <View style={styles.stack}>
+      <TopBar onBack={onBack} title="资产负债管理" />
+
       <View style={sharedStyles.pageHeader}>
         <Text style={sharedStyles.eyebrow}>Assets & Liabilities</Text>
-        <Text style={styles.title}>资产负债管理</Text>
+        <Text style={styles.title}>维护底稿与当前价值</Text>
         <Text style={sharedStyles.pageCopy}>
-          在这里维护你的资产和负债底稿，用于生成个人资产负债表。
+          在这里维护资产、负债和估值调整，用于生成个人资产负债表。
         </Text>
       </View>
 
@@ -383,9 +388,7 @@ export default function AssetsLiabilitiesScreen({
             onPress={() => void handleSubmitAsset()}
             style={[sharedStyles.primaryButton, styles.actionMain, isSavingAsset && styles.buttonDisabled]}
           >
-            <Text style={sharedStyles.primaryButtonText}>
-              {assetForm.id ? "保存资产修改" : "添加资产"}
-            </Text>
+            <Text style={sharedStyles.primaryButtonText}>{assetForm.id ? "保存资产修改" : "添加资产"}</Text>
           </Pressable>
           {assetForm.id ? (
             <Pressable onPress={resetAssetForm} style={sharedStyles.secondaryButton}>
@@ -482,9 +485,7 @@ export default function AssetsLiabilitiesScreen({
             onPress={() => void handleSubmitLiability()}
             style={[sharedStyles.primaryButton, styles.actionMain, isSavingLiability && styles.buttonDisabled]}
           >
-            <Text style={sharedStyles.primaryButtonText}>
-              {liabilityForm.id ? "保存负债修改" : "添加负债"}
-            </Text>
+            <Text style={sharedStyles.primaryButtonText}>{liabilityForm.id ? "保存负债修改" : "添加负债"}</Text>
           </Pressable>
           {liabilityForm.id ? (
             <Pressable onPress={resetLiabilityForm} style={sharedStyles.secondaryButton}>
@@ -531,6 +532,19 @@ export default function AssetsLiabilitiesScreen({
         onSubmit={() => void handleAssetReconciliationSubmit()}
         updateReconciliation={(patch) => setAssetReconciliation((current) => ({ ...current, ...patch }))}
       />
+    </View>
+  );
+}
+
+function TopBar({ onBack, title }: { onBack: () => void; title: string }) {
+  return (
+    <View style={styles.headerRow}>
+      <Pressable onPress={onBack} style={styles.backButton}>
+        <AppIcon color={theme.colors.backButtonText} name="back" size={15} strokeWidth={2.2} />
+        <Text style={styles.backButtonText}>返回</Text>
+      </Pressable>
+      <Text style={styles.pageTitle}>{title}</Text>
+      <View style={styles.headerSpacer} />
     </View>
   );
 }
@@ -613,7 +627,9 @@ function AssetReconciliationModal({
               <Text style={styles.fieldLabel}>实际市值</Text>
               <TextInput
                 keyboardType="decimal-pad"
-                onChangeText={(value) => updateReconciliation({ actualValue: value, isConfirming: false, reason: undefined })}
+                onChangeText={(value) =>
+                  updateReconciliation({ actualValue: value, isConfirming: false, reason: undefined })
+                }
                 placeholder="请输入实际金额"
                 placeholderTextColor={theme.colors.textMuted}
                 style={sharedStyles.input}
@@ -672,6 +688,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: theme.spacing.sm,
   },
+  backButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.backButtonBackground,
+    borderColor: theme.colors.backButtonBorder,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  backButtonText: {
+    color: theme.colors.backButtonText,
+    fontSize: 13,
+    fontWeight: "800",
+  },
   buttonDisabled: {
     opacity: 0.65,
   },
@@ -680,11 +712,54 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: theme.spacing.sm,
   },
+  diffBookValue: {
+    color: theme.colors.textPrimary,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  diffBox: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: theme.spacing.md,
+  },
+  diffLabel: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  diffNegative: {
+    color: theme.colors.danger,
+  },
+  diffPositive: {
+    color: theme.colors.success,
+  },
+  diffRight: {
+    alignItems: "flex-end",
+  },
+  diffValue: {
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: 3,
+  },
   fieldLabel: {
     color: theme.colors.textSecondary,
     fontSize: 14,
     fontWeight: "700",
     marginBottom: 6,
+  },
+  headerRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    justifyContent: "space-between",
+  },
+  headerSpacer: {
+    width: 58,
   },
   inlineActions: {
     flexDirection: "row",
@@ -790,11 +865,20 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "900",
   },
+  pageTitle: {
+    color: theme.colors.textPrimary,
+    flex: 1,
+    fontSize: 21,
+    fontWeight: "900",
+    letterSpacing: -0.5,
+    textAlign: "center",
+  },
   panel: {
     gap: 14,
   },
   stack: {
     gap: theme.spacing.md,
+    paddingBottom: theme.spacing.lg,
   },
   summaryLabel: {
     color: theme.colors.textInverse,
@@ -822,39 +906,5 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "900",
     letterSpacing: -0.8,
-  },
-  diffBookValue: {
-    color: theme.colors.textPrimary,
-    fontSize: 18,
-    fontWeight: "900",
-  },
-  diffBox: {
-    alignItems: "center",
-    backgroundColor: theme.colors.surfaceSoft,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    padding: theme.spacing.md,
-  },
-  diffLabel: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  diffNegative: {
-    color: theme.colors.danger,
-  },
-  diffPositive: {
-    color: theme.colors.success,
-  },
-  diffRight: {
-    alignItems: "flex-end",
-  },
-  diffValue: {
-    fontSize: 18,
-    fontWeight: "900",
-    marginTop: 3,
   },
 });

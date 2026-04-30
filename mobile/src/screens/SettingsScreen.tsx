@@ -102,22 +102,20 @@ export default function SettingsScreen({
           </View>
           <AppIcon color={theme.colors.textMuted} name="chevronRight" size={17} />
         </Pressable>
-        <Pressable style={[styles.listRow, styles.listRowBorder]}>
+        <View style={[styles.listRow, styles.listRowBorder]}>
           <SettingsIcon name="data" />
           <View style={styles.listCopy}>
             <Text style={styles.listTitle}>数据管理</Text>
-            <Text style={styles.listSubtitle}>导入 / 导出 / 清理</Text>
+            <Text style={styles.listSubtitle}>导入 / 导出 / 清理在下方执行</Text>
           </View>
-          <AppIcon color={theme.colors.textMuted} name="chevronRight" size={17} />
-        </Pressable>
-        <Pressable style={[styles.listRow, styles.listRowBorder]}>
+        </View>
+        <View style={[styles.listRow, styles.listRowBorder]}>
           <SettingsIcon name="settings" />
           <View style={styles.listCopy}>
             <Text style={styles.listTitle}>通用设置</Text>
             <Text style={styles.listSubtitle}>{storageMode} · 数据版本 {appVersion}</Text>
           </View>
-          <AppIcon color={theme.colors.textMuted} name="chevronRight" size={17} />
-        </Pressable>
+        </View>
       </View>
 
       <View style={[sharedStyles.card, styles.panel]}>

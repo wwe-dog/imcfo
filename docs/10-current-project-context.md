@@ -1,89 +1,46 @@
 # 我为 CFO 当前项目上下文快照
 
-更新时间：2026-04-29  
+更新时间：2026-04-30  
 当前分支：`main`  
-开发模式：trunk-based development，直接在 `main` 上小步提交。  
-本次快照原因：完成交易记录页月份懒水合性能优化后刷新上下文，便于后续压缩/恢复。
+基线提交：`1b438d9`  
+本次快照原因：完成一轮保守型移动端审计、修复、清理和稳定性验证后刷新上下文。
 
 ## 1. 项目定位与边界
 
-“我为 CFO”是面向普通自然人的个人经营系统，不是普通记账 App。产品把个人生活数据翻译成公司式财务视角，核心是资产负债表、利润表、现金流量表、简单/专业报告模式，以及月度/季度/年度报告。
+“我为 CFO”是把自然人财务按公司报表视角组织起来的个人经营系统，不是普通记账 App。当前移动端 MVP 继续维持 Expo + React Native + TypeScript + AsyncStorage，本轮没有改变产品方向、会计政策、存储 schema、底部导航结构或页面层级。
 
-当前 V0.1 明确不做：后端、登录、数据库、云同步、AI/API、支付、会员、银行/券商真实接口、个体工商户、VAT、发票、正式税务申报、企业法定财报。
+仍然明确不做：后端、登录、云同步、支付、AI/API、税务/VAT/发票、重型依赖、Web 端 Arco 体系迁入。
 
-关键规则：
-- 用户可见文案保持中文。
-- 会计/报表逻辑必须和 UI 分离。
-- 报表计算函数保持纯函数、可测试。
-- 屏幕不得直接调用 `AsyncStorage`，必须通过 `useAppData` 和 storage adapter。
-- 不随意新增依赖。
+## 2. 本轮审计范围
 
-## 2. 技术栈
+- 仓库结构与可达性检查：`mobile/App.tsx`、`mobile/src/screens`、`components`、`domain`、`hooks`、`storage`、`styles`
+- TypeScript 编译稳定性检查
+- 交易记录、管理页、资产负债页、设置页的运行时风险审计
+- 死代码、伪入口、未使用组件清理
+- 高复杂度示例数据财务不变量复核
 
-- Expo
-- React Native
-- TypeScript
-- AsyncStorage
-- `react-native-svg` 用于移动端图表和项目内语义图标
+## 3. 本轮关键修复
 
-常用命令：
+- 恢复并重新接通 `mobile/src/screens/AssetsLiabilitiesScreen.tsx`，解决 `App.tsx` 仍引用该页但工作区文件被删除导致的编译中断。
+- 为资产负债管理页补回统一样式的返回顶部栏，使其与账户管理、交易记录等二级页一致，并与 `App.tsx` 现有 `onBack` 接口对齐。
+- 修正 `RecordScreen` 成功弹窗中的“管理账户 / 资产负债”按钮行为：原先实际跳到账户管理，现改为进入资产负债管理，文案同步改为“去资产负债管理”。
+- 清理 `SettingsScreen` 中两个没有任何行为的伪导航入口：保留信息展示，但移除可点击误导和箭头暗示。
+- 删除未被引用的 `mobile/src/components/MetricCard.tsx`。
+- 清理 `RecordScreen` 中未使用的 `moreOptionArrow` 样式残留。
+
+## 4. 验证结果
+
+已运行：
 
 ```powershell
 cd D:\imcfo\mobile
-npm.cmd run typecheck
+node node_modules/typescript/bin/tsc --noEmit
 ```
 
-```powershell
-cd D:\imcfo
-git status
-git log --oneline --decorate -10
-```
+结果：通过。
 
-## 3. 当前主要功能状态
+已额外用一次性本地 TypeScript 加载脚本核对高复杂度示例数据，2026-04 汇总值保持不变：
 
-- 底部导航：`首页 / 管理 / 报表 / 我的`。
-- 首页：支持 `收支现金流 / 资产负债结构` 双视图，资产、负债、净资产 drilldown，SVG donut/line 图表。
-- 管理页：一句话记账、识别结果 modal、确认入账成功 modal、手动高级填写、管理中心 modal。
-- 账户管理：账户大类总览 -> 分类详情 -> 账户详情/新增账户；账户类型详情页只读，余额/欠款修改有确认。
-- 资产负债管理：支持资产/负债 CRUD 和资产估值更新入口。
-- 报表：资产负债表、利润表、现金流量表，简单/专业模式。
-- 我的：数据导出/导入、恢复示例数据、清空本地数据、账户管理和交易记录入口。
-- 对账/资产盘点：支持账户余额和资产市值的安全调整。
-- 交易记录：只读交易中心，支持搜索、筛选面板、自定义日期范围、账户类别/资金方向筛选、按月分组、月份折叠、交易详情页。
-
-## 4. 最近完成的工作
-
-最新提交：
-- `8f2c3aa perf: lazy hydrate transaction months`
-- `839da79 perf: precompute transaction records index`
-- `364ff22 docs: refresh current project context snapshot`
-- `1be2dc1 perf: reduce transaction records initial load lag`
-- `ec6dbe5 perf: optimize transaction records list rendering`
-- `7c6cddc style: animate transaction month collapse`
-
-最近交易记录性能优化范围：
-- `8f2c3aa` 将交易记录索引拆为月份摘要和按月行数据两层。
-- `transactionDisplayIndex.ts` 现在构建 `monthSummaries`、`rawTransactionsByMonth`，并只在初始索引中水合最新月份的 `recordsByMonth`。
-- `TransactionRecordsScreen.tsx` 默认模式只渲染月份头和已水合月份行，历史月份展开时调用 `hydrateTransactionMonth` 生成该月行数据。
-- 搜索或筛选激活后才调用 `hydrateAllTransactionRecords` 生成全量展示记录；清空搜索和筛选后回到默认懒加载模式。
-- 筛选弹层和日历网格仅在点击漏斗按钮后挂载，不再随页面隐藏渲染。
-- 新增 `mobile/src/domain/transactions/transactionDisplayIndex.ts`：构建 UI 派生的交易记录展示索引，不写入 AsyncStorage。
-- 新增 `mobile/src/hooks/useTransactionRecordsIndex.ts`：App 数据加载后用 `InteractionManager.runAfterInteractions` 预热索引。
-- 更新 `mobile/App.tsx`：在 AppShell 级别预建交易记录索引并传入交易记录页；报表期交易过滤只在进入报表页时执行，避免打开交易记录时做无关遍历。
-- 更新 `mobile/src/screens/TransactionRecordsScreen.tsx`：消费预计算 index，不再在页面打开路径里构建原始交易显示记录。
-- 索引预计算字段包括 title、amountText、amountDirection、cashStatus、cashFlowLabel、typeLabel、categoryText、noteText、accountDisplay、accountTypeBuckets、monthKey、monthLabel、timestamp、searchableText 等。
-- 默认无搜索/无筛选时直接使用预分组 month groups；搜索/筛选时基于预计算 records 和 searchableText 过滤，再按月轻量分组。
-- 最新月份默认展开，历史月份默认折叠，减少首屏渲染行数。
-
-## 5. 高复杂度示例数据
-
-示例数据位于：
-- `mobile/src/storage/seedData.ts`
-- `mobile/src/storage/historicalDemoData.ts`
-
-当前包含 2023-05 至 2026-04 的 36 个月历史数据，约 1000+ 条交易，用于测试交易记录、筛选、月份折叠、趋势和高净值财务复杂度。
-
-2026-04 期望值必须保持：
 - 资产：5,000,000
 - 负债：1,186,000
 - 净资产：3,814,000
@@ -95,71 +52,55 @@ git log --oneline --decorate -10
 - 筹资活动现金流：-69,200
 - 现金净变化：-76,300
 
-## 6. 重要文件职责
+未运行：
 
-- `mobile/App.tsx`：App 入口、页面切换、底部导航、二级页面入口、交易记录索引预热挂载点。
-- `mobile/src/app/useAppData.ts`：集中管理 AppData、加载/保存/恢复/导入/导出、交易/账户/资产/负债/对账更新。
-- `mobile/src/domain/accounting/calculations.ts`：核心报表计算，必须保持纯函数。
-- `mobile/src/domain/accounting/transactionRules.ts`：交易入账和账户/资产/负债同步规则。
-- `mobile/src/domain/accounting/reconciliationRules.ts`：对账/资产盘点调整规则。
-- `mobile/src/domain/accounting/periodFilters.ts`：按当前报告期过滤交易，避免历史交易污染当前期报表。
-- `mobile/src/domain/transactions/transactionDisplayIndex.ts`：交易记录页 UI 派生索引构建，负责月份摘要、最新月预水合、按月懒水合、搜索文本和展示字段。
-- `mobile/src/hooks/useTransactionRecordsIndex.ts`：交易记录索引预热 hook。
-- `mobile/src/screens/TransactionRecordsScreen.tsx`：交易记录列表、筛选、月份折叠、交易详情展示。
-- `mobile/src/screens/AccountManagementScreen.tsx`：账户管理层级页面和账户详情。
-- `mobile/src/screens/DashboardScreen.tsx`：首页仪表盘与资产/负债/净资产 drilldown。
-- `mobile/src/screens/RecordScreen.tsx`：管理页、记账和管理中心 modal。
+- `npm.cmd run lint`
+- `npm.cmd run test`
+- `npm.cmd run build`
 
-## 7. 待办与风险
+原因：`mobile/package.json` 当前只定义了 `start/android/ios/web/typecheck`，没有 lint/test/build 脚本；同时当前环境未将 `npm.cmd` 暴露到 PATH，本轮验证通过直接调用本地 `node` + `typescript` 完成。
 
-高优先级：
-- 为核心报表计算函数补最小自动化测试。
-- 为交易规则、应收/应付、对账规则补关键样例测试。
-- 评估交易记录编辑/删除/反向冲销是否进入 V0.1。
-- 完善账户余额与资产/负债明细的双向同步边界。
+## 5. 当前重要实现状态
 
-已知风险：
-- 当前主要依赖 `npm.cmd run typecheck` 保底，自动化测试不足。
-- 交易记录性能优化已改为月份摘要 + 懒水合，但尚未做真实 Android profiler 帧率采样。
-- 趋势图尚无独立历史快照 schema，部分趋势仍依赖现有数据或近似。
-- 对账规则不会随机 fallback 到任意资产/负债；缺少明确关联时只更新可确认目标。
-- 普通账户一对多关联资产时不会自动覆盖多个资产，需用户进入资产明细分别更新。
+- 底部导航仍为：`首页 / 管理 / 报表 / 我的`
+- `DashboardScreen` 负责首页结果、结构和趋势
+- `RecordScreen` 负责一句话记账、手动录入、管理中心入口
+- `AccountManagementScreen` 负责账户分层管理与对账
+- `AssetsLiabilitiesScreen` 已恢复为可用状态，继续承担资产/负债维护与资产估值调整
+- `TransactionRecordsScreen` 保持既有索引预计算 + 月份懒水合实现
+- `useAppData` 继续作为唯一数据读写入口，屏幕层不直接接触 `AsyncStorage`
 
-## 8. 当前验证
+## 6. 已知限制与风险
 
-最近一次实现后已运行：
+- 自动化测试仍不足，当前主要靠 `typecheck` 和人工规则核对兜底。
+- 本轮没有新增性能架构改造；交易记录页既有的预计算和懒水合方案仍是当前主要性能保障。
+- 工作区仍存在一个未纳入本轮的未跟踪文件：`mobile/src/domain/accounting/accountingSubjectCatalog.ts`。目前没有任何引用，不影响构建；下次若要启用，需要先明确产品用途再接入。
+- Git 提交在当前环境下被 `.git` 写权限/锁限制阻断，未能完成本轮提交。
 
-```powershell
-cd D:\imcfo\mobile
-npm.cmd run typecheck
-```
+## 7. 当前 Git 状态
 
-结果：通过。
+本轮代码改动目标文件：
 
-## 9. 当前 Git 状态
+- `mobile/App.tsx`
+- `mobile/src/screens/AssetsLiabilitiesScreen.tsx`
+- `mobile/src/screens/RecordScreen.tsx`
+- `mobile/src/screens/SettingsScreen.tsx`
+- `mobile/src/components/MetricCard.tsx`（删除）
 
-刷新本快照前的最近提交：
+提交状态：
 
-```text
-8f2c3aa perf: lazy hydrate transaction months
-839da79 perf: precompute transaction records index
-364ff22 docs: refresh current project context snapshot
-1be2dc1 perf: reduce transaction records initial load lag
-ec6dbe5 perf: optimize transaction records list rendering
-7c6cddc style: animate transaction month collapse
-```
+- 计划提交信息：`chore: audit and clean up mobile app`
+- 实际结果：未提交成功
+- 阻塞原因：写入 `.git/index.lock` 时权限被拒绝
 
-本快照应作为单独文档提交，不应混入功能代码。
-
-## 10. 下次会话建议开场
+## 8. 下次会话建议开场
 
 ```text
 Use AGENTS.md and current main branch as source of truth.
-Use the imcfo-context-snapshot skill.
 Read docs/10-current-project-context.md first.
 Project root: D:\imcfo.
 Mobile app path: D:\imcfo\mobile.
-Continue V0.1 mobile development within documented boundaries.
-Before finishing, run npm.cmd run typecheck inside mobile.
+Continue conservative mobile maintenance within V0.1 boundaries.
+Before finishing, run node node_modules/typescript/bin/tsc --noEmit inside mobile.
 Report final results in Chinese.
 ```

@@ -267,6 +267,7 @@ function AppShell() {
             assets={data.assets}
             liabilities={data.liabilities}
             summary={summary}
+            onBack={() => setActiveScreen("record")}
             onDeleteAsset={handleDeleteAsset}
             onDeleteLiability={handleDeleteLiability}
             onSaveReconciliation={handleSaveReconciliation}
