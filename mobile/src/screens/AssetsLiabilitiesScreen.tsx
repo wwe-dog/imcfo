@@ -99,6 +99,7 @@ interface LayoutBox {
 const HELP_BUBBLE_MAX_WIDTH = 248;
 const HELP_BUBBLE_MARGIN = 4;
 const HELP_BUBBLE_CARET_HALF_WIDTH = 7;
+const HELP_BUBBLE_ICON_GAP = 10;
 
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
 
@@ -770,7 +771,7 @@ function SubjectRow({
     HELP_BUBBLE_CARET_HALF_WIDTH,
     bubbleWidth - HELP_BUBBLE_CARET_HALF_WIDTH * 3,
   );
-  const bubbleTop = questionLayout ? questionLayout.y + questionLayout.height + 6 : 30;
+  const bubbleTop = questionLayout ? questionLayout.y + questionLayout.height + HELP_BUBBLE_ICON_GAP : 34;
   const handleRowLayout = (event: LayoutChangeEvent) => {
     setRowWidth(event.nativeEvent.layout.width);
   };
