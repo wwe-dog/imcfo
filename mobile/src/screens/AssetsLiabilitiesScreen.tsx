@@ -1,6 +1,14 @@
-import { useMemo, useState } from "react";
-import { Alert, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import AppIcon from "../components/AppIcon";
+import ScreenTransition from "../components/ScreenTransition";
+import {
+  assetAccountingSubjects,
+  getAssetAccountingSubject,
+  getLiabilityAccountingSubject,
+  liabilityAccountingSubjects,
+  type AccountingSubject,
+} from "../domain/accounting/accountingSubjectCatalog";
 import {
   calculateReconciliationDiff,
   getReconciliationReasonOptions,
@@ -16,93 +24,182 @@ interface AssetsLiabilitiesScreenProps {
   accounts: Account[];
   assets: Asset[];
   liabilities: Liability[];
-  summary: ReportSummary;
   onBack: () => void;
-  onSaveAsset: (input: AssetInput) => Promise<void>;
   onDeleteAsset: (assetId: string) => Promise<void>;
-  onSaveReconciliation: (input: ReconciliationInput) => Promise<void>;
-  onSaveLiability: (input: LiabilityInput) => Promise<void>;
   onDeleteLiability: (liabilityId: string) => Promise<void>;
+  onSaveAsset: (input: AssetInput) => Promise<void>;
+  onSaveLiability: (input: LiabilityInput) => Promise<void>;
+  onSaveReconciliation: (input: ReconciliationInput) => Promise<void>;
+  summary: ReportSummary;
 }
 
-const assetCategoryOptions: Array<{ value: Asset["category"]; label: string }> = [
-  { value: "cash", label: "现金" },
-  { value: "bankDeposit", label: "银行卡" },
-  { value: "paymentAccount", label: "支付账户" },
-  { value: "investment", label: "投资资产" },
-  { value: "receivable", label: "应收款" },
-  { value: "fixedAsset", label: "固定资产" },
-  { value: "other", label: "其他资产" },
-];
-
-const liabilityCategoryOptions: Array<{ value: Liability["category"]; label: string }> = [
-  { value: "creditCard", label: "信用卡" },
-  { value: "huabei", label: "花呗 / 白条" },
-  { value: "loan", label: "贷款" },
-  { value: "borrowing", label: "借款" },
-  { value: "payable", label: "应付款" },
-  { value: "other", label: "其他负债" },
-];
+type LedgerKind = "asset" | "liability";
+type LedgerRoute =
+  | { name: "overview" }
+  | { kind: LedgerKind; name: "subject"; subjectId: string }
+  | { id: string; kind: LedgerKind; name: "detail"; subjectId: string };
+type FormMode = "asset" | "liability" | null;
 
 interface AssetFormState {
+  accountId?: string;
+  amount: string;
+  category: Asset["category"];
   id?: string;
   name: string;
-  category: Asset["category"];
-  amount: string;
-  accountId?: string;
   note: string;
 }
 
 interface LiabilityFormState {
+  amount: string;
+  category: Liability["category"];
+  dueDate: string;
   id?: string;
   name: string;
-  category: Liability["category"];
-  amount: string;
-  dueDate: string;
   note: string;
 }
 
 interface AssetReconciliationState {
-  asset?: Asset;
   actualValue: string;
-  reason?: ReconciliationReason;
-  note: string;
+  asset?: Asset;
   isConfirming: boolean;
   isSaving: boolean;
+  note: string;
+  reason?: ReconciliationReason;
 }
 
-const createEmptyAssetForm = (): AssetFormState => ({
-  amount: "",
+interface AssetSubjectGroup {
+  amount: number;
+  items: Asset[];
+  subject: AccountingSubject;
+}
+
+interface LiabilitySubjectGroup {
+  amount: number;
+  items: Liability[];
+  subject: AccountingSubject;
+}
+
+const assetCategoryOptions: Array<{ label: string; value: Asset["category"] }> = [
+  { label: "现金", value: "cash" },
+  { label: "银行卡 / 存款", value: "bankDeposit" },
+  { label: "支付账户", value: "paymentAccount" },
+  { label: "投资资产", value: "investment" },
+  { label: "应收款", value: "receivable" },
+  { label: "固定资产", value: "fixedAsset" },
+  { label: "其他资产", value: "other" },
+];
+
+const liabilityCategoryOptions: Array<{ label: string; value: Liability["category"] }> = [
+  { label: "信用卡", value: "creditCard" },
+  { label: "消费分期", value: "huabei" },
+  { label: "贷款", value: "loan" },
+  { label: "借款", value: "borrowing" },
+  { label: "应付款", value: "payable" },
+  { label: "其他负债", value: "other" },
+];
+
+const subjectDefaultAssetCategory: Record<string, Asset["category"]> = {
+  "bank-deposit": "bankDeposit",
+  "cash-on-hand": "cash",
+  "fixed-assets": "fixedAsset",
+  "long-term-equity-investment": "investment",
+  "other-assets": "other",
+  "other-monetary-funds": "paymentAccount",
+  "other-receivables": "receivable",
+  "trading-financial-assets": "investment",
+};
+
+const subjectDefaultLiabilityCategory: Record<string, Liability["category"]> = {
+  "accounts-payable": "payable",
+  "long-term-borrowings": "loan",
+  "long-term-payables": "huabei",
+  "other-liabilities": "other",
+  "other-payables": "payable",
+  "short-term-borrowings": "borrowing",
+  "taxes-payable": "payable",
+};
+
+const isAccountEnabled = (account: Account): boolean => account.isEnabled ?? account.isActive ?? true;
+const getAssetValue = (asset: Asset): number => asset.currentValue ?? asset.amount ?? 0;
+
+const createEmptyAssetForm = (subjectId?: string): AssetFormState => ({
   accountId: undefined,
-  category: "bankDeposit",
+  amount: "",
+  category: subjectId ? subjectDefaultAssetCategory[subjectId] ?? "bankDeposit" : "bankDeposit",
   name: "",
   note: "",
 });
 
-const createEmptyLiabilityForm = (): LiabilityFormState => ({
+const createEmptyLiabilityForm = (subjectId?: string): LiabilityFormState => ({
   amount: "",
-  category: "creditCard",
+  category: subjectId ? subjectDefaultLiabilityCategory[subjectId] ?? "creditCard" : "creditCard",
   dueDate: "",
   name: "",
   note: "",
 });
 
-const isAccountEnabled = (account: Account): boolean => account.isEnabled ?? account.isActive ?? true;
+const getSubjectCatalog = (kind: LedgerKind): AccountingSubject[] =>
+  kind === "asset" ? assetAccountingSubjects : liabilityAccountingSubjects;
+
+const getSubjectById = (kind: LedgerKind, subjectId: string): AccountingSubject =>
+  getSubjectCatalog(kind).find((subject) => subject.id === subjectId) ?? getSubjectCatalog(kind)[0];
+
+const buildAssetGroups = (assets: Asset[], accounts: Account[]): AssetSubjectGroup[] => {
+  const groupMap = new Map<string, AssetSubjectGroup>();
+  assetAccountingSubjects.forEach((subject) => groupMap.set(subject.id, { amount: 0, items: [], subject }));
+
+  assets.forEach((asset) => {
+    const subject = getAssetAccountingSubject(asset, accounts);
+    const group = groupMap.get(subject.id);
+    if (!group) return;
+    group.items.push(asset);
+    group.amount += getAssetValue(asset);
+  });
+
+  return assetAccountingSubjects.map((subject) => groupMap.get(subject.id) ?? { amount: 0, items: [], subject });
+};
+
+const buildLiabilityGroups = (liabilities: Liability[]): LiabilitySubjectGroup[] => {
+  const groupMap = new Map<string, LiabilitySubjectGroup>();
+  liabilityAccountingSubjects.forEach((subject) => groupMap.set(subject.id, { amount: 0, items: [], subject }));
+
+  liabilities.forEach((liability) => {
+    const subject = getLiabilityAccountingSubject(liability);
+    const group = groupMap.get(subject.id);
+    if (!group) return;
+    group.items.push(liability);
+    group.amount += liability.amount;
+  });
+
+  return liabilityAccountingSubjects.map((subject) => groupMap.get(subject.id) ?? { amount: 0, items: [], subject });
+};
+
+const getAssetTypeLabel = (category: Asset["category"]): string =>
+  assetCategoryOptions.find((option) => option.value === category)?.label ?? String(category);
+
+const getLiabilityTypeLabel = (category: Liability["category"]): string =>
+  liabilityCategoryOptions.find((option) => option.value === category)?.label ?? String(category);
+
+const getLinkedAccountName = (accounts: Account[], accountId?: string): string =>
+  accountId ? accounts.find((account) => account.id === accountId)?.name ?? "已删除账户" : "无";
 
 export default function AssetsLiabilitiesScreen({
   accounts,
   assets,
   liabilities,
-  summary,
   onBack,
-  onSaveAsset,
   onDeleteAsset,
-  onSaveReconciliation,
-  onSaveLiability,
   onDeleteLiability,
+  onSaveAsset,
+  onSaveLiability,
+  onSaveReconciliation,
 }: AssetsLiabilitiesScreenProps) {
-  const [assetForm, setAssetForm] = useState<AssetFormState>(createEmptyAssetForm);
-  const [liabilityForm, setLiabilityForm] = useState<LiabilityFormState>(createEmptyLiabilityForm);
+  const [activeKind, setActiveKind] = useState<LedgerKind>("asset");
+  const [route, setRoute] = useState<LedgerRoute>({ name: "overview" });
+  const [explainedSubject, setExplainedSubject] = useState<AccountingSubject | null>(null);
+  const [formMode, setFormMode] = useState<FormMode>(null);
+  const [assetForm, setAssetForm] = useState<AssetFormState>(() => createEmptyAssetForm());
+  const [liabilityForm, setLiabilityForm] = useState<LiabilityFormState>(() => createEmptyLiabilityForm());
   const [isSavingAsset, setIsSavingAsset] = useState(false);
   const [isSavingLiability, setIsSavingLiability] = useState(false);
   const [assetReconciliation, setAssetReconciliation] = useState<AssetReconciliationState>({
@@ -113,13 +210,65 @@ export default function AssetsLiabilitiesScreen({
   });
 
   const activeAccounts = useMemo(() => accounts.filter(isAccountEnabled), [accounts]);
+  const assetGroups = useMemo(() => buildAssetGroups(assets, accounts), [accounts, assets]);
+  const liabilityGroups = useMemo(() => buildLiabilityGroups(liabilities), [liabilities]);
 
-  const resetAssetForm = () => setAssetForm(createEmptyAssetForm());
-  const resetLiabilityForm = () => setLiabilityForm(createEmptyLiabilityForm());
+  const closeForm = () => {
+    setFormMode(null);
+    setAssetForm(createEmptyAssetForm());
+    setLiabilityForm(createEmptyLiabilityForm());
+  };
+
+  const openCreateForm = (kind: LedgerKind, subjectId?: string) => {
+    if (kind === "asset") {
+      setAssetForm(createEmptyAssetForm(subjectId));
+    } else {
+      setLiabilityForm(createEmptyLiabilityForm(subjectId));
+    }
+    setFormMode(kind);
+  };
+
+  const openEditAsset = (asset: Asset) => {
+    setAssetForm({
+      accountId: asset.accountId,
+      amount: String(getAssetValue(asset)),
+      category: asset.category,
+      id: asset.id,
+      name: asset.name,
+      note: asset.note ?? "",
+    });
+    setFormMode("asset");
+  };
+
+  const openEditLiability = (liability: Liability) => {
+    setLiabilityForm({
+      amount: String(liability.amount),
+      category: liability.category,
+      dueDate: liability.dueDate ?? "",
+      id: liability.id,
+      name: liability.name,
+      note: liability.note ?? "",
+    });
+    setFormMode("liability");
+  };
+
+  const handleBack = () => {
+    if (route.name === "overview") {
+      onBack();
+      return;
+    }
+
+    if (route.name === "detail") {
+      setRoute({ kind: route.kind, name: "subject", subjectId: route.subjectId });
+      return;
+    }
+
+    setRoute({ name: "overview" });
+  };
 
   const openAssetReconciliation = (asset: Asset) => {
     setAssetReconciliation({
-      actualValue: String(asset.currentValue),
+      actualValue: String(getAssetValue(asset)),
       asset,
       isConfirming: false,
       isSaving: false,
@@ -142,7 +291,7 @@ export default function AssetsLiabilitiesScreen({
     if (!asset) return;
 
     const actualValue = Number(assetReconciliation.actualValue.replace(",", "."));
-    const diff = calculateReconciliationDiff(asset.currentValue, actualValue);
+    const diff = calculateReconciliationDiff(getAssetValue(asset), actualValue);
 
     if (!Number.isFinite(actualValue) || actualValue < 0) {
       Alert.alert("请输入实际金额", "实际金额必须大于等于 0。");
@@ -181,31 +330,9 @@ export default function AssetsLiabilitiesScreen({
     }
   };
 
-  const handleEditAsset = (asset: Asset) => {
-    setAssetForm({
-      accountId: asset.accountId,
-      amount: String(asset.currentValue),
-      category: asset.category,
-      id: asset.id,
-      name: asset.name,
-      note: asset.note ?? "",
-    });
-  };
-
-  const handleEditLiability = (liability: Liability) => {
-    setLiabilityForm({
-      amount: String(liability.amount),
-      category: liability.category,
-      dueDate: liability.dueDate ?? "",
-      id: liability.id,
-      name: liability.name,
-      note: liability.note ?? "",
-    });
-  };
-
   const handleSubmitAsset = async () => {
     const name = assetForm.name.trim();
-    const amount = Number(assetForm.amount);
+    const amount = Number(assetForm.amount.replace(",", "."));
 
     if (!name || !assetForm.amount.trim()) {
       Alert.alert("信息不完整", "请填写资产名称和金额。");
@@ -227,7 +354,7 @@ export default function AssetsLiabilitiesScreen({
         name,
         note: assetForm.note,
       });
-      resetAssetForm();
+      closeForm();
     } finally {
       setIsSavingAsset(false);
     }
@@ -235,7 +362,7 @@ export default function AssetsLiabilitiesScreen({
 
   const handleSubmitLiability = async () => {
     const name = liabilityForm.name.trim();
-    const amount = Number(liabilityForm.amount);
+    const amount = Number(liabilityForm.amount.replace(",", "."));
 
     if (!name || !liabilityForm.amount.trim()) {
       Alert.alert("信息不完整", "请填写负债名称和金额。");
@@ -257,7 +384,7 @@ export default function AssetsLiabilitiesScreen({
         name,
         note: liabilityForm.note,
       });
-      resetLiabilityForm();
+      closeForm();
     } finally {
       setIsSavingLiability(false);
     }
@@ -267,14 +394,14 @@ export default function AssetsLiabilitiesScreen({
     Alert.alert("删除资产", `确认删除“${asset.name}”吗？`, [
       { text: "取消", style: "cancel" },
       {
-        text: "删除",
-        style: "destructive",
         onPress: () => {
           void onDeleteAsset(asset.id);
-          if (assetForm.id === asset.id) {
-            resetAssetForm();
+          if (route.name === "detail") {
+            setRoute({ kind: "asset", name: "subject", subjectId: route.subjectId });
           }
         },
+        style: "destructive",
+        text: "删除",
       },
     ]);
   };
@@ -283,289 +410,597 @@ export default function AssetsLiabilitiesScreen({
     Alert.alert("删除负债", `确认删除“${liability.name}”吗？`, [
       { text: "取消", style: "cancel" },
       {
-        text: "删除",
-        style: "destructive",
         onPress: () => {
           void onDeleteLiability(liability.id);
-          if (liabilityForm.id === liability.id) {
-            resetLiabilityForm();
+          if (route.name === "detail") {
+            setRoute({ kind: "liability", name: "subject", subjectId: route.subjectId });
           }
         },
+        style: "destructive",
+        text: "删除",
       },
     ]);
   };
 
+  const renderOverview = () => {
+    const groups = activeKind === "asset" ? assetGroups : liabilityGroups;
+
+    return (
+      <ScreenTransition animateOnMount transitionKey={`ledger-overview-${activeKind}`} variant="drilldown">
+        <View style={styles.stack}>
+          <LedgerTopBar onAdd={() => openCreateForm(activeKind)} onBack={onBack} title="资产负债管理" />
+          <View style={styles.toggleRow}>
+            <ToggleButton active={activeKind === "asset"} label="资产类" onPress={() => setActiveKind("asset")} />
+            <ToggleButton active={activeKind === "liability"} label="负债类" onPress={() => setActiveKind("liability")} />
+          </View>
+
+          <View style={styles.ledgerList}>
+            <Text style={styles.sectionHeading}>{activeKind === "asset" ? "资产类科目" : "负债类科目"}</Text>
+            {groups.map((group) => (
+              <SubjectRow
+                amount={group.amount}
+                key={group.subject.id}
+                onExplain={setExplainedSubject}
+                onPress={() => setRoute({ kind: activeKind, name: "subject", subjectId: group.subject.id })}
+                subject={group.subject}
+              />
+            ))}
+          </View>
+        </View>
+      </ScreenTransition>
+    );
+  };
+
+  const renderSubjectDetail = (kind: LedgerKind, subjectId: string) => {
+    const subject = getSubjectById(kind, subjectId);
+    const assetGroup = kind === "asset" ? assetGroups.find((group) => group.subject.id === subjectId) : undefined;
+    const liabilityGroup =
+      kind === "liability" ? liabilityGroups.find((group) => group.subject.id === subjectId) : undefined;
+    const amount = assetGroup?.amount ?? liabilityGroup?.amount ?? 0;
+    const items = kind === "asset" ? assetGroup?.items ?? [] : liabilityGroup?.items ?? [];
+
+    return (
+      <ScreenTransition animateOnMount transitionKey={`ledger-subject-${subjectId}`} variant="drilldown">
+        <View style={styles.stack}>
+          <LedgerTopBar onAdd={() => openCreateForm(kind, subjectId)} onBack={handleBack} title={subject.displayName} />
+          <View style={styles.subjectTotalRow}>
+            <Text style={styles.subjectTotalLabel}>本科目合计</Text>
+            <Text style={styles.subjectTotalValue}>{formatCurrency(amount)}</Text>
+          </View>
+
+          <View style={styles.ledgerList}>
+            <Text style={styles.sectionHeading}>明细项目</Text>
+            {items.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <Text style={styles.emptyTitle}>暂无明细项目</Text>
+                <Text style={styles.emptyText}>可点击右上角新增。</Text>
+              </View>
+            ) : null}
+            {kind === "asset"
+              ? (items as Asset[]).map((asset) => (
+                  <DetailItemRow
+                    amount={getAssetValue(asset)}
+                    key={asset.id}
+                    note={asset.note}
+                    onPress={() => setRoute({ id: asset.id, kind, name: "detail", subjectId })}
+                    title={asset.name}
+                  />
+                ))
+              : (items as Liability[]).map((liability) => (
+                  <DetailItemRow
+                    amount={liability.amount}
+                    key={liability.id}
+                    note={liability.note ?? liability.dueDate}
+                    onPress={() => setRoute({ id: liability.id, kind, name: "detail", subjectId })}
+                    title={liability.name}
+                  />
+                ))}
+          </View>
+        </View>
+      </ScreenTransition>
+    );
+  };
+
+  const renderSpecificDetail = (kind: LedgerKind, subjectId: string, id: string) => {
+    const subject = getSubjectById(kind, subjectId);
+    const asset = kind === "asset" ? assets.find((item) => item.id === id) : undefined;
+    const liability = kind === "liability" ? liabilities.find((item) => item.id === id) : undefined;
+
+    if (!asset && !liability) {
+      return (
+        <ScreenTransition animateOnMount transitionKey="ledger-detail-missing" variant="drilldown">
+          <View style={styles.stack}>
+            <LedgerTopBar onBack={handleBack} title="明细不存在" />
+            <EmptyBox description="该资产或负债可能已经被删除。" title="明细不存在" />
+          </View>
+        </ScreenTransition>
+      );
+    }
+
+    return (
+      <ScreenTransition animateOnMount transitionKey={`ledger-detail-${kind}-${id}`} variant="drilldown">
+        <View style={styles.stack}>
+          <LedgerTopBar onBack={handleBack} title={asset?.name ?? liability?.name ?? "明细详情"} />
+          {asset ? (
+            <SpecificDetail
+              amount={getAssetValue(asset)}
+              fields={[
+                ["会计科目", subject.displayName],
+                ["资产类型", getAssetTypeLabel(asset.category)],
+                ["关联账户", getLinkedAccountName(accounts, asset.accountId)],
+                ["用途 / 备注", asset.note || "无"],
+                ["状态", "有效"],
+              ]}
+              name={asset.name}
+            >
+              <Pressable onPress={() => openAssetReconciliation(asset)} style={styles.operationButton}>
+                <Text style={styles.operationButtonText}>更新当前价值</Text>
+              </Pressable>
+              <Pressable onPress={() => openEditAsset(asset)} style={styles.operationButton}>
+                <Text style={styles.operationButtonText}>编辑资产</Text>
+              </Pressable>
+              <Pressable onPress={() => confirmDeleteAsset(asset)} style={styles.operationDangerButton}>
+                <Text style={styles.operationDangerText}>删除资产</Text>
+              </Pressable>
+            </SpecificDetail>
+          ) : null}
+          {liability ? (
+            <SpecificDetail
+              amount={liability.amount}
+              fields={[
+                ["会计科目", subject.displayName],
+                ["负债类型", getLiabilityTypeLabel(liability.category)],
+                ["关联账户", getLinkedAccountName(accounts, liability.accountId)],
+                ["到期日", liability.dueDate || "无"],
+                ["用途 / 备注", liability.note || "无"],
+                ["状态", "有效"],
+              ]}
+              name={liability.name}
+            >
+              <Pressable onPress={() => openEditLiability(liability)} style={styles.operationButton}>
+                <Text style={styles.operationButtonText}>编辑负债</Text>
+              </Pressable>
+              <Pressable onPress={() => confirmDeleteLiability(liability)} style={styles.operationDangerButton}>
+                <Text style={styles.operationDangerText}>删除负债</Text>
+              </Pressable>
+            </SpecificDetail>
+          ) : null}
+        </View>
+      </ScreenTransition>
+    );
+  };
+
   return (
     <View style={styles.stack}>
-      <TopBar onBack={onBack} title="资产负债管理" />
+      {route.name === "overview" ? renderOverview() : null}
+      {route.name === "subject" ? renderSubjectDetail(route.kind, route.subjectId) : null}
+      {route.name === "detail" ? renderSpecificDetail(route.kind, route.subjectId, route.id) : null}
 
-      <View style={sharedStyles.pageHeader}>
-        <Text style={sharedStyles.eyebrow}>Assets & Liabilities</Text>
-        <Text style={styles.title}>维护底稿与当前价值</Text>
-        <Text style={sharedStyles.pageCopy}>
-          在这里维护资产、负债和估值调整，用于生成个人资产负债表。
-        </Text>
-      </View>
-
-      <View style={styles.summaryPanel}>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>总资产</Text>
-          <Text style={styles.summaryValue}>{formatCurrency(summary.totalAssets)}</Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>总负债</Text>
-          <Text style={styles.summaryValue}>{formatCurrency(summary.totalLiabilities)}</Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>所有者权益（个人净资产）</Text>
-          <Text style={styles.summaryValue}>{formatCurrency(summary.ownerEquity)}</Text>
-        </View>
-      </View>
-
-      <View style={[sharedStyles.card, styles.panel]}>
-        <Text style={sharedStyles.sectionTitle}>{assetForm.id ? "编辑资产" : "新增资产"}</Text>
-        <TextInput
-          onChangeText={(value) => setAssetForm((current) => ({ ...current, name: value }))}
-          placeholder="资产名称，例如：工资卡余额"
-          placeholderTextColor={theme.colors.textMuted}
-          style={sharedStyles.input}
-          value={assetForm.name}
-        />
-        <View style={styles.chipGroup}>
-          {assetCategoryOptions.map((option) => {
-            const isActive = assetForm.category === option.value;
-            return (
-              <Pressable
-                key={option.value}
-                onPress={() => setAssetForm((current) => ({ ...current, category: option.value }))}
-                style={[sharedStyles.chip, isActive && sharedStyles.chipActiveLight]}
-              >
-                <Text style={sharedStyles.chipText}>{option.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <TextInput
-          keyboardType="decimal-pad"
-          onChangeText={(value) => setAssetForm((current) => ({ ...current, amount: value }))}
-          placeholder="当前金额或当前价值"
-          placeholderTextColor={theme.colors.textMuted}
-          style={sharedStyles.input}
-          value={assetForm.amount}
-        />
-        <Text style={styles.fieldLabel}>关联账户（可选）</Text>
-        <View style={styles.chipGroup}>
-          <Pressable
-            onPress={() => setAssetForm((current) => ({ ...current, accountId: undefined }))}
-            style={[sharedStyles.chip, !assetForm.accountId && sharedStyles.chipActiveLight]}
-          >
-            <Text style={sharedStyles.chipText}>不关联</Text>
-          </Pressable>
-          {activeAccounts.map((account) => {
-            const isActive = assetForm.accountId === account.id;
-            return (
-              <Pressable
-                key={account.id}
-                onPress={() => setAssetForm((current) => ({ ...current, accountId: account.id }))}
-                style={[sharedStyles.chip, isActive && sharedStyles.chipActiveLight]}
-              >
-                <Text style={sharedStyles.chipText}>{account.name}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <TextInput
-          multiline
-          onChangeText={(value) => setAssetForm((current) => ({ ...current, note: value }))}
-          placeholder="备注（可选）"
-          placeholderTextColor={theme.colors.textMuted}
-          style={[sharedStyles.input, sharedStyles.textArea]}
-          value={assetForm.note}
-        />
-        <View style={styles.actionRow}>
-          <Pressable
-            disabled={isSavingAsset}
-            onPress={() => void handleSubmitAsset()}
-            style={[sharedStyles.primaryButton, styles.actionMain, isSavingAsset && styles.buttonDisabled]}
-          >
-            <Text style={sharedStyles.primaryButtonText}>{assetForm.id ? "保存资产修改" : "添加资产"}</Text>
-          </Pressable>
-          {assetForm.id ? (
-            <Pressable onPress={resetAssetForm} style={sharedStyles.secondaryButton}>
-              <Text style={sharedStyles.secondaryButtonText}>取消编辑</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      </View>
-
-      <View style={[sharedStyles.card, styles.panel]}>
-        <Text style={sharedStyles.sectionTitle}>资产列表</Text>
-        {assets.length === 0 ? <Text style={sharedStyles.emptyText}>还没有资产，先添加第一项。</Text> : null}
-        {assets.map((asset) => (
-          <View key={asset.id} style={styles.itemCard}>
-            <View style={styles.itemHeader}>
-              <View style={styles.itemText}>
-                <Text style={styles.itemTitle}>{asset.name}</Text>
-                <Text style={styles.itemMeta}>
-                  {assetCategoryOptions.find((option) => option.value === asset.category)?.label ?? asset.category}
-                </Text>
-              </View>
-              <Text style={styles.itemValue}>{formatCurrency(asset.currentValue)}</Text>
-            </View>
-            {asset.note ? <Text style={styles.itemNote}>{asset.note}</Text> : null}
-            {asset.accountId ? (
-              <Text style={styles.itemMeta}>
-                关联账户：{activeAccounts.find((account) => account.id === asset.accountId)?.name ?? "已删除账户"}
-              </Text>
-            ) : null}
-            <View style={styles.inlineActions}>
-              <Pressable onPress={() => openAssetReconciliation(asset)} style={styles.inlineButton}>
-                <Text style={styles.inlineButtonText}>更新当前价值</Text>
-              </Pressable>
-              <Pressable onPress={() => handleEditAsset(asset)} style={styles.inlineButton}>
-                <Text style={styles.inlineButtonText}>编辑</Text>
-              </Pressable>
-              <Pressable onPress={() => confirmDeleteAsset(asset)} style={styles.inlineDangerButton}>
-                <Text style={styles.inlineDangerButtonText}>删除</Text>
-              </Pressable>
-            </View>
-          </View>
-        ))}
-      </View>
-
-      <View style={[sharedStyles.card, styles.panel]}>
-        <Text style={sharedStyles.sectionTitle}>{liabilityForm.id ? "编辑负债" : "新增负债"}</Text>
-        <TextInput
-          onChangeText={(value) => setLiabilityForm((current) => ({ ...current, name: value }))}
-          placeholder="负债名称，例如：信用卡应还款"
-          placeholderTextColor={theme.colors.textMuted}
-          style={sharedStyles.input}
-          value={liabilityForm.name}
-        />
-        <View style={styles.chipGroup}>
-          {liabilityCategoryOptions.map((option) => {
-            const isActive = liabilityForm.category === option.value;
-            return (
-              <Pressable
-                key={option.value}
-                onPress={() => setLiabilityForm((current) => ({ ...current, category: option.value }))}
-                style={[sharedStyles.chip, isActive && sharedStyles.chipActiveLight]}
-              >
-                <Text style={sharedStyles.chipText}>{option.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <TextInput
-          keyboardType="decimal-pad"
-          onChangeText={(value) => setLiabilityForm((current) => ({ ...current, amount: value }))}
-          placeholder="负债金额"
-          placeholderTextColor={theme.colors.textMuted}
-          style={sharedStyles.input}
-          value={liabilityForm.amount}
-        />
-        <TextInput
-          onChangeText={(value) => setLiabilityForm((current) => ({ ...current, dueDate: value }))}
-          placeholder="到期日（可选，YYYY-MM-DD）"
-          placeholderTextColor={theme.colors.textMuted}
-          style={sharedStyles.input}
-          value={liabilityForm.dueDate}
-        />
-        <TextInput
-          multiline
-          onChangeText={(value) => setLiabilityForm((current) => ({ ...current, note: value }))}
-          placeholder="备注（可选）"
-          placeholderTextColor={theme.colors.textMuted}
-          style={[sharedStyles.input, sharedStyles.textArea]}
-          value={liabilityForm.note}
-        />
-        <View style={styles.actionRow}>
-          <Pressable
-            disabled={isSavingLiability}
-            onPress={() => void handleSubmitLiability()}
-            style={[sharedStyles.primaryButton, styles.actionMain, isSavingLiability && styles.buttonDisabled]}
-          >
-            <Text style={sharedStyles.primaryButtonText}>{liabilityForm.id ? "保存负债修改" : "添加负债"}</Text>
-          </Pressable>
-          {liabilityForm.id ? (
-            <Pressable onPress={resetLiabilityForm} style={sharedStyles.secondaryButton}>
-              <Text style={sharedStyles.secondaryButtonText}>取消编辑</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      </View>
-
-      <View style={[sharedStyles.card, styles.panel]}>
-        <Text style={sharedStyles.sectionTitle}>负债列表</Text>
-        {liabilities.length === 0 ? (
-          <Text style={sharedStyles.emptyText}>还没有负债，可以按实际情况录入。</Text>
-        ) : null}
-        {liabilities.map((liability) => (
-          <View key={liability.id} style={styles.itemCard}>
-            <View style={styles.itemHeader}>
-              <View style={styles.itemText}>
-                <Text style={styles.itemTitle}>{liability.name}</Text>
-                <Text style={styles.itemMeta}>
-                  {liabilityCategoryOptions.find((option) => option.value === liability.category)?.label ??
-                    liability.category}
-                </Text>
-              </View>
-              <Text style={styles.itemValue}>{formatCurrency(liability.amount)}</Text>
-            </View>
-            {liability.dueDate ? <Text style={styles.itemMeta}>到期日：{liability.dueDate}</Text> : null}
-            {liability.note ? <Text style={styles.itemNote}>{liability.note}</Text> : null}
-            <View style={styles.inlineActions}>
-              <Pressable onPress={() => handleEditLiability(liability)} style={styles.inlineButton}>
-                <Text style={styles.inlineButtonText}>编辑</Text>
-              </Pressable>
-              <Pressable onPress={() => confirmDeleteLiability(liability)} style={styles.inlineDangerButton}>
-                <Text style={styles.inlineDangerButtonText}>删除</Text>
-              </Pressable>
-            </View>
-          </View>
-        ))}
-      </View>
-
+      <SubjectExplanationModal onClose={() => setExplainedSubject(null)} subject={explainedSubject} />
+      <AssetLiabilityFormModal
+        activeAccounts={activeAccounts}
+        assetForm={assetForm}
+        formMode={formMode}
+        isSavingAsset={isSavingAsset}
+        isSavingLiability={isSavingLiability}
+        liabilityForm={liabilityForm}
+        onClose={closeForm}
+        onSubmitAsset={() => void handleSubmitAsset()}
+        onSubmitLiability={() => void handleSubmitLiability()}
+        setAssetForm={setAssetForm}
+        setLiabilityForm={setLiabilityForm}
+      />
       <AssetReconciliationModal
-        reconciliation={assetReconciliation}
         onClose={closeAssetReconciliation}
         onSubmit={() => void handleAssetReconciliationSubmit()}
+        reconciliation={assetReconciliation}
         updateReconciliation={(patch) => setAssetReconciliation((current) => ({ ...current, ...patch }))}
       />
     </View>
   );
 }
 
-function TopBar({ onBack, title }: { onBack: () => void; title: string }) {
+function ToggleButton({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
   return (
-    <View style={styles.headerRow}>
+    <Pressable onPress={onPress} style={[styles.toggleButton, active ? styles.toggleButtonActive : null]}>
+      <Text style={[styles.toggleText, active ? styles.toggleTextActive : null]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function LedgerTopBar({ onAdd, onBack, title }: { onAdd?: () => void; onBack: () => void; title: string }) {
+  return (
+    <View style={styles.topBar}>
       <Pressable onPress={onBack} style={styles.backButton}>
         <AppIcon color={theme.colors.backButtonText} name="back" size={15} strokeWidth={2.2} />
         <Text style={styles.backButtonText}>返回</Text>
       </Pressable>
       <Text style={styles.pageTitle}>{title}</Text>
-      <View style={styles.headerSpacer} />
+      {onAdd ? (
+        <Pressable accessibilityLabel="新增明细" onPress={onAdd} style={styles.addButton}>
+          <AppIcon color={theme.colors.primaryDeep} name="add" size={20} />
+        </Pressable>
+      ) : (
+        <View style={styles.headerSpacer} />
+      )}
     </View>
   );
 }
 
-interface AssetReconciliationModalProps {
-  reconciliation: AssetReconciliationState;
+function SubjectRow({
+  amount,
+  onExplain,
+  onPress,
+  subject,
+}: {
+  amount: number;
+  onExplain: (subject: AccountingSubject) => void;
+  onPress: () => void;
+  subject: AccountingSubject;
+}) {
+  return (
+    <Pressable onPress={onPress} style={styles.subjectRow}>
+      <View style={styles.subjectRowTop}>
+        <View style={styles.subjectNameWrap}>
+          <Text style={styles.subjectName}>{subject.displayName}</Text>
+          <Pressable
+            accessibilityLabel={`解释${subject.displayName}`}
+            hitSlop={8}
+            onPress={(event) => {
+              event.stopPropagation();
+              onExplain(subject);
+            }}
+          >
+            <View style={styles.questionButton}>
+              <Text style={styles.questionText}>?</Text>
+            </View>
+          </Pressable>
+        </View>
+        <View style={styles.subjectAmountWrap}>
+          <Text style={styles.subjectAmount}>{formatCurrency(amount)}</Text>
+          <AppIcon color={theme.colors.textMuted} name="chevronRight" size={16} />
+        </View>
+      </View>
+      <Text numberOfLines={1} style={styles.subjectExamples}>
+        {subject.rowExamples.join(" / ")}
+      </Text>
+    </Pressable>
+  );
+}
+
+function DetailItemRow({
+  amount,
+  note,
+  onPress,
+  title,
+}: {
+  amount: number;
+  note?: string;
+  onPress: () => void;
+  title: string;
+}) {
+  return (
+    <Pressable onPress={onPress} style={styles.detailItemRow}>
+      <View style={styles.detailItemMain}>
+        <Text numberOfLines={1} style={styles.detailItemTitle}>
+          {title}
+        </Text>
+        <Text numberOfLines={1} style={styles.detailItemNote}>
+          {note || "无备注"}
+        </Text>
+      </View>
+      <Text style={styles.detailItemAmount}>{formatCurrency(amount)}</Text>
+      <AppIcon color={theme.colors.textMuted} name="chevronRight" size={16} />
+    </Pressable>
+  );
+}
+
+function SpecificDetail({
+  amount,
+  children,
+  fields,
+  name,
+}: {
+  amount: number;
+  children: ReactNode;
+  fields: Array<[string, string]>;
+  name: string;
+}) {
+  return (
+    <>
+      <View style={styles.detailHero}>
+        <Text style={styles.detailHeroName}>{name}</Text>
+        <Text style={styles.detailHeroAmount}>{formatCurrency(amount)}</Text>
+      </View>
+      <View style={styles.detailPanel}>
+        {fields.map(([label, value]) => (
+          <View key={label} style={styles.infoRow}>
+            <Text style={styles.infoLabel}>{label}</Text>
+            <Text style={styles.infoValue}>{value}</Text>
+          </View>
+        ))}
+      </View>
+      <View style={styles.operations}>
+        <Text style={styles.sectionHeading}>操作</Text>
+        {children}
+      </View>
+    </>
+  );
+}
+
+function EmptyBox({ description, title }: { description: string; title: string }) {
+  return (
+    <View style={styles.emptyBox}>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptyText}>{description}</Text>
+    </View>
+  );
+}
+
+function SubjectExplanationModal({
+  onClose,
+  subject,
+}: {
   onClose: () => void;
+  subject: AccountingSubject | null;
+}) {
+  return (
+    <Modal animationType="fade" onRequestClose={onClose} transparent visible={subject !== null}>
+      <Pressable onPress={onClose} style={styles.explainBackdrop}>
+        <Pressable style={styles.explainPanel}>
+          {subject ? (
+            <>
+              <Text style={styles.explainTitle}>{subject.displayName}</Text>
+              <ExplanationBlock label="科目含义" text={subject.description} />
+              <View style={styles.explainBlock}>
+                <Text style={styles.explainLabel}>本页明细示例</Text>
+                {subject.detailExamples.slice(0, 3).map((example) => (
+                  <Text key={example} style={styles.explainText}>
+                    · {example}
+                  </Text>
+                ))}
+              </View>
+              <ExplanationBlock label="个人化例子" text={subject.personalExample} />
+              <Pressable onPress={onClose} style={styles.explainButton}>
+                <Text style={styles.explainButtonText}>知道了</Text>
+              </Pressable>
+            </>
+          ) : null}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function ExplanationBlock({ label, text }: { label: string; text: string }) {
+  return (
+    <View style={styles.explainBlock}>
+      <Text style={styles.explainLabel}>{label}</Text>
+      <Text style={styles.explainText}>{text}</Text>
+    </View>
+  );
+}
+
+function AssetLiabilityFormModal({
+  activeAccounts,
+  assetForm,
+  formMode,
+  isSavingAsset,
+  isSavingLiability,
+  liabilityForm,
+  onClose,
+  onSubmitAsset,
+  onSubmitLiability,
+  setAssetForm,
+  setLiabilityForm,
+}: {
+  activeAccounts: Account[];
+  assetForm: AssetFormState;
+  formMode: FormMode;
+  isSavingAsset: boolean;
+  isSavingLiability: boolean;
+  liabilityForm: LiabilityFormState;
+  onClose: () => void;
+  onSubmitAsset: () => void;
+  onSubmitLiability: () => void;
+  setAssetForm: Dispatch<SetStateAction<AssetFormState>>;
+  setLiabilityForm: Dispatch<SetStateAction<LiabilityFormState>>;
+}) {
+  return (
+    <Modal animationType="fade" onRequestClose={onClose} transparent visible={formMode !== null}>
+      <Pressable onPress={onClose} style={styles.modalBackdrop}>
+        <Pressable style={styles.modalPanel}>
+          <ScrollView contentContainerStyle={styles.modalContent} showsVerticalScrollIndicator={false}>
+            {formMode === "asset" ? (
+              <>
+                <Text style={styles.modalTitle}>{assetForm.id ? "编辑资产" : "新增资产"}</Text>
+                <TextInput
+                  onChangeText={(value) => setAssetForm((current) => ({ ...current, name: value }))}
+                  placeholder="资产名称，例如：招商银行活期"
+                  placeholderTextColor={theme.colors.textMuted}
+                  style={sharedStyles.input}
+                  value={assetForm.name}
+                />
+                <AssetCategoryChips form={assetForm} setForm={setAssetForm} />
+                <TextInput
+                  keyboardType="decimal-pad"
+                  onChangeText={(value) => setAssetForm((current) => ({ ...current, amount: value }))}
+                  placeholder="当前金额或当前价值"
+                  placeholderTextColor={theme.colors.textMuted}
+                  style={sharedStyles.input}
+                  value={assetForm.amount}
+                />
+                <Text style={styles.fieldLabel}>关联账户（可选）</Text>
+                <View style={styles.chipGroup}>
+                  <Pressable
+                    onPress={() => setAssetForm((current) => ({ ...current, accountId: undefined }))}
+                    style={[sharedStyles.chip, !assetForm.accountId && sharedStyles.chipActiveLight]}
+                  >
+                    <Text style={sharedStyles.chipText}>不关联</Text>
+                  </Pressable>
+                  {activeAccounts.map((account) => (
+                    <Pressable
+                      key={account.id}
+                      onPress={() => setAssetForm((current) => ({ ...current, accountId: account.id }))}
+                      style={[sharedStyles.chip, assetForm.accountId === account.id && sharedStyles.chipActiveLight]}
+                    >
+                      <Text style={sharedStyles.chipText}>{account.name}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <TextInput
+                  multiline
+                  onChangeText={(value) => setAssetForm((current) => ({ ...current, note: value }))}
+                  placeholder="备注（可选）"
+                  placeholderTextColor={theme.colors.textMuted}
+                  style={[sharedStyles.input, sharedStyles.textArea]}
+                  value={assetForm.note}
+                />
+                <ModalActions
+                  disabled={isSavingAsset}
+                  onCancel={onClose}
+                  onSubmit={onSubmitAsset}
+                  submitLabel={assetForm.id ? "保存资产修改" : "添加资产"}
+                />
+              </>
+            ) : null}
+
+            {formMode === "liability" ? (
+              <>
+                <Text style={styles.modalTitle}>{liabilityForm.id ? "编辑负债" : "新增负债"}</Text>
+                <TextInput
+                  onChangeText={(value) => setLiabilityForm((current) => ({ ...current, name: value }))}
+                  placeholder="负债名称，例如：招商信用卡"
+                  placeholderTextColor={theme.colors.textMuted}
+                  style={sharedStyles.input}
+                  value={liabilityForm.name}
+                />
+                <LiabilityCategoryChips form={liabilityForm} setForm={setLiabilityForm} />
+                <TextInput
+                  keyboardType="decimal-pad"
+                  onChangeText={(value) => setLiabilityForm((current) => ({ ...current, amount: value }))}
+                  placeholder="负债金额"
+                  placeholderTextColor={theme.colors.textMuted}
+                  style={sharedStyles.input}
+                  value={liabilityForm.amount}
+                />
+                <TextInput
+                  onChangeText={(value) => setLiabilityForm((current) => ({ ...current, dueDate: value }))}
+                  placeholder="到期日（可选，YYYY-MM-DD）"
+                  placeholderTextColor={theme.colors.textMuted}
+                  style={sharedStyles.input}
+                  value={liabilityForm.dueDate}
+                />
+                <TextInput
+                  multiline
+                  onChangeText={(value) => setLiabilityForm((current) => ({ ...current, note: value }))}
+                  placeholder="备注（可选）"
+                  placeholderTextColor={theme.colors.textMuted}
+                  style={[sharedStyles.input, sharedStyles.textArea]}
+                  value={liabilityForm.note}
+                />
+                <ModalActions
+                  disabled={isSavingLiability}
+                  onCancel={onClose}
+                  onSubmit={onSubmitLiability}
+                  submitLabel={liabilityForm.id ? "保存负债修改" : "添加负债"}
+                />
+              </>
+            ) : null}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function AssetCategoryChips({
+  form,
+  setForm,
+}: {
+  form: AssetFormState;
+  setForm: Dispatch<SetStateAction<AssetFormState>>;
+}) {
+  return (
+    <View style={styles.chipGroup}>
+      {assetCategoryOptions.map((option) => (
+        <Pressable
+          key={option.value}
+          onPress={() => setForm((current) => ({ ...current, category: option.value }))}
+          style={[sharedStyles.chip, form.category === option.value && sharedStyles.chipActiveLight]}
+        >
+          <Text style={sharedStyles.chipText}>{option.label}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+function LiabilityCategoryChips({
+  form,
+  setForm,
+}: {
+  form: LiabilityFormState;
+  setForm: Dispatch<SetStateAction<LiabilityFormState>>;
+}) {
+  return (
+    <View style={styles.chipGroup}>
+      {liabilityCategoryOptions.map((option) => (
+        <Pressable
+          key={option.value}
+          onPress={() => setForm((current) => ({ ...current, category: option.value }))}
+          style={[sharedStyles.chip, form.category === option.value && sharedStyles.chipActiveLight]}
+        >
+          <Text style={sharedStyles.chipText}>{option.label}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+function ModalActions({
+  disabled,
+  onCancel,
+  onSubmit,
+  submitLabel,
+}: {
+  disabled: boolean;
+  onCancel: () => void;
   onSubmit: () => void;
-  updateReconciliation: (patch: Partial<AssetReconciliationState>) => void;
+  submitLabel: string;
+}) {
+  return (
+    <View style={styles.modalActions}>
+      <Pressable onPress={onCancel} style={sharedStyles.secondaryButton}>
+        <Text style={sharedStyles.secondaryButtonText}>取消</Text>
+      </Pressable>
+      <Pressable
+        disabled={disabled}
+        onPress={onSubmit}
+        style={[sharedStyles.primaryButton, styles.modalPrimaryButton, disabled && styles.buttonDisabled]}
+      >
+        <Text style={sharedStyles.primaryButtonText}>{disabled ? "保存中..." : submitLabel}</Text>
+      </Pressable>
+    </View>
+  );
 }
 
 function AssetReconciliationModal({
-  reconciliation,
   onClose,
   onSubmit,
+  reconciliation,
   updateReconciliation,
-}: AssetReconciliationModalProps) {
+}: {
+  onClose: () => void;
+  onSubmit: () => void;
+  reconciliation: AssetReconciliationState;
+  updateReconciliation: (patch: Partial<AssetReconciliationState>) => void;
+}) {
   const asset = reconciliation.asset;
   const actualValue = Number(reconciliation.actualValue.replace(",", "."));
-  const displayActual = Number.isFinite(actualValue) ? actualValue : asset?.currentValue ?? 0;
-  const diff = asset ? calculateReconciliationDiff(asset.currentValue, displayActual) : 0;
+  const bookValue = asset ? getAssetValue(asset) : 0;
+  const displayActual = Number.isFinite(actualValue) ? actualValue : bookValue;
+  const diff = asset ? calculateReconciliationDiff(bookValue, displayActual) : 0;
   const reasonOptions = asset && Math.abs(diff) >= 0.01 ? getReconciliationReasonOptions("asset", diff) : [];
 
   return (
@@ -578,13 +1013,7 @@ function AssetReconciliationModal({
               <Text style={styles.modalDescription}>
                 系统将根据你选择的原因生成一笔调整记录，并更新相关账户或资产。请确认这不是重复记录。
               </Text>
-              <View style={styles.diffBox}>
-                <Text style={styles.diffLabel}>本次差额</Text>
-                <Text style={[styles.diffValue, diff >= 0 ? styles.diffPositive : styles.diffNegative]}>
-                  {diff >= 0 ? "+" : "-"}
-                  {formatCurrency(Math.abs(diff))}
-                </Text>
-              </View>
+              <DiffBox diff={diff} label="本次差额" value={Math.abs(diff)} />
               <View style={styles.modalActions}>
                 <Pressable
                   disabled={reconciliation.isSaving}
@@ -608,34 +1037,18 @@ function AssetReconciliationModal({
             <>
               <Text style={styles.modalTitle}>更新当前价值</Text>
               <Text style={styles.modalDescription}>
-                输入资产的实际市值，系统会生成非现金估值调整，不计入收入、费用或现金流。
+                输入资产的实际市值，系统会生成安全的非现金估值调整，不计入收入、费用或现金流。
               </Text>
-              <View style={styles.diffBox}>
-                <View>
-                  <Text style={styles.diffLabel}>当前账面价值</Text>
-                  <Text style={styles.diffBookValue}>{formatCurrency(asset?.currentValue ?? 0)}</Text>
-                </View>
-                <View style={styles.diffRight}>
-                  <Text style={styles.diffLabel}>差额</Text>
-                  <Text style={[styles.diffValue, diff >= 0 ? styles.diffPositive : styles.diffNegative]}>
-                    {Math.abs(diff) < 0.01 ? "" : diff > 0 ? "+" : "-"}
-                    {formatCurrency(Math.abs(diff))}
-                  </Text>
-                </View>
-              </View>
-
+              <DiffBox diff={diff} label="当前账面价值" value={bookValue} />
               <Text style={styles.fieldLabel}>实际市值</Text>
               <TextInput
                 keyboardType="decimal-pad"
-                onChangeText={(value) =>
-                  updateReconciliation({ actualValue: value, isConfirming: false, reason: undefined })
-                }
+                onChangeText={(value) => updateReconciliation({ actualValue: value, isConfirming: false, reason: undefined })}
                 placeholder="请输入实际金额"
                 placeholderTextColor={theme.colors.textMuted}
                 style={sharedStyles.input}
                 value={reconciliation.actualValue}
               />
-
               <Text style={styles.fieldLabel}>差额原因</Text>
               <View style={styles.chipGroup}>
                 {reasonOptions.map((option) => {
@@ -653,7 +1066,6 @@ function AssetReconciliationModal({
                   );
                 })}
               </View>
-
               <Text style={styles.fieldLabel}>备注</Text>
               <TextInput
                 multiline
@@ -663,7 +1075,6 @@ function AssetReconciliationModal({
                 style={[sharedStyles.input, sharedStyles.textArea]}
                 value={reconciliation.note}
               />
-
               <View style={styles.modalActions}>
                 <Pressable onPress={onClose} style={sharedStyles.secondaryButton}>
                   <Text style={sharedStyles.secondaryButtonText}>取消</Text>
@@ -680,13 +1091,34 @@ function AssetReconciliationModal({
   );
 }
 
+function DiffBox({ diff, label, value }: { diff: number; label: string; value: number }) {
+  return (
+    <View style={styles.diffBox}>
+      <View>
+        <Text style={styles.diffLabel}>{label}</Text>
+        <Text style={styles.diffBookValue}>{formatCurrency(value)}</Text>
+      </View>
+      <View style={styles.diffRight}>
+        <Text style={styles.diffLabel}>差额</Text>
+        <Text style={[styles.diffValue, diff >= 0 ? styles.diffPositive : styles.diffNegative]}>
+          {Math.abs(diff) < 0.01 ? "" : diff > 0 ? "+" : "-"}
+          {formatCurrency(Math.abs(diff))}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  actionMain: {
-    flex: 1,
-  },
-  actionRow: {
-    flexDirection: "row",
-    gap: theme.spacing.sm,
+  addButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
   },
   backButton: {
     alignItems: "center",
@@ -695,9 +1127,9 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     flexDirection: "row",
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    gap: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
   backButtonText: {
     color: theme.colors.backButtonText,
@@ -711,6 +1143,60 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: theme.spacing.sm,
+  },
+  detailHero: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    padding: theme.spacing.lg,
+  },
+  detailHeroAmount: {
+    color: theme.colors.textPrimary,
+    fontSize: 24,
+    fontWeight: "900",
+    marginTop: 8,
+  },
+  detailHeroName: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  detailItemAmount: {
+    color: theme.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "900",
+    maxWidth: 132,
+    textAlign: "right",
+  },
+  detailItemMain: {
+    flex: 1,
+    gap: 4,
+  },
+  detailItemNote: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+  },
+  detailItemRow: {
+    alignItems: "center",
+    borderBottomColor: theme.colors.border,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 12,
+  },
+  detailItemTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  detailPanel: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
   },
   diffBookValue: {
     color: theme.colors.textPrimary,
@@ -746,91 +1232,107 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     marginTop: 3,
   },
+  emptyBox: {
+    alignItems: "center",
+    gap: 6,
+    padding: theme.spacing.lg,
+  },
+  emptyText: {
+    color: theme.colors.textMuted,
+    fontSize: 13,
+    textAlign: "center",
+  },
+  emptyTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  explainBackdrop: {
+    alignItems: "center",
+    backgroundColor: "rgba(17, 24, 39, 0.18)",
+    flex: 1,
+    justifyContent: "center",
+    padding: theme.spacing.container,
+  },
+  explainBlock: {
+    gap: 5,
+  },
+  explainButton: {
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    marginTop: 2,
+    paddingVertical: 11,
+  },
+  explainButtonText: {
+    color: theme.colors.textPrimary,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  explainLabel: {
+    color: theme.colors.textPrimary,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  explainPanel: {
+    backgroundColor: "#F3F4F6",
+    borderColor: "#E5E7EB",
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    gap: 13,
+    maxWidth: 330,
+    padding: theme.spacing.lg,
+    width: "100%",
+  },
+  explainText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  explainTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 20,
+    fontWeight: "900",
+  },
   fieldLabel: {
     color: theme.colors.textSecondary,
     fontSize: 14,
     fontWeight: "700",
-    marginBottom: 6,
-  },
-  headerRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: theme.spacing.sm,
-    justifyContent: "space-between",
+    marginBottom: -2,
   },
   headerSpacer: {
-    width: 58,
+    width: 36,
   },
-  inlineActions: {
-    flexDirection: "row",
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.md,
-  },
-  inlineButton: {
-    alignItems: "center",
-    backgroundColor: theme.colors.surfaceSoft,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 40,
-    paddingHorizontal: theme.spacing.md,
-  },
-  inlineButtonText: {
-    color: theme.colors.primaryDeep,
-    fontSize: 14,
+  infoLabel: {
+    color: theme.colors.textMuted,
+    fontSize: 13,
     fontWeight: "700",
+    width: 86,
   },
-  inlineDangerButton: {
+  infoRow: {
     alignItems: "center",
-    backgroundColor: theme.colors.dangerSoft,
-    borderRadius: theme.radius.lg,
-    justifyContent: "center",
-    minHeight: 40,
-    paddingHorizontal: theme.spacing.md,
-  },
-  inlineDangerButtonText: {
-    color: theme.colors.danger,
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  itemCard: {
-    backgroundColor: theme.colors.surfaceElevated,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    padding: theme.spacing.md,
-  },
-  itemHeader: {
-    alignItems: "flex-start",
+    borderBottomColor: theme.colors.border,
+    borderBottomWidth: 1,
     flexDirection: "row",
     gap: theme.spacing.md,
     justifyContent: "space-between",
+    paddingVertical: 13,
   },
-  itemMeta: {
-    color: theme.colors.textMuted,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  itemNote: {
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 22,
-    marginTop: theme.spacing.sm,
-  },
-  itemText: {
+  infoValue: {
+    color: theme.colors.textPrimary,
     flex: 1,
-    gap: 2,
-  },
-  itemTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "800",
+    textAlign: "right",
   },
-  itemValue: {
-    color: theme.colors.textPrimary,
-    fontSize: 16,
-    fontWeight: "800",
+  ledgerList: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    overflow: "hidden",
   },
   modalActions: {
     flexDirection: "row",
@@ -844,6 +1346,9 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     padding: theme.spacing.container,
   },
+  modalContent: {
+    gap: theme.spacing.md,
+  },
   modalDescription: {
     color: theme.colors.textSecondary,
     fontSize: 14,
@@ -854,7 +1359,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     borderRadius: theme.radius.xl,
     borderWidth: 1,
-    gap: theme.spacing.md,
+    maxHeight: "86%",
     padding: theme.spacing.lg,
   },
   modalPrimaryButton: {
@@ -865,46 +1370,154 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "900",
   },
+  operationButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    paddingVertical: 12,
+  },
+  operationButtonText: {
+    color: theme.colors.primaryDeep,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  operationDangerButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.dangerSoft,
+    borderRadius: theme.radius.lg,
+    paddingVertical: 12,
+  },
+  operationDangerText: {
+    color: theme.colors.danger,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  operations: {
+    gap: theme.spacing.sm,
+  },
   pageTitle: {
     color: theme.colors.textPrimary,
     flex: 1,
-    fontSize: 21,
+    fontSize: 20,
     fontWeight: "900",
-    letterSpacing: -0.5,
     textAlign: "center",
   },
-  panel: {
-    gap: 14,
+  questionButton: {
+    alignItems: "center",
+    backgroundColor: "#F3F4F6",
+    borderColor: "#D1D5DB",
+    borderRadius: 9,
+    borderWidth: 1,
+    height: 18,
+    justifyContent: "center",
+    width: 18,
+  },
+  questionText: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: "900",
+    lineHeight: 14,
+  },
+  sectionHeading: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "900",
+    paddingHorizontal: theme.spacing.md,
+    paddingTop: theme.spacing.md,
   },
   stack: {
     gap: theme.spacing.md,
-    paddingBottom: theme.spacing.lg,
   },
-  summaryLabel: {
-    color: theme.colors.textInverse,
-    fontSize: 14,
-    fontWeight: "600",
+  subjectAmount: {
+    color: theme.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "900",
+    maxWidth: 132,
+    textAlign: "right",
   },
-  summaryPanel: {
-    backgroundColor: theme.colors.surfaceStrong,
-    borderRadius: theme.radius.xl,
-    gap: theme.spacing.sm,
-    padding: theme.spacing.lg,
-  },
-  summaryRow: {
+  subjectAmountWrap: {
     alignItems: "center",
     flexDirection: "row",
+    gap: 5,
+  },
+  subjectExamples: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    marginTop: 4,
+  },
+  subjectName: {
+    color: theme.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  subjectNameWrap: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    gap: 6,
+  },
+  subjectRow: {
+    borderBottomColor: theme.colors.border,
+    borderBottomWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 13,
+  },
+  subjectRowTop: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
     justifyContent: "space-between",
   },
-  summaryValue: {
-    color: "#FFFFFF",
-    fontSize: 16,
+  subjectTotalLabel: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
     fontWeight: "800",
   },
-  title: {
+  subjectTotalRow: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: theme.spacing.lg,
+  },
+  subjectTotalValue: {
     color: theme.colors.textPrimary,
-    fontSize: 28,
+    fontSize: 18,
     fontWeight: "900",
-    letterSpacing: -0.8,
+  },
+  toggleButton: {
+    alignItems: "center",
+    borderRadius: theme.radius.pill,
+    flex: 1,
+    paddingVertical: 10,
+  },
+  toggleButtonActive: {
+    backgroundColor: theme.colors.surfaceStrong,
+  },
+  toggleRow: {
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: "row",
+    padding: 4,
+  },
+  toggleText: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  toggleTextActive: {
+    color: "#FFFFFF",
+  },
+  topBar: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
   },
 });
