@@ -183,6 +183,32 @@ const getLiabilityTypeLabel = (category: Liability["category"]): string =>
 const getLinkedAccountName = (accounts: Account[], accountId?: string): string =>
   accountId ? accounts.find((account) => account.id === accountId)?.name ?? "已删除账户" : "无";
 
+const normalizeSearchText = (value: unknown): string => String(value ?? "").trim().toLowerCase();
+
+const doesSubjectGroupMatchSearch = (group: AssetSubjectGroup | LiabilitySubjectGroup, rawQuery: string): boolean => {
+  const query = normalizeSearchText(rawQuery);
+  if (!query) return true;
+
+  const subject = group.subject;
+  const itemText = group.items
+    .map((item) => [item.name, item.category, item.note].filter(Boolean).join(" "))
+    .join(" ");
+  const searchableText = normalizeSearchText(
+    [
+      subject.displayName,
+      subject.description,
+      subject.personalExample,
+      subject.rowExamples.join(" "),
+      subject.detailExamples.join(" "),
+      formatCurrency(group.amount),
+      group.amount,
+      itemText,
+    ].join(" "),
+  );
+
+  return searchableText.includes(query);
+};
+
 export default function AssetsLiabilitiesScreen({
   accounts,
   assets,
@@ -195,6 +221,7 @@ export default function AssetsLiabilitiesScreen({
   onSaveReconciliation,
 }: AssetsLiabilitiesScreenProps) {
   const [activeKind, setActiveKind] = useState<LedgerKind>("asset");
+  const [subjectSearchQuery, setSubjectSearchQuery] = useState("");
   const [route, setRoute] = useState<LedgerRoute>({ name: "overview" });
   const [explainedSubject, setExplainedSubject] = useState<AccountingSubject | null>(null);
   const [formMode, setFormMode] = useState<FormMode>(null);
@@ -212,6 +239,10 @@ export default function AssetsLiabilitiesScreen({
   const activeAccounts = useMemo(() => accounts.filter(isAccountEnabled), [accounts]);
   const assetGroups = useMemo(() => buildAssetGroups(assets, accounts), [accounts, assets]);
   const liabilityGroups = useMemo(() => buildLiabilityGroups(liabilities), [liabilities]);
+
+  const handleSubjectFilterPress = () => {
+    Alert.alert("筛选科目", "科目筛选功能将在后续版本中完善。");
+  };
 
   const closeForm = () => {
     setFormMode(null);
@@ -424,6 +455,7 @@ export default function AssetsLiabilitiesScreen({
 
   const renderOverview = () => {
     const groups = activeKind === "asset" ? assetGroups : liabilityGroups;
+    const visibleGroups = groups.filter((group) => doesSubjectGroupMatchSearch(group, subjectSearchQuery));
 
     return (
       <ScreenTransition animateOnMount transitionKey={`ledger-overview-${activeKind}`} variant="drilldown">
@@ -434,9 +466,24 @@ export default function AssetsLiabilitiesScreen({
             <ToggleButton active={activeKind === "liability"} label="负债类" onPress={() => setActiveKind("liability")} />
           </View>
 
-          <View style={styles.ledgerList}>
-            <Text style={styles.sectionHeading}>{activeKind === "asset" ? "资产类科目" : "负债类科目"}</Text>
-            {groups.map((group) => (
+          <View style={styles.subjectSearchRow}>
+            <View style={styles.subjectSearchBox}>
+              <AppIcon color={theme.colors.textMuted} name="search" size={18} />
+              <TextInput
+                onChangeText={setSubjectSearchQuery}
+                placeholder="搜索科目、金额、备注"
+                placeholderTextColor={theme.colors.textMuted}
+                style={styles.subjectSearchInput}
+                value={subjectSearchQuery}
+              />
+            </View>
+            <Pressable accessibilityLabel="筛选科目" onPress={handleSubjectFilterPress} style={styles.subjectFilterButton}>
+              <AppIcon color={theme.colors.textMuted} name="filter" size={18} />
+            </Pressable>
+          </View>
+
+          <View style={styles.subjectList}>
+            {visibleGroups.map((group) => (
               <SubjectRow
                 amount={group.amount}
                 key={group.subject.id}
@@ -445,6 +492,7 @@ export default function AssetsLiabilitiesScreen({
                 subject={group.subject}
               />
             ))}
+            {visibleGroups.length === 0 ? <EmptyBox description="试试调整关键词。" title="没有找到科目" /> : null}
           </View>
         </View>
       </ScreenTransition>
@@ -1458,10 +1506,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 6,
   },
+  subjectFilterButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: "center",
+    width: 42,
+  },
+  subjectList: {
+    borderTopColor: theme.colors.divider,
+    borderTopWidth: 1,
+  },
   subjectRow: {
     borderBottomColor: theme.colors.border,
     borderBottomWidth: 1,
-    paddingHorizontal: theme.spacing.md,
+    paddingHorizontal: 2,
     paddingVertical: 13,
   },
   subjectRowTop: {
@@ -1490,30 +1552,52 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "900",
   },
+  subjectSearchBox: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    minHeight: 42,
+    paddingHorizontal: theme.spacing.md,
+  },
+  subjectSearchInput: {
+    color: theme.colors.textPrimary,
+    flex: 1,
+    fontSize: 14,
+    paddingVertical: 0,
+  },
+  subjectSearchRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+  },
   toggleButton: {
     alignItems: "center",
-    borderRadius: theme.radius.pill,
-    flex: 1,
-    paddingVertical: 10,
+    borderBottomColor: "transparent",
+    borderBottomWidth: 2,
+    paddingBottom: 9,
+    paddingHorizontal: theme.spacing.sm,
+    paddingTop: 3,
   },
   toggleButtonActive: {
-    backgroundColor: theme.colors.surfaceStrong,
+    borderBottomColor: theme.colors.primaryDeep,
   },
   toggleRow: {
-    backgroundColor: theme.colors.surfaceSoft,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
     flexDirection: "row",
-    padding: 4,
+    gap: theme.spacing.lg,
+    paddingHorizontal: 2,
   },
   toggleText: {
-    color: theme.colors.textSecondary,
+    color: theme.colors.textMuted,
     fontSize: 14,
     fontWeight: "800",
   },
   toggleTextActive: {
-    color: "#FFFFFF",
+    color: theme.colors.textPrimary,
   },
   topBar: {
     alignItems: "center",
