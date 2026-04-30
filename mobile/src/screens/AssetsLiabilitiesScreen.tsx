@@ -240,10 +240,6 @@ export default function AssetsLiabilitiesScreen({
   const assetGroups = useMemo(() => buildAssetGroups(assets, accounts), [accounts, assets]);
   const liabilityGroups = useMemo(() => buildLiabilityGroups(liabilities), [liabilities]);
 
-  const handleSubjectFilterPress = () => {
-    Alert.alert("筛选科目", "科目筛选功能将在后续版本中完善。");
-  };
-
   const closeForm = () => {
     setFormMode(null);
     setAssetForm(createEmptyAssetForm());
@@ -477,9 +473,6 @@ export default function AssetsLiabilitiesScreen({
                 value={subjectSearchQuery}
               />
             </View>
-            <Pressable accessibilityLabel="筛选科目" onPress={handleSubjectFilterPress} style={styles.subjectFilterButton}>
-              <AppIcon color={theme.colors.textMuted} name="filter" size={18} />
-            </Pressable>
           </View>
 
           <View style={styles.subjectList}>
@@ -1505,16 +1498,6 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     gap: 6,
-  },
-  subjectFilterButton: {
-    alignItems: "center",
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    height: 42,
-    justifyContent: "center",
-    width: 42,
   },
   subjectList: {
     borderTopColor: theme.colors.divider,
