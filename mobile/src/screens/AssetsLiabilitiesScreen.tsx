@@ -734,7 +734,7 @@ function SubjectRow({
   subject: AccountingSubject;
 }) {
   return (
-    <View style={styles.subjectRow}>
+    <View style={[styles.subjectRow, isHelpVisible && styles.subjectRowActive]}>
       <Pressable onPress={onPress} style={styles.subjectRowPressable}>
         <View style={styles.subjectRowTop}>
           <View style={styles.subjectNameWrap}>
@@ -1324,9 +1324,14 @@ const styles = StyleSheet.create({
   helpBubble: {
     backgroundColor: theme.colors.surfaceStrong,
     borderRadius: theme.radius.lg,
+    elevation: 12,
     maxWidth: 286,
     paddingHorizontal: 12,
     paddingVertical: 9,
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
   },
   helpBubbleCaret: {
     borderBottomColor: theme.colors.surfaceStrong,
@@ -1347,9 +1352,11 @@ const styles = StyleSheet.create({
   },
   helpBubbleWrap: {
     alignItems: "flex-start",
-    marginTop: -5,
-    paddingBottom: 10,
-    paddingHorizontal: 2,
+    elevation: 12,
+    left: 18,
+    position: "absolute",
+    top: 31,
+    zIndex: 20,
   },
   infoLabel: {
     color: theme.colors.textMuted,
@@ -1511,6 +1518,12 @@ const styles = StyleSheet.create({
   subjectRow: {
     borderBottomColor: theme.colors.border,
     borderBottomWidth: 1,
+    position: "relative",
+    zIndex: 1,
+  },
+  subjectRowActive: {
+    elevation: 12,
+    zIndex: 30,
   },
   subjectRowPressable: {
     paddingHorizontal: 2,
