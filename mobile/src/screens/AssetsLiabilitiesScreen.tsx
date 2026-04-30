@@ -734,7 +734,7 @@ function SubjectRow({
   subject: AccountingSubject;
 }) {
   return (
-    <View style={[styles.subjectRow, isHelpVisible && styles.subjectRowActive]}>
+    <View style={styles.subjectRow}>
       <Pressable onPress={onPress} style={styles.subjectRowPressable}>
         <View style={styles.subjectRowTop}>
           <View style={styles.subjectNameWrap}>
@@ -1520,10 +1520,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     position: "relative",
     zIndex: 1,
-  },
-  subjectRowActive: {
-    elevation: 12,
-    zIndex: 30,
   },
   subjectRowPressable: {
     paddingHorizontal: 2,
