@@ -48,6 +48,10 @@ type LedgerRoute =
   | { kind: LedgerKind; name: "subject"; subjectId: string }
   | { id: string; kind: LedgerKind; name: "detail"; subjectId: string };
 type FormMode = "asset" | "liability" | null;
+type DeleteConfirmation =
+  | { id: string; kind: "asset"; subjectId: string }
+  | { id: string; kind: "liability"; subjectId: string }
+  | null;
 
 interface AssetFormState {
   accountId?: string;
@@ -285,6 +289,7 @@ export default function AssetsLiabilitiesScreen({
   const [route, setRoute] = useState<LedgerRoute>({ name: "overview" });
   const [openHelpSubjectId, setOpenHelpSubjectId] = useState<string | null>(null);
   const [formMode, setFormMode] = useState<FormMode>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteConfirmation>(null);
   const [assetForm, setAssetForm] = useState<AssetFormState>(() => createEmptyAssetForm());
   const [liabilityForm, setLiabilityForm] = useState<LiabilityFormState>(() => createEmptyLiabilityForm());
   const [isSavingAsset, setIsSavingAsset] = useState(false);
@@ -478,35 +483,28 @@ export default function AssetsLiabilitiesScreen({
   };
 
   const confirmDeleteAsset = (asset: Asset) => {
-    Alert.alert("删除资产", `确认删除“${asset.name}”吗？`, [
-      { text: "取消", style: "cancel" },
-      {
-        onPress: () => {
-          void onDeleteAsset(asset.id);
-          if (route.name === "detail") {
-            setRoute({ kind: "asset", name: "subject", subjectId: route.subjectId });
-          }
-        },
-        style: "destructive",
-        text: "删除",
-      },
-    ]);
+    if (route.name !== "detail") return;
+    setDeleteConfirmation({ id: asset.id, kind: "asset", subjectId: route.subjectId });
   };
 
   const confirmDeleteLiability = (liability: Liability) => {
-    Alert.alert("删除负债", `确认删除“${liability.name}”吗？`, [
-      { text: "取消", style: "cancel" },
-      {
-        onPress: () => {
-          void onDeleteLiability(liability.id);
-          if (route.name === "detail") {
-            setRoute({ kind: "liability", name: "subject", subjectId: route.subjectId });
-          }
-        },
-        style: "destructive",
-        text: "删除",
-      },
-    ]);
+    if (route.name !== "detail") return;
+    setDeleteConfirmation({ id: liability.id, kind: "liability", subjectId: route.subjectId });
+  };
+
+  const handleConfirmDelete = () => {
+    const target = deleteConfirmation;
+    if (!target) return;
+
+    setDeleteConfirmation(null);
+    if (target.kind === "asset") {
+      void onDeleteAsset(target.id);
+      setRoute({ kind: "asset", name: "subject", subjectId: target.subjectId });
+      return;
+    }
+
+    void onDeleteLiability(target.id);
+    setRoute({ kind: "liability", name: "subject", subjectId: target.subjectId });
   };
 
   const renderOverview = () => {
@@ -711,6 +709,11 @@ export default function AssetsLiabilitiesScreen({
         onSubmit={() => void handleAssetReconciliationSubmit()}
         reconciliation={assetReconciliation}
         updateReconciliation={(patch) => setAssetReconciliation((current) => ({ ...current, ...patch }))}
+      />
+      <DeleteConfirmationModal
+        confirmation={deleteConfirmation}
+        onCancel={() => setDeleteConfirmation(null)}
+        onConfirm={handleConfirmDelete}
       />
     </View>
   );
@@ -940,8 +943,12 @@ function AssetLiabilityFormModal({
   return (
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={formMode !== null}>
       <Pressable onPress={onClose} style={styles.modalBackdrop}>
-        <Pressable style={styles.modalPanel}>
-          <ScrollView contentContainerStyle={styles.modalContent} showsVerticalScrollIndicator={false}>
+        <Pressable onPress={(event) => event.stopPropagation()} style={styles.modalPanel}>
+          <ScrollView
+            contentContainerStyle={styles.modalContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             {formMode === "asset" ? (
               <>
                 <Text style={styles.modalTitle}>{assetForm.id ? "编辑资产" : "新增资产"}</Text>
@@ -1116,6 +1123,37 @@ function ModalActions({
   );
 }
 
+function DeleteConfirmationModal({
+  confirmation,
+  onCancel,
+  onConfirm,
+}: {
+  confirmation: DeleteConfirmation;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const isAsset = confirmation?.kind === "asset";
+
+  return (
+    <Modal animationType="fade" onRequestClose={onCancel} transparent visible={confirmation !== null}>
+      <Pressable onPress={onCancel} style={styles.confirmBackdrop}>
+        <Pressable onPress={(event) => event.stopPropagation()} style={styles.confirmPanel}>
+          <Text style={styles.confirmTitle}>{isAsset ? "确认删除资产？" : "确认删除负债？"}</Text>
+          <Text style={styles.confirmDescription}>删除后不可恢复，请确认是否继续。</Text>
+          <View style={styles.confirmActions}>
+            <Pressable onPress={onCancel} style={styles.confirmCancelButton}>
+              <Text style={styles.confirmCancelText}>取消</Text>
+            </Pressable>
+            <Pressable onPress={onConfirm} style={styles.confirmDeleteButton}>
+              <Text style={styles.confirmDeleteText}>确认删除</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 function AssetReconciliationModal({
   onClose,
   onSubmit,
@@ -1137,85 +1175,93 @@ function AssetReconciliationModal({
   return (
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={asset !== undefined}>
       <Pressable onPress={onClose} style={styles.modalBackdrop}>
-        <Pressable style={styles.modalPanel}>
-          {reconciliation.isConfirming ? (
-            <>
-              <Text style={styles.modalTitle}>确认对账调整</Text>
-              <Text style={styles.modalDescription}>
-                系统将根据你选择的原因生成一笔调整记录，并更新相关账户或资产。请确认这不是重复记录。
-              </Text>
-              <DiffBox diff={diff} label="本次差额" value={Math.abs(diff)} />
-              <View style={styles.modalActions}>
-                <Pressable
-                  disabled={reconciliation.isSaving}
-                  onPress={() => updateReconciliation({ isConfirming: false })}
-                  style={sharedStyles.secondaryButton}
-                >
-                  <Text style={sharedStyles.secondaryButtonText}>取消</Text>
-                </Pressable>
-                <Pressable
-                  disabled={reconciliation.isSaving}
-                  onPress={onSubmit}
-                  style={[sharedStyles.primaryButton, styles.modalPrimaryButton]}
-                >
-                  <Text style={sharedStyles.primaryButtonText}>
-                    {reconciliation.isSaving ? "保存中..." : "确认调整"}
-                  </Text>
-                </Pressable>
-              </View>
-            </>
-          ) : (
-            <>
-              <Text style={styles.modalTitle}>更新当前价值</Text>
-              <Text style={styles.modalDescription}>
-                输入资产的实际市值，系统会生成安全的非现金估值调整，不计入收入、费用或现金流。
-              </Text>
-              <DiffBox diff={diff} label="当前账面价值" value={bookValue} />
-              <Text style={styles.fieldLabel}>实际市值</Text>
-              <TextInput
-                keyboardType="decimal-pad"
-                onChangeText={(value) => updateReconciliation({ actualValue: value, isConfirming: false, reason: undefined })}
-                placeholder="请输入实际金额"
-                placeholderTextColor={theme.colors.textMuted}
-                style={sharedStyles.input}
-                value={reconciliation.actualValue}
-              />
-              <Text style={styles.fieldLabel}>差额原因</Text>
-              <View style={styles.chipGroup}>
-                {reasonOptions.map((option) => {
-                  const active = reconciliation.reason === option.value;
-                  return (
-                    <Pressable
-                      key={option.value}
-                      onPress={() => updateReconciliation({ reason: option.value, isConfirming: false })}
-                      style={[sharedStyles.chip, active && sharedStyles.chipActiveDark]}
-                    >
-                      <Text style={[sharedStyles.chipText, active && sharedStyles.chipTextInverse]}>
-                        {option.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              <Text style={styles.fieldLabel}>备注</Text>
-              <TextInput
-                multiline
-                onChangeText={(value) => updateReconciliation({ note: value })}
-                placeholder="可补充估值来源或说明"
-                placeholderTextColor={theme.colors.textMuted}
-                style={[sharedStyles.input, sharedStyles.textArea]}
-                value={reconciliation.note}
-              />
-              <View style={styles.modalActions}>
-                <Pressable onPress={onClose} style={sharedStyles.secondaryButton}>
-                  <Text style={sharedStyles.secondaryButtonText}>取消</Text>
-                </Pressable>
-                <Pressable onPress={onSubmit} style={[sharedStyles.primaryButton, styles.modalPrimaryButton]}>
-                  <Text style={sharedStyles.primaryButtonText}>下一步</Text>
-                </Pressable>
-              </View>
-            </>
-          )}
+        <Pressable onPress={(event) => event.stopPropagation()} style={styles.modalPanel}>
+          <ScrollView
+            contentContainerStyle={styles.modalContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {reconciliation.isConfirming ? (
+              <>
+                <Text style={styles.modalTitle}>确认对账调整</Text>
+                <Text style={styles.modalDescription}>
+                  系统将根据你选择的原因生成一笔调整记录，并更新相关账户或资产。请确认这不是重复记录。
+                </Text>
+                <DiffBox diff={diff} label="本次差额" value={Math.abs(diff)} />
+                <View style={styles.modalActions}>
+                  <Pressable
+                    disabled={reconciliation.isSaving}
+                    onPress={() => updateReconciliation({ isConfirming: false })}
+                    style={sharedStyles.secondaryButton}
+                  >
+                    <Text style={sharedStyles.secondaryButtonText}>取消</Text>
+                  </Pressable>
+                  <Pressable
+                    disabled={reconciliation.isSaving}
+                    onPress={onSubmit}
+                    style={[sharedStyles.primaryButton, styles.modalPrimaryButton]}
+                  >
+                    <Text style={sharedStyles.primaryButtonText}>
+                      {reconciliation.isSaving ? "保存中..." : "确认调整"}
+                    </Text>
+                  </Pressable>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.modalTitle}>更新当前价值</Text>
+                <Text style={styles.modalDescription}>
+                  输入资产的实际市值，系统会生成安全的非现金估值调整，不计入收入、费用或现金流。
+                </Text>
+                <DiffBox diff={diff} label="当前账面价值" value={bookValue} />
+                <Text style={styles.fieldLabel}>实际市值</Text>
+                <TextInput
+                  keyboardType="decimal-pad"
+                  onChangeText={(value) =>
+                    updateReconciliation({ actualValue: value, isConfirming: false, reason: undefined })
+                  }
+                  placeholder="请输入实际金额"
+                  placeholderTextColor={theme.colors.textMuted}
+                  style={sharedStyles.input}
+                  value={reconciliation.actualValue}
+                />
+                <Text style={styles.fieldLabel}>差额原因</Text>
+                <View style={styles.chipGroup}>
+                  {reasonOptions.map((option) => {
+                    const active = reconciliation.reason === option.value;
+                    return (
+                      <Pressable
+                        key={option.value}
+                        onPress={() => updateReconciliation({ reason: option.value, isConfirming: false })}
+                        style={[sharedStyles.chip, active && sharedStyles.chipActiveDark]}
+                      >
+                        <Text style={[sharedStyles.chipText, active && sharedStyles.chipTextInverse]}>
+                          {option.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <Text style={styles.fieldLabel}>备注</Text>
+                <TextInput
+                  multiline
+                  onChangeText={(value) => updateReconciliation({ note: value })}
+                  placeholder="可补充估值来源或说明"
+                  placeholderTextColor={theme.colors.textMuted}
+                  style={[sharedStyles.input, sharedStyles.textArea]}
+                  value={reconciliation.note}
+                />
+                <View style={styles.modalActions}>
+                  <Pressable onPress={onClose} style={sharedStyles.secondaryButton}>
+                    <Text style={sharedStyles.secondaryButtonText}>取消</Text>
+                  </Pressable>
+                  <Pressable onPress={onSubmit} style={[sharedStyles.primaryButton, styles.modalPrimaryButton]}>
+                    <Text style={sharedStyles.primaryButtonText}>下一步</Text>
+                  </Pressable>
+                </View>
+              </>
+            )}
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
@@ -1445,6 +1491,66 @@ const styles = StyleSheet.create({
     borderTopColor: theme.colors.divider,
     borderTopWidth: 1,
   },
+  confirmActions: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    justifyContent: "flex-end",
+    marginTop: theme.spacing.lg,
+  },
+  confirmBackdrop: {
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.22)",
+    flex: 1,
+    justifyContent: "center",
+    padding: theme.spacing.container,
+  },
+  confirmCancelButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    flex: 1,
+    paddingVertical: 12,
+  },
+  confirmCancelText: {
+    color: theme.colors.textPrimary,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  confirmDeleteButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.dangerSoft,
+    borderColor: theme.colors.danger,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    flex: 1,
+    paddingVertical: 12,
+  },
+  confirmDeleteText: {
+    color: theme.colors.danger,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  confirmDescription: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: theme.spacing.sm,
+  },
+  confirmPanel: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    padding: theme.spacing.lg,
+    width: "100%",
+  },
+  confirmTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 18,
+    fontWeight: "900",
+  },
   modalActions: {
     flexDirection: "row",
     gap: theme.spacing.sm,
@@ -1459,6 +1565,7 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     gap: theme.spacing.md,
+    paddingBottom: theme.spacing.xl,
   },
   modalDescription: {
     color: theme.colors.textSecondary,
