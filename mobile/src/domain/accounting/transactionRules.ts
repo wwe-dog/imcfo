@@ -206,8 +206,11 @@ const updateCreditCardDebt = (accounts: Account[], accountId: string, delta: num
     };
   });
 
-const updateAssetByAccount = (assets: Asset[], accountId: string, delta: number): Asset[] =>
-  assets.map((asset) =>
+const updateAssetByAccount = (assets: Asset[], accountId: string, delta: number): Asset[] => {
+  const linkedAssets = assets.filter((asset) => asset.accountId === accountId);
+  if (linkedAssets.length !== 1) return assets;
+
+  return assets.map((asset) =>
     asset.accountId === accountId
       ? {
           ...asset,
@@ -217,6 +220,7 @@ const updateAssetByAccount = (assets: Asset[], accountId: string, delta: number)
         }
       : asset,
   );
+};
 
 const updateAssetById = (assets: Asset[], assetId: string | undefined, delta: number): Asset[] => {
   if (!assetId || !assets.some((asset) => asset.id === assetId)) return assets;
@@ -232,18 +236,6 @@ const updateAssetById = (assets: Asset[], assetId: string | undefined, delta: nu
       : asset,
   );
 };
-
-const updateFirstInvestmentAsset = (assets: Asset[], delta: number): Asset[] =>
-  assets.map((asset) =>
-    asset.category === "investment"
-      ? {
-          ...asset,
-          amount: Math.max(0, asset.amount + delta),
-          currentValue: Math.max(0, asset.currentValue + delta),
-          updatedAt: new Date().toISOString(),
-        }
-      : asset,
-  );
 
 const updateFirstLiability = (liabilities: Liability[], delta: number): Liability[] =>
   liabilities.map((liability, index) =>
@@ -395,12 +387,12 @@ export const applyTransactionToFinancialState = <T extends FinancialState>(
     case "investmentBuy":
       accounts = updateAccountBalance(accounts, transaction.accountId, -transaction.amount);
       assets = updateAssetByAccount(assets, transaction.accountId, -transaction.amount);
-      assets = updateFirstInvestmentAsset(assets, transaction.amount);
+      assets = updateAssetById(assets, transaction.relatedAssetId, transaction.amount);
       break;
     case "investmentSell":
       accounts = updateAccountBalance(accounts, transaction.accountId, transaction.amount);
       assets = updateAssetByAccount(assets, transaction.accountId, transaction.amount);
-      assets = updateFirstInvestmentAsset(assets, -transaction.amount);
+      assets = updateAssetById(assets, transaction.relatedAssetId, -transaction.amount);
       break;
     case "liabilityIncrease":
       if (transaction.cashFlowType !== "nonCash") {

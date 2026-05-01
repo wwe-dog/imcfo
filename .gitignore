@@ -20,3 +20,5 @@ expo-start.log
 expo-start.err.log
 mobile/expo-start.log
 mobile/expo-start.err.log
+
+mobile/expo-start-*.log

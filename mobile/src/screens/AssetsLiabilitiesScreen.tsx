@@ -26,7 +26,7 @@ import {
   type ReconciliationReason,
 } from "../domain/accounting/reconciliationRules";
 import type { AssetInput, LiabilityInput } from "../domain/accounting/transactionRules";
-import type { Account, Asset, Liability, ReportSummary } from "../domain/models";
+import type { Account, Asset, Liability } from "../domain/models";
 import { sharedStyles, theme } from "../styles/theme";
 import { formatCurrency } from "../utils/formatters";
 
@@ -40,7 +40,6 @@ interface AssetsLiabilitiesScreenProps {
   onSaveAsset: (input: AssetInput) => Promise<void>;
   onSaveLiability: (input: LiabilityInput) => Promise<void>;
   onSaveReconciliation: (input: ReconciliationInput) => Promise<void>;
-  summary: ReportSummary;
 }
 
 type LedgerKind = "asset" | "liability";

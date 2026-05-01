@@ -1,9 +1,0 @@
-
-> imcfo-mobile@0.1.0 start
-> expo start --port 8083
-
-Starting project at D:\imcfo\mobile
-Using src/app as the root directory for Expo Router.
-Starting Metro Bundler
-Waiting on http://localhost:8083
-Logs for your project will appear below.

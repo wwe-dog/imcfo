@@ -73,6 +73,16 @@ const formatAmount = (value: string): string => {
 
 const isAccountEnabled = (account: Account): boolean => account.isEnabled ?? account.isActive ?? true;
 
+const requiresRelatedAsset = (type: NaturalLanguageTransactionType): boolean =>
+  type === "investmentBuy" ||
+  type === "investmentSell" ||
+  type === "receivableRecognize" ||
+  type === "receivableCollect";
+
+const requiresRelatedLiability = (type: NaturalLanguageTransactionType): boolean =>
+  type === "payableRecognize" ||
+  type === "payablePay";
+
 export default function RecordScreen({
   accounts,
   assets,
@@ -129,10 +139,28 @@ export default function RecordScreen({
       ),
     [liabilities],
   );
+  const investmentAssets = useMemo(() => {
+    const linkedAssets = assets.filter((asset) => asset.accountId === accountId);
+    if (linkedAssets.length > 0) return linkedAssets;
+    return assets.filter((asset) => asset.category === "investment");
+  }, [accountId, assets]);
+  const relatedAssetOptions = useMemo(() => {
+    if (type === "receivableRecognize" || type === "receivableCollect") return receivableAssets;
+    if (type === "investmentBuy" || type === "investmentSell") return investmentAssets;
+    if (type === "assetIncrease" || type === "assetDecrease") return assets;
+    return [];
+  }, [assets, investmentAssets, receivableAssets, type]);
+  const relatedLiabilityOptions = useMemo(() => {
+    if (type === "payableRecognize" || type === "payablePay") return payableLiabilities;
+    if (type === "liabilityIncrease" || type === "liabilityDecrease") return liabilities;
+    return [];
+  }, [liabilities, payableLiabilities, type]);
   const selectedAccount = activeAccounts.find((account) => account.id === accountId);
   const selectedCreditCardAccount = creditCardAccounts.find((account) => account.id === creditCardAccountId);
-  const selectedReceivableAsset = receivableAssets.find((asset) => asset.id === relatedAssetId);
-  const selectedPayableLiability = payableLiabilities.find((liability) => liability.id === relatedLiabilityId);
+  const selectedRelatedAsset = relatedAssetOptions.find((asset) => asset.id === relatedAssetId);
+  const selectedRelatedLiability = relatedLiabilityOptions.find((liability) => liability.id === relatedLiabilityId);
+  const selectedReceivableAsset = selectedRelatedAsset;
+  const selectedPayableLiability = selectedRelatedLiability;
 
   useEffect(() => {
     if (!isMoreMenuVisible) return;
@@ -162,14 +190,6 @@ export default function RecordScreen({
     return currentCreditCardAccount?.id ?? creditCardAccounts[0]?.id ?? "";
   };
 
-  const pickReceivableAssetId = (): string =>
-    receivableAssets.some((asset) => asset.id === relatedAssetId) ? relatedAssetId : receivableAssets[0]?.id ?? "";
-
-  const pickPayableLiabilityId = (): string =>
-    payableLiabilities.some((liability) => liability.id === relatedLiabilityId)
-      ? relatedLiabilityId
-      : payableLiabilities[0]?.id ?? "";
-
   useEffect(() => {
     if (activeAccounts.length === 0) {
       setAccountId("");
@@ -184,30 +204,35 @@ export default function RecordScreen({
       setCreditCardAccountId(pickCreditCardAccountId());
     }
 
-    if (
-      (type === "receivableRecognize" || type === "receivableCollect") &&
-      !receivableAssets.some((asset) => asset.id === relatedAssetId)
-    ) {
-      setRelatedAssetId(pickReceivableAssetId());
-    }
-
-    if (
-      (type === "payableRecognize" || type === "payablePay") &&
-      !payableLiabilities.some((liability) => liability.id === relatedLiabilityId)
-    ) {
-      setRelatedLiabilityId(pickPayableLiabilityId());
-    }
   }, [
     accountId,
     activeAccounts,
     creditCardAccountId,
     creditCardAccounts,
-    payableLiabilities,
-    receivableAssets,
-    relatedAssetId,
-    relatedLiabilityId,
     type,
   ]);
+
+  useEffect(() => {
+    if (!requiresRelatedAsset(type)) {
+      if (relatedAssetId) setRelatedAssetId("");
+      return;
+    }
+
+    if (!relatedAssetOptions.some((asset) => asset.id === relatedAssetId)) {
+      setRelatedAssetId(relatedAssetOptions[0]?.id ?? "");
+    }
+  }, [relatedAssetId, relatedAssetOptions, type]);
+
+  useEffect(() => {
+    if (!requiresRelatedLiability(type)) {
+      if (relatedLiabilityId) setRelatedLiabilityId("");
+      return;
+    }
+
+    if (!relatedLiabilityOptions.some((liability) => liability.id === relatedLiabilityId)) {
+      setRelatedLiabilityId(relatedLiabilityOptions[0]?.id ?? "");
+    }
+  }, [relatedLiabilityId, relatedLiabilityOptions, type]);
 
   const clearEntryFields = () => {
     setAmount("");
@@ -248,12 +273,6 @@ export default function RecordScreen({
     if (nextType === "creditCardRepayment") {
       setCreditCardAccountId(pickCreditCardAccountId());
     }
-    if (nextType === "receivableRecognize" || nextType === "receivableCollect") {
-      setRelatedAssetId(pickReceivableAssetId());
-    }
-    if (nextType === "payableRecognize" || nextType === "payablePay") {
-      setRelatedLiabilityId(pickPayableLiabilityId());
-    }
     setSuccessMessage("");
   };
 
@@ -265,12 +284,6 @@ export default function RecordScreen({
     setAccountId(pickAccountId(parsedDraft.type));
     if (parsedDraft.type === "creditCardRepayment") {
       setCreditCardAccountId(pickCreditCardAccountId());
-    }
-    if (parsedDraft.type === "receivableRecognize" || parsedDraft.type === "receivableCollect") {
-      setRelatedAssetId(pickReceivableAssetId());
-    }
-    if (parsedDraft.type === "payableRecognize" || parsedDraft.type === "payablePay") {
-      setRelatedLiabilityId(pickPayableLiabilityId());
     }
     setNote(parsedDraft.rawText.trim());
     setDraft(parsedDraft);
@@ -360,6 +373,19 @@ export default function RecordScreen({
       }
     }
 
+    if (
+      (type === "assetIncrease" || type === "assetDecrease" || type === "investmentBuy" || type === "investmentSell") &&
+      !selectedRelatedAsset
+    ) {
+      Alert.alert("璇烽€夋嫨鍏宠仈璧勪骇", "璇峰厛閫夋嫨瑕佸奖鍝嶇殑璧勪骇鎴栨姇璧勯」锛岄伩鍏嶈褰曡惤鍒伴敊璇彴璐︺€?");
+      return null;
+    }
+
+    if ((type === "liabilityIncrease" || type === "liabilityDecrease") && !selectedRelatedLiability) {
+      Alert.alert("璇烽€夋嫨鍏宠仈璐熷€?", "璇峰厛閫夋嫨瑕佸奖鍝嶇殑璐熷€洪」锛岄伩鍏嶈褰曡惤鍒伴敊璇彴璐︺€?");
+      return null;
+    }
+
     if (!date.trim()) {
       Alert.alert("请填写日期", "日期是必填项，格式建议为 YYYY-MM-DD。");
       return null;
@@ -382,10 +408,8 @@ export default function RecordScreen({
         category,
         accountId,
         counterAccountId: type === "creditCardRepayment" ? creditCardAccountId : undefined,
-        relatedAssetId:
-          type === "receivableRecognize" || type === "receivableCollect" ? relatedAssetId : undefined,
-        relatedLiabilityId:
-          type === "payableRecognize" || type === "payablePay" ? relatedLiabilityId : undefined,
+        relatedAssetId: requiresRelatedAsset(type) ? relatedAssetId : undefined,
+        relatedLiabilityId: requiresRelatedLiability(type) ? relatedLiabilityId : undefined,
         date,
         note: note.trim() || selectedMeta.impactText,
       });

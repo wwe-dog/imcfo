@@ -1,34 +1,64 @@
 # 我为 CFO 当前项目上下文快照
 
-更新时间：2026-04-30  
+更新时间：2026-05-01  
 当前分支：`main`  
-基线提交：`1b438d9`  
-本次快照原因：完成一轮保守型移动端审计、修复、清理和稳定性验证后刷新上下文。
+当前已验证基线提交：`3c8fb60`  
+本次快照原因：完成一轮保守型移动端审计、修补、清理与不变量复核后刷新上下文。  
+提交状态说明：本轮代码已完成并通过校验，但当前环境写入 `.git/index.lock` 被拒绝，暂未形成新的 Git 提交。
 
 ## 1. 项目定位与边界
 
-“我为 CFO”是把自然人财务按公司报表视角组织起来的个人经营系统，不是普通记账 App。当前移动端 MVP 继续维持 Expo + React Native + TypeScript + AsyncStorage，本轮没有改变产品方向、会计政策、存储 schema、底部导航结构或页面层级。
+“我为 CFO” 是把自然人财务按公司报表视角组织起来的个人经营系统，不是普通记账 App。当前移动端 MVP 继续坚持 Expo + React Native + TypeScript + AsyncStorage，不新增后端、登录、云同步、支付、AI/API、税务/VAT/发票模块，不改变底部导航结构、核心页面层级、产品中文定位或项目宪法。
 
-仍然明确不做：后端、登录、云同步、支付、AI/API、税务/VAT/发票、重型依赖、Web 端 Arco 体系迁入。
+V0.1 继续围绕这些能力：
 
-## 2. 本轮审计范围
+- 首页仪表盘
+- 管理页
+- 账户管理
+- 资产负债管理
+- 交易记录
+- 手动对账 / 资产估值更新
+- 报表
+- 我的 / 设置 / 数据工具
+
+## 2. 当前技术栈与开发方式
+
+- 移动端：Expo 54 + React Native 0.81 + React 19 + TypeScript strict
+- 本地存储：AsyncStorage，经 `useAppData` 统一读写
+- 报表与会计逻辑：`mobile/src/domain/accounting` 下纯函数
+- 交易记录索引：`mobile/src/domain/transactions/transactionDisplayIndex.ts`
+- 当前 `mobile/package.json` 仅提供 `start/android/ios/web/typecheck`
+
+约束继续保持：
+
+- 屏幕层不直接读写 `AsyncStorage`
+- 报表计算函数保持纯函数、可测试
+- 前端不自行发明会计公式
+- 存储适配器与会计计算逻辑分离
+
+## 3. 本轮审计范围
 
 - 仓库结构与可达性检查：`mobile/App.tsx`、`mobile/src/screens`、`components`、`domain`、`hooks`、`storage`、`styles`
 - TypeScript 编译稳定性检查
-- 交易记录、管理页、资产负债页、设置页的运行时风险审计
-- 死代码、伪入口、未使用组件清理
-- 高复杂度示例数据财务不变量复核
+- 运行时风险点检查：管理页、账户页、资产负债页、交易录入页
+- 一对多账户/资产联动安全性检查
+- 高复杂度示例数据 2026-04 财务不变量复核
 
-## 3. 本轮关键修复
+## 4. 本轮已完成修补
 
-- 恢复并重新接通 `mobile/src/screens/AssetsLiabilitiesScreen.tsx`，解决 `App.tsx` 仍引用该页但工作区文件被删除导致的编译中断。
-- 为资产负债管理页补回统一样式的返回顶部栏，使其与账户管理、交易记录等二级页一致，并与 `App.tsx` 现有 `onBack` 接口对齐。
-- 修正 `RecordScreen` 成功弹窗中的“管理账户 / 资产负债”按钮行为：原先实际跳到账户管理，现改为进入资产负债管理，文案同步改为“去资产负债管理”。
-- 清理 `SettingsScreen` 中两个没有任何行为的伪导航入口：保留信息展示，但移除可点击误导和箭头暗示。
-- 删除未被引用的 `mobile/src/components/MetricCard.tsx`。
-- 清理 `RecordScreen` 中未使用的 `moreOptionArrow` 样式残留。
+- 修正 `mobile/src/domain/accounting/transactionRules.ts`
+  - 账户联动资产更新改为“仅一对一链接时自动同步”，避免一个账户挂多条资产时被批量误改。
+  - `investmentBuy` / `investmentSell` 不再错误地修改“第一个投资资产”，改为只更新明确传入的 `relatedAssetId`。
+- 修正 `mobile/src/screens/RecordScreen.tsx`
+  - 增加投资交易对关联资产的自动选择与保持逻辑，避免投资买入/卖出落到错误资产或丢失关联资产。
+  - 统一 `relatedAssetId` / `relatedLiabilityId` 透传条件，避免投资交易仍走旧的应收/应付专用分支。
+  - 清理旧的应收/应付默认选择辅助函数，改为基于当前交易类型与候选集合自动维护状态。
+- 清理 `mobile/src/screens/AssetsLiabilitiesScreen.tsx`
+  - 删除未使用的 `summary` 类型与属性，减少无效接口负担。
+- 清理 `mobile/App.tsx`
+  - 移除传给 `AssetsLiabilitiesScreen` 的无效 `summary` 属性。
 
-## 4. 验证结果
+## 5. 验证结果
 
 已运行：
 
@@ -39,7 +69,7 @@ node node_modules/typescript/bin/tsc --noEmit
 
 结果：通过。
 
-已额外用一次性本地 TypeScript 加载脚本核对高复杂度示例数据，2026-04 汇总值保持不变：
+已额外执行本地 TypeScript 加载脚本复核 2026-04 高复杂度示例汇总，不变量保持不变：
 
 - 资产：5,000,000
 - 负债：1,186,000
@@ -58,49 +88,80 @@ node node_modules/typescript/bin/tsc --noEmit
 - `npm.cmd run test`
 - `npm.cmd run build`
 
-原因：`mobile/package.json` 当前只定义了 `start/android/ios/web/typecheck`，没有 lint/test/build 脚本；同时当前环境未将 `npm.cmd` 暴露到 PATH，本轮验证通过直接调用本地 `node` + `typescript` 完成。
+原因：当前 `mobile/package.json` 没有这些脚本；同时本环境未将 `npm.cmd` 暴露到 PATH，本轮验证以本地 `node` + `typescript` 完成。
 
-## 5. 当前重要实现状态
+## 6. 当前实现状态
 
-- 底部导航仍为：`首页 / 管理 / 报表 / 我的`
-- `DashboardScreen` 负责首页结果、结构和趋势
-- `RecordScreen` 负责一句话记账、手动录入、管理中心入口
+- 底部导航仍为：首页 / 管理 / 报表 / 我的
+- `DashboardScreen` 负责首页结果、结构与趋势
+- `RecordScreen` 负责一句话记账、手动录入和管理入口
 - `AccountManagementScreen` 负责账户分层管理与对账
-- `AssetsLiabilitiesScreen` 已恢复为可用状态，继续承担资产/负债维护与资产估值调整
-- `TransactionRecordsScreen` 保持既有索引预计算 + 月份懒水合实现
-- `useAppData` 继续作为唯一数据读写入口，屏幕层不直接接触 `AsyncStorage`
+- `AssetsLiabilitiesScreen` 负责资产/负债维护与资产估值调整
+- `TransactionRecordsScreen` 继续使用索引预处理 + 月份懒展开策略
+- `useAppData` 仍是唯一应用数据读写入口
 
-## 6. 已知限制与风险
+## 7. 已知限制与风险
 
-- 自动化测试仍不足，当前主要靠 `typecheck` 和人工规则核对兜底。
-- 本轮没有新增性能架构改造；交易记录页既有的预计算和懒水合方案仍是当前主要性能保障。
-- 工作区仍存在一个未纳入本轮的未跟踪文件：`mobile/src/domain/accounting/accountingSubjectCatalog.ts`。目前没有任何引用，不影响构建；下次若要启用，需要先明确产品用途再接入。
-- Git 提交在当前环境下被 `.git` 写权限/锁限制阻断，未能完成本轮提交。
+- 自动化测试仍不足，当前主要依赖 `typecheck` 与规则复核
+- `RecordScreen` 对普通“资产增加/减少”“负债增加/减少”仍缺少显式关联对象选择 UI；本轮重点修了投资交易误关联问题，后续可继续细化这两类录入体验
+- 当前工作区仍有一项无关改动：`mobile/expo-start-8083.out.log`
+- 当前环境无法写入 `.git/index.lock`，所以这轮变更暂时无法正常提交
 
-## 7. 当前 Git 状态
-
-本轮代码改动目标文件：
+## 8. 重要文件变动记录
 
 - `mobile/App.tsx`
+- `mobile/src/domain/accounting/transactionRules.ts`
 - `mobile/src/screens/AssetsLiabilitiesScreen.tsx`
 - `mobile/src/screens/RecordScreen.tsx`
-- `mobile/src/screens/SettingsScreen.tsx`
-- `mobile/src/components/MetricCard.tsx`（删除）
+- `docs/10-current-project-context.md`
 
-提交状态：
+## 9. 架构与数据流摘要
 
-- 计划提交信息：`chore: audit and clean up mobile app`
-- 实际结果：未提交成功
-- 阻塞原因：写入 `.git/index.lock` 时权限被拒绝
+- 页面操作先进入 `useAppData`
+- `useAppData` 调用 `transactionRules.ts` / `reconciliationRules.ts` 生成新的财务状态
+- 新状态经 `asyncStorageAdapter` 持久化
+- 首页与报表直接读取 `assets / liabilities / period transactions` 计算结果，不从 UI 层拼公式
+- 交易记录页优先消费 `transactionDisplayIndex`，避免首屏重复全量分组与搜索预处理
 
-## 8. 下次会话建议开场
+## 10. 当前 Git 状态与最近提交
+
+当前工作区状态（快照生成时）：
+
+- 已修改但未提交：`mobile/App.tsx`
+- 已修改但未提交：`mobile/src/domain/accounting/transactionRules.ts`
+- 已修改但未提交：`mobile/src/screens/AssetsLiabilitiesScreen.tsx`
+- 已修改但未提交：`mobile/src/screens/RecordScreen.tsx`
+- 无关日志改动：`mobile/expo-start-8083.out.log`
+
+最近提交（已验证）：
+
+- `3c8fb60` `style: unify secondary pages with line list style`
+- `74fb8a8` `style: align help caret with subject title baseline`
+- `586f072` `style: offset help bubble caret from question icon`
+- `f9eada5` `style: align help bubble caret with question icon`
+- `b1d2c91` `style: align help bubble below question icon`
+
+## 11. 常用命令
+
+```powershell
+cd D:\imcfo\mobile
+npm install
+npx expo start
+node node_modules/typescript/bin/tsc --noEmit
+
+cd D:\imcfo
+git status --short --branch
+git log --oneline --decorate -8
+```
+
+## 12. 下次会话建议首句
 
 ```text
 Use AGENTS.md and current main branch as source of truth.
 Read docs/10-current-project-context.md first.
 Project root: D:\imcfo.
 Mobile app path: D:\imcfo\mobile.
-Continue conservative mobile maintenance within V0.1 boundaries.
+Continue conservative mobile audit/fix work without changing accounting policy or storage schema.
 Before finishing, run node node_modules/typescript/bin/tsc --noEmit inside mobile.
 Report final results in Chinese.
 ```
