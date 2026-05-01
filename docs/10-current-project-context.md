@@ -1,167 +1,177 @@
 # 我为 CFO 当前项目上下文快照
 
 更新时间：2026-05-01  
-当前分支：`main`  
-当前已验证基线提交：`3c8fb60`  
-本次快照原因：完成一轮保守型移动端审计、修补、清理与不变量复核后刷新上下文。  
-提交状态说明：本轮代码已完成并通过校验，但当前环境写入 `.git/index.lock` 被拒绝，暂未形成新的 Git 提交。
+当前分支：`main`，相对 `origin/main` ahead 16  
+快照原因：完成一轮移动端暖色金融 UI 重构与截图验收后，按压缩上下文规则刷新。  
+提交状态：本快照已按规则单独更新；当前仍有未提交的 UI 代码与截图产物，未在本快照提交中一并处理。
 
-## 1. 项目定位与边界
+## 1. 项目定位
 
-“我为 CFO” 是把自然人财务按公司报表视角组织起来的个人经营系统，不是普通记账 App。当前移动端 MVP 继续坚持 Expo + React Native + TypeScript + AsyncStorage，不新增后端、登录、云同步、支付、AI/API、税务/VAT/发票模块，不改变底部导航结构、核心页面层级、产品中文定位或项目宪法。
+“我为 CFO”是把普通自然人的个人财务按公司经营视角组织起来的移动端 MVP。产品核心不是普通记账，而是用资产负债表、利润表、现金流量表、经营结论和个人净资产视角帮助用户理解自己的财务经营状态。
 
-V0.1 继续围绕这些能力：
+当前范围继续保持 V0.1 简单边界：
 
-- 首页仪表盘
-- 管理页
-- 账户管理
-- 资产负债管理
-- 交易记录
-- 手动对账 / 资产估值更新
-- 报表
-- 我的 / 设置 / 数据工具
+- Expo + React Native + TypeScript + AsyncStorage。
+- 不新增后端、登录、数据库、云同步、AI/API、支付、税务申报、VAT、发票逻辑、个体工商户逻辑。
+- 底部导航固定为：首页 / 管理 / 报表 / 我的。
+- 用户可见文案保持中文。
+- “我为 CFO”“经营结论”“资产负债管理”这些关键文案保持不变。
 
-## 2. 当前技术栈与开发方式
+## 2. 技术栈与开发方式
 
-- 移动端：Expo 54 + React Native 0.81 + React 19 + TypeScript strict
-- 本地存储：AsyncStorage，经 `useAppData` 统一读写
-- 报表与会计逻辑：`mobile/src/domain/accounting` 下纯函数
-- 交易记录索引：`mobile/src/domain/transactions/transactionDisplayIndex.ts`
-- 当前 `mobile/package.json` 仅提供 `start/android/ios/web/typecheck`
+- 移动端：Expo 54 + React Native 0.81 + React 19 + TypeScript strict。
+- 本地存储：AsyncStorage，通过 `mobile/src/hooks/useAppData.ts` 统一读写。
+- 会计与报表逻辑：`mobile/src/domain/accounting` 下的纯函数。
+- 交易展示索引：`mobile/src/domain/transactions/transactionDisplayIndex.ts`。
+- 当前可用脚本：`npm.cmd run web`、`npm.cmd run typecheck`。
 
-约束继续保持：
+架构边界继续保持：
 
-- 屏幕层不直接读写 `AsyncStorage`
-- 报表计算函数保持纯函数、可测试
-- 前端不自行发明会计公式
-- 存储适配器与会计计算逻辑分离
+- UI 屏幕不直接读写 AsyncStorage。
+- 报表计算函数保持纯函数、可测试。
+- UI 不发明或修改会计公式。
+- 不改 storage schema、transaction mapping、自然语言解析行为、route/storage/domain key。
 
-## 3. 本轮审计范围
+## 3. 本轮已完成工作
 
-- 仓库结构与可达性检查：`mobile/App.tsx`、`mobile/src/screens`、`components`、`domain`、`hooks`、`storage`、`styles`
-- TypeScript 编译稳定性检查
-- 运行时风险点检查：管理页、账户页、资产负债页、交易录入页
-- 一对多账户/资产联动安全性检查
-- 高复杂度示例数据 2026-04 财务不变量复核
+本轮主要完成“暖色中国个人金融 + CFO 仪表盘”视觉系统统一，覆盖根页和主要二/三级页面。
 
-## 4. 本轮已完成修补
+已完成的 UI 方向：
 
-- 修正 `mobile/src/domain/accounting/transactionRules.ts`
-  - 账户联动资产更新改为“仅一对一链接时自动同步”，避免一个账户挂多条资产时被批量误改。
-  - `investmentBuy` / `investmentSell` 不再错误地修改“第一个投资资产”，改为只更新明确传入的 `relatedAssetId`。
-- 修正 `mobile/src/screens/RecordScreen.tsx`
-  - 增加投资交易对关联资产的自动选择与保持逻辑，避免投资买入/卖出落到错误资产或丢失关联资产。
-  - 统一 `relatedAssetId` / `relatedLiabilityId` 透传条件，避免投资交易仍走旧的应收/应付专用分支。
-  - 清理旧的应收/应付默认选择辅助函数，改为基于当前交易类型与候选集合自动维护状态。
-- 清理 `mobile/src/screens/AssetsLiabilitiesScreen.tsx`
-  - 删除未使用的 `summary` 类型与属性，减少无效接口负担。
-- 清理 `mobile/App.tsx`
-  - 移除传给 `AssetsLiabilitiesScreen` 的无效 `summary` 属性。
+- `mobile/src/styles/theme.ts`：建立暖米色背景、橙色主色、白色卡片、软阴影、金额颜色、分割线、底部导航样式等 token。
+- `mobile/src/components/financeUI.tsx`：新增共享 UI primitives，包括 `TopBar`、`SummaryHeroCard`、`SectionCard`、`LineListCard`、`LineListRow`、`InfoLineRow`、`AmountText`、`IconTile`、`ActionTile`、`SegmentedControl`、`SearchFilterBar`、`BottomSheetFrame`、`DangerActionButton`。
+- 根页更新：
+  - `DashboardScreen.tsx`：暖色首页、深色净资产 hero、经营结论、图表/结构卡片统一。
+  - `RecordScreen.tsx`：记一笔主操作区、支出/收入/转账/借还分段、分类 icon chips、常用操作、账务中心。
+  - `ReportsScreen.tsx`：报表详情、简易版/专业版、经营结论、资产与负债结构卡片统一。
+  - `SettingsScreen.tsx`：我的页 profile/summary、常用工具、设置与管理列表。
+- 二/三级页面更新：
+  - `TransactionRecordsScreen.tsx`：交易记录改为搜索筛选行、月份分组卡、右对齐金额、交易详情分区卡。
+  - `AccountManagementScreen.tsx`：账户管理改为总览 summary、现金与活期/信用与借记/投资账户等分组、分类详情、账户详情/新增账户底部弹层。
+  - `AssetsLiabilitiesScreen.tsx`：资产负债管理保留会计科目列表结构，改为 summary、分段切换、科目行、科目详情、明细详情、暖色底部表单。
+- `mobile/App.tsx`：根页与二级页入口、底部导航视觉统一。
 
-## 5. 验证结果
+行为保持：
+
+- 未改会计公式。
+- 未改存储 schema。
+- 未改交易映射规则。
+- 未改自然语言解析。
+- 未新增后端、登录、云同步、支付或税务能力。
+- 交易搜索/筛选/月分组折叠、账户保存/删除/对账、资产负债帮助气泡和明细操作继续走原有数据流。
+
+## 4. 验证结果
 
 已运行：
 
 ```powershell
 cd D:\imcfo\mobile
-node node_modules/typescript/bin/tsc --noEmit
+npm.cmd run typecheck
 ```
 
-结果：通过。
+结果：通过，`tsc --noEmit` 无错误。
 
-已额外执行本地 TypeScript 加载脚本复核 2026-04 高复杂度示例汇总，不变量保持不变：
+已生成当前 UI 截图 PDF：
 
-- 资产：5,000,000
-- 负债：1,186,000
-- 净资产：3,814,000
-- 收入：93,500
-- 费用：45,600
-- 利润：47,900
-- 经营活动现金流：56,900
-- 投资活动现金流：-64,000
-- 筹资活动现金流：-69,200
-- 现金净变化：-76,300
+```text
+D:\imcfo\docs\ui-snapshots\2026-05-01-warm-fintech\imcfo-ui-screenshots.pdf
+```
 
-未运行：
+PDF 对应截图覆盖：
 
-- `npm.cmd run lint`
-- `npm.cmd run test`
-- `npm.cmd run build`
+- 首页
+- 管理
+- 报表
+- 我的
+- 交易记录
+- 交易详情
+- 账户管理
+- 账户分类详情
+- 账户详情弹层
+- 资产负债管理
+- 资产科目详情
+- 资产详情
 
-原因：当前 `mobile/package.json` 没有这些脚本；同时本环境未将 `npm.cmd` 暴露到 PATH，本轮验证以本地 `node` + `typescript` 完成。
+## 5. 当前已知限制与风险
 
-## 6. 当前实现状态
+- 当前工作区仍有未提交 UI 代码和截图产物，尚未形成最终 UI feature commit。
+- `docs/handoff/` 为未跟踪目录，当前任务未修改其内容。
+- 截图验收基于 Expo Web + Playwright/Edge 的移动视口，不能完全替代真机 Expo 预览。
+- 部分长标题在交易记录中会截断，这是当前紧凑金融列表布局的预期处理，后续可按产品优先级继续优化。
+- 资产详情页底部操作区在长截图中会被固定底部导航遮住一部分，真机滚动可继续验证底部 safe-area 间距。
 
-- 底部导航仍为：首页 / 管理 / 报表 / 我的
-- `DashboardScreen` 负责首页结果、结构与趋势
-- `RecordScreen` 负责一句话记账、手动录入和管理入口
-- `AccountManagementScreen` 负责账户分层管理与对账
-- `AssetsLiabilitiesScreen` 负责资产/负债维护与资产估值调整
-- `TransactionRecordsScreen` 继续使用索引预处理 + 月份懒展开策略
-- `useAppData` 仍是唯一应用数据读写入口
+## 6. 重要文件变动记录
 
-## 7. 已知限制与风险
-
-- 自动化测试仍不足，当前主要依赖 `typecheck` 与规则复核
-- `RecordScreen` 对普通“资产增加/减少”“负债增加/减少”仍缺少显式关联对象选择 UI；本轮重点修了投资交易误关联问题，后续可继续细化这两类录入体验
-- 当前工作区仍有一项无关改动：`mobile/expo-start-8083.out.log`
-- 当前环境无法写入 `.git/index.lock`，所以这轮变更暂时无法正常提交
-
-## 8. 重要文件变动记录
+当前未提交的主要文件：
 
 - `mobile/App.tsx`
-- `mobile/src/domain/accounting/transactionRules.ts`
-- `mobile/src/screens/AssetsLiabilitiesScreen.tsx`
+- `mobile/src/styles/theme.ts`
+- `mobile/src/components/financeUI.tsx`
+- `mobile/src/screens/DashboardScreen.tsx`
 - `mobile/src/screens/RecordScreen.tsx`
-- `docs/10-current-project-context.md`
+- `mobile/src/screens/ReportsScreen.tsx`
+- `mobile/src/screens/SettingsScreen.tsx`
+- `mobile/src/screens/TransactionRecordsScreen.tsx`
+- `mobile/src/screens/AccountManagementScreen.tsx`
+- `mobile/src/screens/AssetsLiabilitiesScreen.tsx`
+- `docs/ui-snapshots/2026-05-01-warm-fintech/`
 
-## 9. 架构与数据流摘要
+## 7. 架构与数据流摘要
 
-- 页面操作先进入 `useAppData`
-- `useAppData` 调用 `transactionRules.ts` / `reconciliationRules.ts` 生成新的财务状态
-- 新状态经 `asyncStorageAdapter` 持久化
-- 首页与报表直接读取 `assets / liabilities / period transactions` 计算结果，不从 UI 层拼公式
-- 交易记录页优先消费 `transactionDisplayIndex`，避免首屏重复全量分组与搜索预处理
+- 页面操作进入 `useAppData`。
+- `useAppData` 调用 accounting / reconciliation / transaction rule 层生成状态变化。
+- 持久化仍由 AsyncStorage adapter 负责。
+- Dashboard 和 Reports 消费 domain 层计算结果，不在 UI 层拼公式。
+- TransactionRecords 消费交易展示索引，UI 只负责搜索、筛选、分组展示和详情展示。
+- 账户与资产负债页面只重构展示结构和弹层，不改 save/delete/reconciliation 的数据入口。
 
-## 10. 当前 Git 状态与最近提交
+## 8. 当前 Git 状态与最近提交
 
-当前工作区状态（快照生成时）：
+当前 Git 状态：
 
-- 已修改但未提交：`mobile/App.tsx`
-- 已修改但未提交：`mobile/src/domain/accounting/transactionRules.ts`
-- 已修改但未提交：`mobile/src/screens/AssetsLiabilitiesScreen.tsx`
-- 已修改但未提交：`mobile/src/screens/RecordScreen.tsx`
-- 无关日志改动：`mobile/expo-start-8083.out.log`
+```text
+main...origin/main [ahead 16]
+modified: mobile/App.tsx
+modified: mobile/src/screens/AccountManagementScreen.tsx
+modified: mobile/src/screens/AssetsLiabilitiesScreen.tsx
+modified: mobile/src/screens/DashboardScreen.tsx
+modified: mobile/src/screens/RecordScreen.tsx
+modified: mobile/src/screens/ReportsScreen.tsx
+modified: mobile/src/screens/SettingsScreen.tsx
+modified: mobile/src/screens/TransactionRecordsScreen.tsx
+modified: mobile/src/styles/theme.ts
+untracked: docs/handoff/
+untracked: docs/ui-snapshots/
+untracked: mobile/src/components/financeUI.tsx
+```
 
-最近提交（已验证）：
+最近提交：
 
+- `d9d8584` `fix: polish assets liabilities modal and delete flow`
+- `35e73f3` `feat: convert account forms to modal sheets`
+- `f55a6b2` `chore: sync current mobile refinements`
 - `3c8fb60` `style: unify secondary pages with line list style`
 - `74fb8a8` `style: align help caret with subject title baseline`
-- `586f072` `style: offset help bubble caret from question icon`
-- `f9eada5` `style: align help bubble caret with question icon`
-- `b1d2c91` `style: align help bubble below question icon`
 
-## 11. 常用命令
+## 9. 常用命令
 
 ```powershell
 cd D:\imcfo\mobile
 npm install
-npx expo start
-node node_modules/typescript/bin/tsc --noEmit
+npm.cmd run web -- --port 8091 --host localhost
+npm.cmd run typecheck
 
 cd D:\imcfo
 git status --short --branch
-git log --oneline --decorate -8
+git log --oneline --decorate -10
 ```
 
-## 12. 下次会话建议首句
+## 10. 下次会话建议首句
 
 ```text
-Use AGENTS.md and current main branch as source of truth.
-Read docs/10-current-project-context.md first.
+Use AGENTS.md and docs/10-current-project-context.md as source of truth.
 Project root: D:\imcfo.
-Mobile app path: D:\imcfo\mobile.
-Continue conservative mobile audit/fix work without changing accounting policy or storage schema.
-Before finishing, run node node_modules/typescript/bin/tsc --noEmit inside mobile.
+Continue the mobile warm fintech UI work without changing accounting formulas, storage schema, transaction mapping, parser behavior, route keys, storage keys, or domain model fields.
+Before finishing, run npm.cmd run typecheck inside D:\imcfo\mobile.
 Report final results in Chinese.
 ```
