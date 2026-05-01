@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Alert, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   calculateReconciliationDiff,
   getReconciliationReasonOptions,
@@ -49,8 +49,12 @@ interface AccountReconciliationState {
 
 type AccountRoute =
   | { name: "overview" }
-  | { name: "categoryDetail"; type: AccountType }
-  | { name: "form"; type?: AccountType; returnTo?: AccountType };
+  | { name: "categoryDetail"; type: AccountType };
+
+interface AccountFormSheetState {
+  returnTo?: AccountType;
+  type?: AccountType;
+}
 
 interface AccountCategoryMeta {
   type: AccountType;
@@ -187,6 +191,7 @@ export default function AccountManagementScreen({
 }: AccountManagementScreenProps) {
   const [route, setRoute] = useState<AccountRoute>({ name: "overview" });
   const [form, setForm] = useState<AccountFormState>(emptyForm());
+  const [formSheet, setFormSheet] = useState<AccountFormSheetState | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [reconciliation, setReconciliation] = useState<AccountReconciliationState>({
     actualValue: "",
@@ -210,12 +215,17 @@ export default function AccountManagementScreen({
 
   const openCreateForm = (type?: AccountType, returnTo?: AccountType) => {
     setForm(emptyForm(type));
-    setRoute({ name: "form", returnTo, type });
+    setFormSheet({ returnTo, type });
   };
 
   const openEditForm = (account: Account, returnTo: AccountType) => {
     setForm(buildFormFromAccount(account));
-    setRoute({ name: "form", returnTo, type: normalizeAccountType(account.type) });
+    setFormSheet({ returnTo, type: normalizeAccountType(account.type) });
+  };
+
+  const closeFormSheet = () => {
+    if (isSaving) return;
+    setFormSheet(null);
   };
 
   const updateForm = (patch: Partial<AccountFormState>) => {
@@ -309,11 +319,6 @@ export default function AccountManagementScreen({
       return;
     }
 
-    if (route.returnTo) {
-      openCategoryDetail(route.returnTo);
-      return;
-    }
-
     setRoute({ name: "overview" });
   };
 
@@ -381,7 +386,7 @@ export default function AccountManagementScreen({
     try {
       await onSaveAccount(input);
       Alert.alert(input.id ? "账户已更新" : "账户已新增", "账户管理和记一笔账户选择已同步刷新。");
-      openCategoryDetail(normalizeAccountType(input.type));
+      setFormSheet(null);
     } catch {
       Alert.alert("保存失败", "无法保存这个账户。");
     } finally {
@@ -456,33 +461,30 @@ export default function AccountManagementScreen({
     ]);
   };
 
-  if (route.name === "form") {
-    const selectedAccount = form.id ? accounts.find((account) => account.id === form.id) : undefined;
-    return (
-      <ScreenTransition
-        animateOnMount
-        transitionKey={form.id ? `account-detail-${form.id}` : `account-create-${route.type ?? "overview"}`}
-        variant="drilldown"
-      >
-        <AccountFormPage
-          form={form}
-          isSaving={isSaving}
-          onBack={handleBack}
-          onOpenReconciliation={selectedAccount ? () => openAccountReconciliation(selectedAccount) : undefined}
-          onSave={handleSave}
-          updateForm={updateForm}
-        />
-        <AccountReconciliationModal
-          accounts={enabledAssetAccounts}
-          bookValue={selectedAccount ? getAccountBookValue(selectedAccount) : 0}
-          reconciliation={reconciliation}
-          onClose={closeReconciliation}
-          onSubmit={() => void handleReconciliationSubmit()}
-          updateReconciliation={(patch) => setReconciliation((current) => ({ ...current, ...patch }))}
-        />
-      </ScreenTransition>
-    );
-  }
+  const selectedAccount = form.id ? accounts.find((account) => account.id === form.id) : undefined;
+
+  const renderAccountFormSheet = () => (
+    <AccountFormSheet
+      form={form}
+      isSaving={isSaving}
+      onClose={closeFormSheet}
+      onOpenReconciliation={selectedAccount ? () => openAccountReconciliation(selectedAccount) : undefined}
+      onSave={handleSave}
+      updateForm={updateForm}
+      visible={formSheet !== null}
+    />
+  );
+
+  const renderReconciliationModal = () => (
+    <AccountReconciliationModal
+      accounts={enabledAssetAccounts}
+      bookValue={selectedAccount ? getAccountBookValue(selectedAccount) : 0}
+      reconciliation={reconciliation}
+      onClose={closeReconciliation}
+      onSubmit={() => void handleReconciliationSubmit()}
+      updateReconciliation={(patch) => setReconciliation((current) => ({ ...current, ...patch }))}
+    />
+  );
 
   if (route.name === "categoryDetail") {
     const meta = getCategoryMeta(route.type);
@@ -518,6 +520,8 @@ export default function AccountManagementScreen({
             )}
           </View>
         </View>
+        {renderAccountFormSheet()}
+        {renderReconciliationModal()}
       </ScreenTransition>
     );
   }
@@ -566,6 +570,8 @@ export default function AccountManagementScreen({
           );
         })}
       </View>
+      {renderAccountFormSheet()}
+      {renderReconciliationModal()}
     </View>
   );
 }
@@ -659,144 +665,182 @@ function AccountDetailRow({ account, onDelete, onDisable, onEdit }: AccountDetai
   );
 }
 
-interface AccountFormPageProps {
+interface AccountFormSheetProps {
   form: AccountFormState;
   isSaving: boolean;
-  onBack: () => void;
+  onClose: () => void;
   onOpenReconciliation?: () => void;
   onSave: () => void;
   updateForm: (patch: Partial<AccountFormState>) => void;
+  visible: boolean;
 }
 
-function AccountFormPage({ form, isSaving, onBack, onOpenReconciliation, onSave, updateForm }: AccountFormPageProps) {
+function AccountFormSheet({
+  form,
+  isSaving,
+  onClose,
+  onOpenReconciliation,
+  onSave,
+  updateForm,
+  visible,
+}: AccountFormSheetProps) {
   const isAccountDetail = form.id !== undefined;
   const accountTypeLabel = getAccountTypeLabel(form.type);
 
   return (
-    <View style={styles.stack}>
-      <TopBar actionLabel="保存" onBack={onBack} onAdd={onSave} title={isAccountDetail ? "账户详情" : "新增账户"} />
-      <View style={[sharedStyles.card, styles.formCard]}>
-        <Text style={styles.fieldLabel}>账户名称</Text>
-        <TextInput
-          onChangeText={(value) => updateForm({ name: value })}
-          placeholder="例如 招商银行卡"
-          placeholderTextColor={theme.colors.textMuted}
-          style={sharedStyles.input}
-          value={form.name}
-        />
-
-        <Text style={styles.fieldLabel}>账户类型</Text>
-        {isAccountDetail ? (
-          <View style={styles.readonlyTypePill}>
-            <Text style={styles.readonlyTypeText}>{accountTypeLabel}</Text>
+    <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
+      <Pressable onPress={onClose} style={styles.sheetBackdrop}>
+        <Pressable onPress={(event) => event.stopPropagation()} style={styles.accountSheet}>
+          <View style={styles.sheetHeader}>
+            <Pressable disabled={isSaving} onPress={onClose} style={styles.sheetHeaderButton}>
+              <Text style={styles.sheetCancelText}>{isSaving ? "保存中" : "取消"}</Text>
+            </Pressable>
+            <Text style={styles.sheetTitle}>{isAccountDetail ? "账户详情" : "新增账户"}</Text>
+            <Pressable disabled={isSaving} onPress={onSave} style={styles.sheetHeaderButton}>
+              <Text style={[styles.sheetSaveText, isSaving && styles.sheetSaveTextDisabled]}>
+                {isSaving ? "保存中" : "保存"}
+              </Text>
+            </Pressable>
           </View>
-        ) : (
-          <View style={styles.chipWrap}>
-            {accountCategories.map((option) => {
-              const active = form.type === option.type;
-              return (
+          <ScrollView
+            contentContainerStyle={styles.formContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.formLineRow}>
+              <Text style={styles.fieldLabel}>账户名称</Text>
+              <TextInput
+                onChangeText={(value) => updateForm({ name: value })}
+                placeholder="例如 招商银行卡"
+                placeholderTextColor={theme.colors.textMuted}
+                style={sharedStyles.input}
+                value={form.name}
+              />
+            </View>
+
+            <View style={styles.formLineRow}>
+              <Text style={styles.fieldLabel}>账户类型</Text>
+              {isAccountDetail ? (
+                <View style={styles.readonlyTypePill}>
+                  <Text style={styles.readonlyTypeText}>{accountTypeLabel}</Text>
+                </View>
+              ) : (
+                <View style={styles.chipWrap}>
+                  {accountCategories.map((option) => {
+                    const active = form.type === option.type;
+                    return (
+                      <Pressable
+                        key={option.type}
+                        onPress={() => updateForm({ type: option.type })}
+                        style={[sharedStyles.chip, active && sharedStyles.chipActiveDark]}
+                      >
+                        <Text style={[sharedStyles.chipText, active && sharedStyles.chipTextInverse]}>
+                          {option.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+
+            <View style={styles.formLineRow}>
+              <Text style={styles.fieldLabel}>{form.type === "creditCard" ? "当前欠款" : "当前余额"}</Text>
+              <TextInput
+                keyboardType="decimal-pad"
+                onChangeText={(value) =>
+                  updateForm({ balance: value, currentDebt: form.type === "creditCard" ? value : form.currentDebt })
+                }
+                placeholder="0"
+                placeholderTextColor={theme.colors.textMuted}
+                style={sharedStyles.input}
+                value={form.balance}
+              />
+            </View>
+
+            {form.type === "creditCard" ? (
+              <>
+                <View style={styles.formLineRow}>
+                  <Text style={styles.fieldLabel}>信用额度</Text>
+                  <TextInput
+                    keyboardType="decimal-pad"
+                    onChangeText={(value) => updateForm({ creditLimit: value })}
+                    placeholder="可选"
+                    placeholderTextColor={theme.colors.textMuted}
+                    style={sharedStyles.input}
+                    value={form.creditLimit}
+                  />
+                </View>
+                <View style={styles.formLineRow}>
+                  <View style={styles.twoColumnRow}>
+                    <View style={styles.twoColumnItem}>
+                      <Text style={styles.fieldLabel}>账单日</Text>
+                      <TextInput
+                        keyboardType="number-pad"
+                        onChangeText={(value) => updateForm({ billDay: value })}
+                        placeholder="1-31"
+                        placeholderTextColor={theme.colors.textMuted}
+                        style={sharedStyles.input}
+                        value={form.billDay}
+                      />
+                    </View>
+                    <View style={styles.twoColumnItem}>
+                      <Text style={styles.fieldLabel}>还款日</Text>
+                      <TextInput
+                        keyboardType="number-pad"
+                        onChangeText={(value) => updateForm({ repaymentDay: value })}
+                        placeholder="1-31"
+                        placeholderTextColor={theme.colors.textMuted}
+                        style={sharedStyles.input}
+                        value={form.repaymentDay}
+                      />
+                    </View>
+                  </View>
+                </View>
+              </>
+            ) : null}
+
+            <View style={styles.formLineRow}>
+              <Text style={styles.fieldLabel}>是否启用</Text>
+              <View style={styles.chipWrap}>
                 <Pressable
-                  key={option.type}
-                  onPress={() => updateForm({ type: option.type })}
-                  style={[sharedStyles.chip, active && sharedStyles.chipActiveDark]}
+                  onPress={() => updateForm({ isEnabled: true })}
+                  style={[sharedStyles.chip, form.isEnabled && sharedStyles.chipActiveDark]}
                 >
-                  <Text style={[sharedStyles.chipText, active && sharedStyles.chipTextInverse]}>{option.label}</Text>
+                  <Text style={[sharedStyles.chipText, form.isEnabled && sharedStyles.chipTextInverse]}>启用</Text>
                 </Pressable>
-              );
-            })}
-          </View>
-        )}
-
-        <Text style={styles.fieldLabel}>{form.type === "creditCard" ? "当前欠款" : "当前余额"}</Text>
-        <TextInput
-          keyboardType="decimal-pad"
-          onChangeText={(value) =>
-            updateForm({ balance: value, currentDebt: form.type === "creditCard" ? value : form.currentDebt })
-          }
-          placeholder="0"
-          placeholderTextColor={theme.colors.textMuted}
-          style={sharedStyles.input}
-          value={form.balance}
-        />
-
-        {form.type === "creditCard" ? (
-          <>
-            <Text style={styles.fieldLabel}>信用额度</Text>
-            <TextInput
-              keyboardType="decimal-pad"
-              onChangeText={(value) => updateForm({ creditLimit: value })}
-              placeholder="可选"
-              placeholderTextColor={theme.colors.textMuted}
-              style={sharedStyles.input}
-              value={form.creditLimit}
-            />
-            <View style={styles.twoColumnRow}>
-              <View style={styles.twoColumnItem}>
-                <Text style={styles.fieldLabel}>账单日</Text>
-                <TextInput
-                  keyboardType="number-pad"
-                  onChangeText={(value) => updateForm({ billDay: value })}
-                  placeholder="1-31"
-                  placeholderTextColor={theme.colors.textMuted}
-                  style={sharedStyles.input}
-                  value={form.billDay}
-                />
-              </View>
-              <View style={styles.twoColumnItem}>
-                <Text style={styles.fieldLabel}>还款日</Text>
-                <TextInput
-                  keyboardType="number-pad"
-                  onChangeText={(value) => updateForm({ repaymentDay: value })}
-                  placeholder="1-31"
-                  placeholderTextColor={theme.colors.textMuted}
-                  style={sharedStyles.input}
-                  value={form.repaymentDay}
-                />
+                <Pressable
+                  onPress={() => updateForm({ isEnabled: false })}
+                  style={[sharedStyles.chip, !form.isEnabled && sharedStyles.chipActiveDark]}
+                >
+                  <Text style={[sharedStyles.chipText, !form.isEnabled && sharedStyles.chipTextInverse]}>停用</Text>
+                </Pressable>
               </View>
             </View>
-          </>
-        ) : null}
 
-        <Text style={styles.fieldLabel}>是否启用</Text>
-        <View style={styles.chipWrap}>
-          <Pressable
-            onPress={() => updateForm({ isEnabled: true })}
-            style={[sharedStyles.chip, form.isEnabled && sharedStyles.chipActiveDark]}
-          >
-            <Text style={[sharedStyles.chipText, form.isEnabled && sharedStyles.chipTextInverse]}>启用</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => updateForm({ isEnabled: false })}
-            style={[sharedStyles.chip, !form.isEnabled && sharedStyles.chipActiveDark]}
-          >
-            <Text style={[sharedStyles.chipText, !form.isEnabled && sharedStyles.chipTextInverse]}>停用</Text>
-          </Pressable>
-        </View>
+            <View style={styles.formLineRow}>
+              <Text style={styles.fieldLabel}>备注 / 用途</Text>
+              <TextInput
+                multiline
+                onChangeText={(value) => updateForm({ note: value })}
+                placeholder="例如 工资卡 / 日常消费 / 投资账户"
+                placeholderTextColor={theme.colors.textMuted}
+                style={[sharedStyles.input, sharedStyles.textArea]}
+                value={form.note}
+              />
+            </View>
 
-        <Text style={styles.fieldLabel}>备注 / 用途</Text>
-        <TextInput
-          multiline
-          onChangeText={(value) => updateForm({ note: value })}
-          placeholder="例如 工资卡 / 日常消费 / 投资账户"
-          placeholderTextColor={theme.colors.textMuted}
-          style={[sharedStyles.input, sharedStyles.textArea]}
-          value={form.note}
-        />
-
-        <Pressable
-          disabled={isSaving}
-          onPress={onSave}
-          style={[sharedStyles.primaryButton, isSaving && styles.buttonDisabled]}
-        >
-          <Text style={sharedStyles.primaryButtonText}>{isSaving ? "保存中..." : "保存账户"}</Text>
+            {isAccountDetail && onOpenReconciliation ? (
+              <View style={styles.formLineRow}>
+                <Pressable onPress={onOpenReconciliation} style={sharedStyles.secondaryButton}>
+                  <Text style={sharedStyles.secondaryButtonText}>对账 / 更新余额</Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </ScrollView>
         </Pressable>
-        {isAccountDetail && onOpenReconciliation ? (
-          <Pressable onPress={onOpenReconciliation} style={sharedStyles.secondaryButton}>
-            <Text style={sharedStyles.secondaryButtonText}>对账 / 更新余额</Text>
-          </Pressable>
-        ) : null}
-      </View>
-    </View>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -992,6 +1036,15 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     paddingVertical: 12,
   },
+  accountSheet: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderTopLeftRadius: theme.radius.xl,
+    borderTopRightRadius: theme.radius.xl,
+    borderWidth: 1,
+    maxHeight: "86%",
+    overflow: "hidden",
+  },
   accountTitleRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -1117,8 +1170,16 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: 6,
   },
-  formCard: {
+  formContent: {
     gap: 14,
+    paddingBottom: 28,
+    paddingHorizontal: theme.spacing.container,
+    paddingTop: theme.spacing.md,
+  },
+  formLineRow: {
+    borderBottomColor: theme.colors.divider,
+    borderBottomWidth: 1,
+    paddingBottom: 14,
   },
   headerRow: {
     alignItems: "center",
@@ -1226,6 +1287,46 @@ const styles = StyleSheet.create({
   rowActionGroup: {
     flexDirection: "row",
     gap: theme.spacing.sm,
+  },
+  sheetBackdrop: {
+    backgroundColor: "rgba(0, 0, 0, 0.18)",
+    flex: 1,
+    justifyContent: "flex-end",
+    paddingTop: theme.spacing.xl,
+  },
+  sheetCancelText: {
+    color: theme.colors.textSecondary,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  sheetHeader: {
+    alignItems: "center",
+    borderBottomColor: theme.colors.divider,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 54,
+    paddingHorizontal: theme.spacing.container,
+  },
+  sheetHeaderButton: {
+    minWidth: 56,
+    paddingVertical: 10,
+  },
+  sheetSaveText: {
+    color: theme.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "900",
+    textAlign: "right",
+  },
+  sheetSaveTextDisabled: {
+    color: theme.colors.textMuted,
+  },
+  sheetTitle: {
+    color: theme.colors.textPrimary,
+    flex: 1,
+    fontSize: 17,
+    fontWeight: "900",
+    textAlign: "center",
   },
   smallActionButton: {
     backgroundColor: theme.colors.surfaceElevated,
