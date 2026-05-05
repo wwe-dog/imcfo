@@ -31,10 +31,15 @@ Current completion warning:
 - The basic Dashboard and three report summaries are calculated from local data.
 - Operating analysis and profitability analysis screens currently use static mock report data. They are UI/prototype work, not a completed real report engine.
 - Some mobile UI/report files are dirty or untracked. Do not assume they have been committed.
+- 2026-05-05 context snapshot records an overnight-quality audit and cleanup pass: TransactionRecordsScreen relies on transactionDisplayIndex, stale selected transaction details are cleaned when the records index changes, closed debug logging was removed, and unused imports/state/components were cleaned in several screens/components. Verify against current Git state before editing because these mobile changes may still be uncommitted.
 
 Minimum verification:
 cd D:\imcfo\mobile
 npm.cmd run typecheck
+
+If npm.cmd is unavailable in the automation environment, run the same TypeScript compiler through the bundled/local Node path:
+C:\Users\liyuxiang\AppData\Local\OpenAI\Codex\bin\node.exe .\node_modules\typescript\bin\tsc --noEmit
+C:\Users\liyuxiang\AppData\Local\OpenAI\Codex\bin\node.exe .\node_modules\typescript\bin\tsc --noEmit --noUnusedLocals --noUnusedParameters
 
 Final reporting:
 Report results in Chinese.

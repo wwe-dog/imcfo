@@ -83,3 +83,23 @@ Screen
 - 应收/应付现金流分类在文档和实现之间需要再统一。
 - 当前没有自动化公式测试，只有 TypeScript typecheck。
 
+## 6. 2026-05-05 审计同步
+
+最新上下文快照记录了一轮 overnight-quality 维护审计，重点检查移动端编译稳定性、交易记录状态安全、未使用代码和高复杂度演示数据不变量。
+
+记录到交接包的最新实现方向：
+
+- 交易记录页继续统一使用 `transactionDisplayIndex` 作为展示索引来源。
+- 交易记录详情选中项会在 records index 变化后清理，降低导入、清空、重置数据后的 stale record 风险。
+- 交易记录默认保留月份懒加载策略，搜索或筛选时才 hydration 全量 records。
+- 若继续维护交易记录页，应避免重新引入旧版本地搜索/分组 helper。
+- 若继续维护分析报告页，应优先把静态 mock 数据接入真实 AppData 和三大报表口径。
+
+验证记录：
+
+```powershell
+C:\Users\liyuxiang\AppData\Local\OpenAI\Codex\bin\node.exe .\node_modules\typescript\bin\tsc --noEmit
+C:\Users\liyuxiang\AppData\Local\OpenAI\Codex\bin\node.exe .\node_modules\typescript\bin\tsc --noEmit --noUnusedLocals --noUnusedParameters
+```
+
+结果：均通过。

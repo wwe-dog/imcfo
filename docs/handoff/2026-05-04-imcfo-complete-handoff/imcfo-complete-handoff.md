@@ -1,11 +1,12 @@
 # 我为 CFO 当前项目完整交接包
 
 生成日期：2026-05-04  
+最近同步：2026-05-05  
 项目根目录：`D:\imcfo`  
 移动端目录：`D:\imcfo\mobile`  
-当前分支：`main`，相对 `origin/main` ahead 17  
-当前 HEAD：`346d37f docs: refresh current project context snapshot`  
-最低验证：`cd D:\imcfo\mobile; npm.cmd run typecheck` 已通过
+当前分支：`main`，相对 `origin/main` ahead 18  
+当前 HEAD：`30a3411 docs: add complete project handoff package`  
+最低验证：`cd D:\imcfo\mobile; npm.cmd run typecheck` 已通过；2026-05-05 自动化审计环境还通过本地 TypeScript 编译器入口的 `tsc --noEmit` 与 `tsc --noEmit --noUnusedLocals --noUnusedParameters`
 
 ## 1. 项目定位
 
@@ -118,6 +119,51 @@ V0.1 使用个人经营语境下的六大会计要素：
 - `incomeStructureFlow.ts` 是收入结构树到下钻 view model 的纯展示转换。
 - Dashboard 内仍有部分趋势、结构和聚合逻辑留在 UI 层，后续应迁到 domain/report engine。
 
+## 5.1 2026-05-05 最新进度同步
+
+2026-05-05 的当前上下文快照记录了一轮 overnight-quality 维护审计。该审计覆盖仓库结构、移动端入口、页面、组件、domain、hooks、storage、styles、TypeScript 编译稳定性、交易记录、筛选弹窗、月份折叠、交易详情、账户管理、资产负债管理、数据重置/导入后的状态安全。
+
+本轮审计记录的关键修复方向：
+
+- `TransactionRecordsScreen` 删除旧版交易搜索、筛选、分组和 display record 构建 helper，统一依赖 `transactionDisplayIndex`。
+- `TransactionRecordsScreen` 在 records index 变化后清理已经不存在的交易详情选中项，避免重置、导入或清空数据后详情页引用 stale record。
+- `transactionDisplayIndex` 移除关闭状态的性能调试 `console.log` 路径。
+- `RecordScreen`、`SettingsScreen`、`AppIcon`、`ProfitabilityAnalysisScreen`、`AccountManagementScreen` 清理未使用导入、未使用状态和未使用组件。
+- 交易记录默认懒加载月份数据仍保留，搜索或筛选时才 hydration 全量 records。
+
+本轮审计保持不变：
+
+- 未改会计公式、交易规则、现金流规则。
+- 未改 seed data totals、高复杂度演示预期值。
+- 未改 storage schema。
+- 未新增后端、登录、云同步、支付、AI/API、税务/VAT/发票模块。
+- 未新增底部 tab。
+
+验证记录：
+
+```powershell
+cd D:\imcfo\mobile
+C:\Users\liyuxiang\AppData\Local\OpenAI\Codex\bin\node.exe .\node_modules\typescript\bin\tsc --noEmit
+C:\Users\liyuxiang\AppData\Local\OpenAI\Codex\bin\node.exe .\node_modules\typescript\bin\tsc --noEmit --noUnusedLocals --noUnusedParameters
+```
+
+结果：均通过。
+
+2026-04 seed data 校验值：
+
+- assets: 5,000,000
+- liabilities: 1,186,000
+- net worth: 3,814,000
+- income: 93,500
+- expenses: 45,600
+- profit: 47,900
+- operating cash flow: 56,900
+- investing cash flow: -64,000
+- financing cash flow: -69,200
+- cash net change: -76,300
+
+注意：这些审计进展体现在当前工作区状态和 `docs/10-current-project-context.md` 中；截至本次同步开始时，移动端相关代码仍显示为工作区未提交改动，不应误判为已经形成独立功能提交。
+
 ## 6. UI 设计
 
 当前视觉方向是“暖色中国个人金融 + CFO 仪表盘”：
@@ -149,10 +195,11 @@ V0.1 使用个人经营语境下的六大会计要素：
 
 ## 7. 当前 Git 状态
 
-本交接包生成前的状态：
+2026-05-05 同步时的状态：
 
 ```text
-## main...origin/main [ahead 17]
+## main...origin/main [ahead 18]
+ M docs/10-current-project-context.md
  M mobile/App.tsx
  M mobile/src/components/AppIcon.tsx
  M mobile/src/screens/AccountManagementScreen.tsx
@@ -163,7 +210,7 @@ V0.1 使用个人经营语境下的六大会计要素：
  M mobile/src/screens/SettingsScreen.tsx
  M mobile/src/screens/TransactionRecordsScreen.tsx
  M mobile/src/styles/theme.ts
-?? docs/handoff/
+?? docs/handoff/2026-05-imcfo-pdf/
 ?? docs/ui-reference/
 ?? docs/ui-snapshots/
 ?? mobile/src/components/DrilldownIncomeSankeySection.tsx
@@ -175,7 +222,7 @@ V0.1 使用个人经营语境下的六大会计要素：
 ?? mobile/src/screens/ProfitabilityAnalysisScreen.tsx
 ```
 
-本次提交只应包含：
+本次同步提交只应包含：
 
 - `docs/handoff/2026-05-04-imcfo-complete-handoff/**`
 - `docs/10-current-project-context.md`
