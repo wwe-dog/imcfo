@@ -63,7 +63,6 @@ export interface TransactionRecordsIndex {
 }
 
 const UNKNOWN_VALUE = "无";
-const DEBUG_TRANSACTION_PERF = false;
 
 const transactionTypeLabels: Record<TransactionType, string> = {
   assetDecrease: "资产减少",
@@ -270,9 +269,11 @@ export const hydrateTransactionMonth = (
   if (cachedRecords) return cachedRecords;
 
   const rawRecords = index.rawTransactionsByMonth.get(monthKey) ?? [];
-  return rawRecords.map((transaction) =>
+  const records = rawRecords.map((transaction) =>
     buildTransactionDisplayRecord(transaction, index.accountById, index.accountTypeById),
   );
+  index.recordsByMonth.set(monthKey, records);
+  return records;
 };
 
 export const hydrateAllTransactionRecords = (index: TransactionRecordsIndex): TransactionDisplayRecord[] =>
@@ -299,7 +300,6 @@ export const buildTransactionRecordsIndex = (
   transactions: Transaction[],
   accounts: Account[],
 ): TransactionRecordsIndex => {
-  const startedAt = DEBUG_TRANSACTION_PERF ? Date.now() : 0;
   const accountById = new Map(accounts.map((account) => [account.id, account]));
   const accountTypeById = new Map(accounts.map((account) => [account.id, account.type]));
   const sortedTransactions = [...transactions].sort((first, second) => {
@@ -340,12 +340,6 @@ export const buildTransactionRecordsIndex = (
   }
 
   const transactionById = new Map(transactions.map((transaction) => [transaction.id, transaction]));
-
-  if (DEBUG_TRANSACTION_PERF) {
-    console.log(
-      `[transaction-records] build month index: ${Date.now() - startedAt}ms, months=${monthSummaries.length}`,
-    );
-  }
 
   return {
     accountById,

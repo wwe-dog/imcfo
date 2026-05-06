@@ -66,6 +66,7 @@ export default function App() {
 
 function AppShell() {
   const [activeScreen, setActiveScreen] = useState<ScreenKey>("dashboard");
+  const [isDashboardScrollEnabled, setIsDashboardScrollEnabled] = useState(false);
   const insets = useSafeAreaInsets();
   const {
     data,
@@ -90,6 +91,9 @@ function AppShell() {
     accounts: data?.accounts,
     transactions: data?.transactions,
   });
+  const bottomContentPadding = 128 + insets.bottom;
+  const isFuturisticHome = activeScreen === "dashboard";
+  const mainScrollEnabled = activeScreen !== "dashboard" || isDashboardScrollEnabled;
 
   const handleExport = async () => exportData();
 
@@ -215,12 +219,23 @@ function AppShell() {
       );
     }
 
+    const receivableAmount = data.assets
+      .filter((asset) => asset.category === "receivable" || asset.category === "应收款")
+      .reduce((total, asset) => total + asset.currentValue, 0);
+
     switch (activeScreen) {
       case "dashboard":
         return (
           <DashboardScreen
             assets={data.assets}
             liabilities={data.liabilities}
+            onOpenAccounts={() => setActiveScreen("accounts")}
+            onOpenAssets={() => setActiveScreen("assets")}
+            onOpenRecord={() => setActiveScreen("record")}
+            onOpenReports={() => setActiveScreen("reports")}
+            onOpenSettings={() => setActiveScreen("settings")}
+            onOpenTransactions={() => setActiveScreen("transactions")}
+            onScrollEnabledChange={setIsDashboardScrollEnabled}
             summary={summary}
             transactions={data.transactions}
           />
@@ -287,8 +302,13 @@ function AppShell() {
       case "settings":
         return (
           <SettingsScreen
+            accountCount={data.accounts.length}
             appVersion={data.version}
+            receivableAmount={receivableAmount}
+            summary={summary}
+            transactionCount={data.transactions.length}
             onOpenAccounts={() => setActiveScreen("accounts")}
+            onOpenAssets={() => setActiveScreen("assets")}
             onOpenTransactions={() => setActiveScreen("transactions")}
             onClear={handleClear}
             onExport={handleExport}
@@ -301,16 +321,10 @@ function AppShell() {
   };
 
   return (
-    <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
-      <StatusBar style="dark" />
-      {activeScreen !== "dashboard" ? (
-        <View style={styles.header}>
-          <Text style={styles.brand}>我为 CFO</Text>
-          <Text style={styles.subtitle}>像经营公司一样经营自己</Text>
-        </View>
-      ) : null}
+    <SafeAreaView edges={["top", "left", "right"]} style={[styles.safeArea, isFuturisticHome && styles.safeAreaDark]}>
+      <StatusBar style={isFuturisticHome ? "light" : "dark"} />
       {activeScreen === "transactions" ? (
-        <View style={[styles.content, styles.virtualizedContent, { paddingBottom: 120 + insets.bottom }]}>
+        <View style={[styles.content, styles.virtualizedContent, { paddingBottom: bottomContentPadding }]}>
           <ScreenTransition
             animateOnMount
             style={styles.virtualizedContent}
@@ -322,7 +336,15 @@ function AppShell() {
         </View>
       ) : (
         <ScrollView
-          contentContainerStyle={[styles.content, { paddingBottom: 120 + insets.bottom }]}
+          alwaysBounceVertical={mainScrollEnabled}
+          contentContainerStyle={[
+            styles.content,
+            isFuturisticHome && styles.futuristicContent,
+            { paddingBottom: bottomContentPadding },
+          ]}
+          bounces={mainScrollEnabled}
+          overScrollMode={mainScrollEnabled ? "auto" : "never"}
+          scrollEnabled={mainScrollEnabled}
           showsVerticalScrollIndicator={false}
         >
           <ScreenTransition
@@ -334,23 +356,37 @@ function AppShell() {
           </ScreenTransition>
         </ScrollView>
       )}
-      <View style={[styles.tabBarShell, { paddingBottom: Math.max(insets.bottom, 14) }]}>
-        <View style={styles.tabBar}>
+      <View style={[styles.tabBarShell, isFuturisticHome && styles.tabBarShellDark, { paddingBottom: Math.max(insets.bottom, 14) }]}>
+        <View style={[styles.tabBar, isFuturisticHome && styles.tabBarDark]}>
           {tabs.map((tab) => {
             const isActive = activeScreen === tab.key;
             return (
               <Pressable
                 key={tab.key}
                 onPress={() => setActiveScreen(tab.key)}
-                style={[styles.tabButton, isActive && styles.tabButtonActive]}
+                style={[
+                  styles.tabButton,
+                  isActive && styles.tabButtonActive,
+                  isFuturisticHome && styles.tabButtonDark,
+                ]}
               >
                 <AppIcon
-                  color={isActive ? theme.colors.primaryDeep : theme.colors.textMuted}
+                  color={isFuturisticHome ? (isActive ? "#FFFFFF" : "rgba(255,255,255,0.52)") : isActive ? theme.colors.primaryDeep : theme.colors.textMuted}
                   name={getTabIcon(tab.key)}
                   size={19}
                   strokeWidth={1.9}
                 />
-                <Text style={[styles.tabText, isActive && styles.tabTextActive]}>{tab.label}</Text>
+                <Text
+                  style={[
+                    styles.tabText,
+                    isActive && styles.tabTextActive,
+                    isFuturisticHome && styles.tabTextDark,
+                    isFuturisticHome && isActive && styles.tabTextDarkActive,
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+                {isFuturisticHome && isActive ? <View style={styles.tabActiveUnderline} /> : null}
               </Pressable>
             );
           })}
@@ -372,13 +408,15 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 120,
   },
+  futuristicContent: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
+  },
   virtualizedContent: {
     flex: 1,
   },
   header: {
-    backgroundColor: "rgba(255,254,252,0.92)",
-    borderBottomColor: theme.colors.border,
-    borderBottomWidth: 1,
+    backgroundColor: "rgba(255,248,236,0.96)",
     paddingHorizontal: theme.spacing.container,
     paddingVertical: 13,
   },
@@ -396,33 +434,50 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
     flex: 1,
   },
+  safeAreaDark: {
+    backgroundColor: "#050607",
+  },
   subtitle: {
     color: theme.colors.textMuted,
     fontSize: 14,
     marginTop: 2,
   },
   tabBar: {
-    backgroundColor: "rgba(255,254,252,0.96)",
-    borderColor: theme.colors.border,
-    borderRadius: 22,
-    borderWidth: 1,
+    backgroundColor: "#FFFFFF",
+    borderTopColor: theme.colors.divider,
+    borderTopWidth: 1,
     flexDirection: "row",
     justifyContent: "space-around",
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    paddingHorizontal: 6,
+    paddingTop: 8,
     shadowColor: theme.colors.shadowSoft,
-    shadowOffset: { width: 0, height: 5 },
+    shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 1,
-    shadowRadius: 18,
+    shadowRadius: 16,
     elevation: 2,
+  },
+  tabBarDark: {
+    backgroundColor: "rgba(9,10,13,0.82)",
+    borderColor: "rgba(255,255,255,0.18)",
+    borderRadius: 32,
+    borderTopWidth: 0,
+    borderWidth: 1,
+    overflow: "hidden",
+    paddingBottom: 6,
+    paddingTop: 8,
+    shadowColor: "#000000",
+    shadowOpacity: 0.6,
+    shadowRadius: 24,
   },
   tabBarShell: {
     bottom: 0,
     left: 0,
-    paddingBottom: 14,
-    paddingHorizontal: theme.spacing.container,
+    paddingHorizontal: 0,
     position: "absolute",
     right: 0,
+  },
+  tabBarShellDark: {
+    paddingHorizontal: 24,
   },
   tabButton: {
     alignItems: "center",
@@ -434,7 +489,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   tabButtonActive: {
-    backgroundColor: "#ECE8FF",
+    backgroundColor: "transparent",
+  },
+  tabButtonDark: {
+    borderRadius: 24,
+    minHeight: 58,
+    position: "relative",
+  },
+  tabActiveUnderline: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: 999,
+    bottom: 0,
+    height: 3,
+    position: "absolute",
+    width: 28,
   },
   tabText: {
     color: theme.colors.textMuted,
@@ -444,5 +512,11 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: theme.colors.primaryDeep,
     fontWeight: "700",
+  },
+  tabTextDark: {
+    color: "rgba(255,255,255,0.52)",
+  },
+  tabTextDarkActive: {
+    color: "#FFFFFF",
   },
 });

@@ -9,6 +9,7 @@ import {
 import type { TransactionInput } from "../domain/accounting/transactionRules";
 import type { Account, Asset, Liability } from "../domain/models";
 import AppIcon, { type AppIconName } from "../components/AppIcon";
+import { SectionCard } from "../components/financeUI";
 import { sharedStyles, theme } from "../styles/theme";
 
 interface RecordScreenProps {
@@ -30,6 +31,7 @@ interface TransactionTypeOption {
 }
 
 type ModalState = "draft" | "success";
+type EntryMode = "ai" | "button";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -50,15 +52,31 @@ const transactionTypeOptions: TransactionTypeOption[] = [
   { type: "creditCardRepayment", label: "信用卡还款", defaultCategory: "信用卡", requiresAccount: true },
 ];
 
-const examples = [
-  "今天中午吃饭花了15",
-  "工资到账3200",
-  "买基金1000",
-  "还信用卡500",
-  "朋友还我200",
+const aiPlaceholder = [
+  "试试用自然语言描述一笔收支，",
+  "AI 将自动识别金额、方向、分类并记账。",
+  "",
+  "例如：今天午餐 32 元，用支付宝支付；",
+  "下午打车 18 元；工资到账 5800 元",
+].join("\n");
+
+const expenseCategories = [
+  { label: "餐饮", icon: "wallet" as AppIconName, tone: "#FFC33D", bg: "#FFF8E8" },
+  { label: "购物", icon: "card" as AppIconName, tone: "#F45B8D", bg: "#FFF0F4" },
+  { label: "交通", icon: "transaction" as AppIconName, tone: "#3298F5", bg: "#EEF7FF" },
+  { label: "娱乐", icon: "edit" as AppIconName, tone: "#9867E8", bg: "#F5F0FF" },
+  { label: "日用", icon: "asset" as AppIconName, tone: "#31C99A", bg: "#ECFBF5" },
+  { label: "居家", icon: "home" as AppIconName, tone: "#FF8B35", bg: "#FFF3E9" },
 ];
 
-const quickCategories = ["餐饮", "购物", "交通", "娱乐", "其他"];
+const incomeCategories = [
+  { label: "工资薪金", icon: "wallet" as AppIconName, tone: "#31C99A", bg: "#ECFBF5" },
+  { label: "副业收入", icon: "manage" as AppIconName, tone: "#3298F5", bg: "#EEF7FF" },
+  { label: "投资收益", icon: "chart" as AppIconName, tone: "#9867E8", bg: "#F5F0FF" },
+  { label: "红包", icon: "card" as AppIconName, tone: "#F45B8D", bg: "#FFF0F4" },
+  { label: "退款", icon: "reconcile" as AppIconName, tone: "#FFC33D", bg: "#FFF8E8" },
+  { label: "其他", icon: "data" as AppIconName, tone: "#FF8B35", bg: "#FFF3E9" },
+];
 
 const findOption = (type: NaturalLanguageTransactionType): TransactionTypeOption =>
   transactionTypeOptions.find((option) => option.type === type) ?? transactionTypeOptions[0];
@@ -107,10 +125,11 @@ export default function RecordScreen({
   const [date, setDate] = useState(today());
   const [note, setNote] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
+  const [, setSuccessMessage] = useState("");
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [modalState, setModalState] = useState<ModalState>("draft");
   const [isMoreMenuVisible, setIsMoreMenuVisible] = useState(false);
+  const [entryMode, setEntryMode] = useState<EntryMode>("ai");
   const moreMenuProgress = useRef(new Animated.Value(0)).current;
 
   const selectedOption = findOption(type);
@@ -155,8 +174,6 @@ export default function RecordScreen({
     if (type === "liabilityIncrease" || type === "liabilityDecrease") return liabilities;
     return [];
   }, [liabilities, payableLiabilities, type]);
-  const selectedAccount = activeAccounts.find((account) => account.id === accountId);
-  const selectedCreditCardAccount = creditCardAccounts.find((account) => account.id === creditCardAccountId);
   const selectedRelatedAsset = relatedAssetOptions.find((asset) => asset.id === relatedAssetId);
   const selectedRelatedLiability = relatedLiabilityOptions.find((liability) => liability.id === relatedLiabilityId);
   const selectedReceivableAsset = selectedRelatedAsset;
@@ -377,12 +394,12 @@ export default function RecordScreen({
       (type === "assetIncrease" || type === "assetDecrease" || type === "investmentBuy" || type === "investmentSell") &&
       !selectedRelatedAsset
     ) {
-      Alert.alert("璇烽€夋嫨鍏宠仈璧勪骇", "璇峰厛閫夋嫨瑕佸奖鍝嶇殑璧勪骇鎴栨姇璧勯」锛岄伩鍏嶈褰曡惤鍒伴敊璇彴璐︺€?");
+      Alert.alert("请选择关联资产", "请先选择要影响的资产或投资项，避免记录落到错误台账。");
       return null;
     }
 
     if ((type === "liabilityIncrease" || type === "liabilityDecrease") && !selectedRelatedLiability) {
-      Alert.alert("璇烽€夋嫨鍏宠仈璐熷€?", "璇峰厛閫夋嫨瑕佸奖鍝嶇殑璐熷€洪」锛岄伩鍏嶈褰曡惤鍒伴敊璇彴璐︺€?");
+      Alert.alert("请选择关联负债", "请先选择要影响的负债项，避免记录落到错误台账。");
       return null;
     }
 
@@ -414,6 +431,7 @@ export default function RecordScreen({
         note: note.trim() || selectedMeta.impactText,
       });
       setModalState("success");
+      setIsModalVisible(true);
       setSuccessMessage("已保存，金额和备注已清空，可以继续记录下一笔。");
     } catch {
       Alert.alert("保存失败", "这笔记录没有保存成功，请稍后重试。");
@@ -435,6 +453,12 @@ export default function RecordScreen({
     }
   };
 
+  const handleEditDraft = () => {
+    if (isSaving) return;
+    setEntryMode("button");
+    setIsModalVisible(false);
+  };
+
   const handleGoReports = () => {
     setIsModalVisible(false);
     clearEntryFields();
@@ -447,269 +471,207 @@ export default function RecordScreen({
     onOpenAssets();
   };
 
+  const appendAmountKey = (key: string) => {
+    setSuccessMessage("");
+    if (key === "today") {
+      setDate(today());
+      return;
+    }
+    if (key === "+" || key === "-") return;
+    if (key === "del") {
+      setAmount((current) => current.slice(0, -1));
+      return;
+    }
+    if (key === "." && amount.includes(".")) return;
+    setAmount((current) => `${current}${key}`);
+  };
+
+  const visibleCategories = type === "income" ? incomeCategories : expenseCategories;
+  const amountDisplay = amount.trim() ? amount : "0.00";
+
   return (
     <View style={styles.stack}>
-      <View style={sharedStyles.pageHeader}>
-        <View style={styles.headerRow}>
-          <View style={styles.headerCopy}>
-            <Text style={sharedStyles.eyebrow}>Manage</Text>
-            <Text style={styles.pageTitle}>管理</Text>
-            <Text style={sharedStyles.pageCopy}>
-              用一句话描述这笔钱发生了什么，系统识别后再确认入账。
-            </Text>
+      <View style={styles.heroHeader}>
+        <View style={styles.brandBlock}>
+          <View style={styles.brandRow}>
+            <Text style={styles.brandText}>我为 </Text>
+            <Text style={styles.brandAccent}>CFO</Text>
+            <Text style={styles.versionBadge}>V0.1</Text>
           </View>
-          <Pressable onPress={openMoreMenu} style={styles.moreButton}>
-            <AppIcon color={theme.colors.primaryDeep} name="more" size={18} />
-            <Text style={styles.moreButtonText}>更多</Text>
+          <Text style={styles.brandSubtitle}>把自己当成一家公司经营</Text>
+        </View>
+        <View style={styles.periodTools}>
+          <Pressable style={styles.periodButton}>
+            <Text style={styles.periodText}>2026年4月</Text>
+            <Text style={styles.periodArrow}>▼</Text>
+          </Pressable>
+          <Pressable onPress={openMoreMenu} style={styles.calendarButton}>
+            <AppIcon color={theme.colors.textPrimary} name="calendar" size={22} strokeWidth={2.4} />
           </Pressable>
         </View>
       </View>
 
       <View style={[sharedStyles.card, styles.formCard]}>
-        <Text style={sharedStyles.sectionTitle}>一句话记账</Text>
-
-        <Text style={styles.amountLabel}>金额</Text>
-        <TextInput
-          keyboardType="decimal-pad"
-          onChangeText={setAmount}
-          placeholder="¥"
-          placeholderTextColor={theme.colors.textMuted}
-          style={styles.amountInput}
-          value={amount}
-        />
-
-        <View style={styles.quickCategoryRow}>
-          {quickCategories.map((item) => {
-            const isActive = category === item;
-            return (
-              <Pressable
-                key={item}
-                onPress={() => setCategory(item)}
-                style={[sharedStyles.chip, isActive && sharedStyles.chipActiveLight, styles.quickChip]}
-              >
-                <Text style={sharedStyles.chipText}>{item}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <TextInput
-          multiline
-          onChangeText={(value) => {
-            setNaturalText(value);
-            setSuccessMessage("");
-          }}
-          placeholder={examples.join("\n")}
-          placeholderTextColor={theme.colors.textMuted}
-          style={[sharedStyles.input, sharedStyles.textArea, styles.naturalInput]}
-          value={naturalText}
-        />
-
-        <Pressable onPress={handleRecognize} style={sharedStyles.primaryButton}>
-          <Text style={sharedStyles.primaryButtonText}>智能识别</Text>
-        </Pressable>
-      </View>
-
-      <View style={[sharedStyles.card, styles.formCard]}>
-        <Text style={sharedStyles.sectionTitle}>手动修改 / 高级填写</Text>
-
-        <Text style={styles.fieldLabel}>交易类型</Text>
-        <View style={styles.chipWrap}>
-          {transactionTypeOptions.map((option) => {
-            const isActive = type === option.type;
-            return (
-              <Pressable
-                key={option.type}
-                onPress={() => handleTypeChange(option.type)}
-                style={[sharedStyles.chip, isActive && sharedStyles.chipActiveDark]}
-              >
-                <Text style={[sharedStyles.chipText, isActive && sharedStyles.chipTextInverse]}>
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <View style={sharedStyles.helperBox}>
-          <Text style={sharedStyles.helperTitle}>影响说明</Text>
-          <Text style={sharedStyles.helperText}>{selectedMeta.impactText}</Text>
-        </View>
-
-        <Text style={styles.fieldLabel}>分类</Text>
-        <TextInput
-          onChangeText={(value) => {
-            setCategory(value);
-            setSuccessMessage("");
-          }}
-          placeholder="例如 工资薪金 / 餐饮 / 投资资产"
-          placeholderTextColor={theme.colors.textMuted}
-          style={sharedStyles.input}
-          value={category}
-        />
-
-        <Text style={styles.fieldLabel}>{type === "creditCardRepayment" ? "付款账户" : "账户"}</Text>
-        {(type === "creditCardRepayment" ? assetLikeAccounts : activeAccounts).length > 0 ? (
-          <View style={styles.chipWrap}>
-            {(type === "creditCardRepayment" ? assetLikeAccounts : activeAccounts).map((account) => {
-              const isActive = accountId === account.id;
-              return (
-                <Pressable
-                  key={account.id}
-                  onPress={() => {
-                    setAccountId(account.id);
-                    setSuccessMessage("");
-                  }}
-                  style={[sharedStyles.chip, isActive && sharedStyles.chipActiveDark]}
-                >
-                  <Text style={[sharedStyles.chipText, isActive && sharedStyles.chipTextInverse]}>
-                    {account.name}
-                  </Text>
-                </Pressable>
-              );
-            })}
+        <View style={styles.cardTitleRow}>
+          <View style={styles.cardTitleLeft}>
+            <View style={styles.titleMark} />
+            <Text style={styles.cardTitle}>记一笔</Text>
           </View>
+          <Pressable
+            onPress={() => setEntryMode((current) => (current === "ai" ? "button" : "ai"))}
+            style={styles.modeSwitchButton}
+          >
+            <AppIcon color={theme.colors.textPrimary} name="cashFlow" size={17} strokeWidth={2.1} />
+            <Text style={styles.modeSwitchText}>{entryMode === "ai" ? "按钮记账" : "AI记账"}</Text>
+          </Pressable>
+        </View>
+
+        {entryMode === "ai" ? (
+          <>
+            <View style={styles.aiPanel}>
+              <View style={styles.aiPromptRow}>
+                <View style={styles.robotWrap}>
+                  <View style={styles.robotAntenna} />
+                  <View style={styles.robotHead}>
+                    <View style={styles.robotEye} />
+                    <View style={styles.robotEye} />
+                  </View>
+                </View>
+                <View style={styles.aiTextBox}>
+                  <TextInput
+                    multiline
+                    onChangeText={(value) => {
+                      setNaturalText(value);
+                      setSuccessMessage("");
+                    }}
+                    placeholder={aiPlaceholder}
+                    placeholderTextColor={theme.colors.textMuted}
+                    style={styles.aiInput}
+                    value={naturalText}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.aiHintRow}>
+                <AppIcon color={theme.colors.textMuted} name="success" size={18} strokeWidth={1.8} />
+                <Text style={styles.aiHintText}>AI 会自动识别金额、收支方向、分类和账户，减少手动判断错误</Text>
+              </View>
+
+              <View style={styles.utilityRow}>
+                {[
+                  ["edit", "语音输入"],
+                  ["data", "粘贴文字"],
+                  ["eye", "识别截图"],
+                ].map(([icon, label]) => (
+                  <Pressable key={label} style={styles.utilityButton}>
+                    <AppIcon color={theme.colors.textPrimary} name={icon as AppIconName} size={20} strokeWidth={2.1} />
+                    <Text style={styles.utilityText}>{label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Pressable onPress={handleRecognize} style={styles.recognizeButton}>
+                <Text style={styles.recognizeSpark}>✦</Text>
+                <Text style={styles.recognizeButtonText}>开始识别记账</Text>
+              </Pressable>
+            </View>
+          </>
         ) : (
-          <View style={styles.messageBox}>
-            <Text style={sharedStyles.warningText}>
-              {type === "creditCardRepayment"
-                ? "当前没有可用付款账户，请先在账户管理中启用现金、银行卡或支付账户。"
-                : "当前没有可用账户，请先通过“更多 - 账户管理”新增或启用账户。"}
-            </Text>
-          </View>
+          <>
+            <View style={styles.segmentedShell}>
+              {[
+                { label: "支出", value: "expense" as const },
+                { label: "收入", value: "income" as const },
+              ].map((option) => {
+                const isActive = (type === "income" ? "income" : "expense") === option.value;
+                return (
+                  <Pressable
+                    key={option.value}
+                    onPress={() => handleTypeChange(option.value)}
+                    style={[styles.segmentButton, isActive && styles.segmentButtonActive]}
+                  >
+                    <Text style={[styles.segmentButtonText, isActive && styles.segmentButtonTextActive]}>
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View style={styles.amountDisplay}>
+              <Text style={styles.amountCurrency}>¥</Text>
+              <Text style={[styles.amountValue, !amount.trim() && styles.amountValueMuted]}>{amountDisplay}</Text>
+            </View>
+
+            <View style={styles.categoryGrid}>
+              {visibleCategories.map((item) => {
+                const isActive = category === item.label;
+                return (
+                  <Pressable
+                    key={item.label}
+                    onPress={() => {
+                      setCategory(item.label);
+                      setSuccessMessage("");
+                    }}
+                    style={[styles.categoryButton, { backgroundColor: item.bg }, isActive && styles.categoryButtonActive]}
+                  >
+                    <View style={[styles.categoryIcon, { backgroundColor: item.tone }]}>
+                      <AppIcon color="#FFFFFF" name={item.icon} size={20} strokeWidth={2.2} />
+                    </View>
+                    <Text style={styles.categoryText}>{item.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View style={styles.noteInputShell}>
+              <AppIcon color={theme.colors.textMuted} name="edit" size={20} strokeWidth={2.1} />
+              <TextInput
+                maxLength={60}
+                onChangeText={setNote}
+                placeholder="点击填写备注"
+                placeholderTextColor={theme.colors.textMuted}
+                style={styles.noteInput}
+                value={note}
+              />
+              <Text style={styles.noteCount}>{note.length}/60</Text>
+            </View>
+
+            <View style={styles.keypad}>
+              {["7", "8", "9", "today", "4", "5", "6", "+", "1", "2", "3", "-", ".", "0", "del", "done"].map((key) => (
+                <Pressable
+                  disabled={key === "done" && isSaving}
+                  key={key}
+                  onPress={() => (key === "done" ? void handleSubmit() : appendAmountKey(key))}
+                  style={[styles.keypadButton, key === "done" && styles.keypadDoneButton, isSaving && key === "done" && styles.buttonDisabled]}
+                >
+                  {key === "del" ? (
+                    <AppIcon color={theme.colors.textPrimary} name="close" size={23} strokeWidth={2.1} />
+                  ) : key === "today" ? (
+                    <View style={styles.todayKey}>
+                      <AppIcon color={theme.colors.textPrimary} name="calendar" size={20} strokeWidth={2.1} />
+                      <Text style={styles.keypadTextSmall}>今天</Text>
+                    </View>
+                  ) : key === "done" ? (
+                    <Text style={styles.keypadDoneText}>{isSaving ? "保存中" : "完成"}</Text>
+                  ) : (
+                    <Text style={styles.keypadText}>{key}</Text>
+                  )}
+                </Pressable>
+              ))}
+            </View>
+          </>
         )}
-
-        {type === "creditCardRepayment" ? (
-          <>
-            <Text style={styles.fieldLabel}>信用卡账户</Text>
-            {creditCardAccounts.length > 0 ? (
-              <View style={styles.chipWrap}>
-                {creditCardAccounts.map((account) => {
-                  const isActive = creditCardAccountId === account.id;
-                  return (
-                    <Pressable
-                      key={account.id}
-                      onPress={() => {
-                        setCreditCardAccountId(account.id);
-                        setSuccessMessage("");
-                      }}
-                      style={[sharedStyles.chip, isActive && sharedStyles.chipActiveDark]}
-                    >
-                      <Text style={[sharedStyles.chipText, isActive && sharedStyles.chipTextInverse]}>
-                        {account.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            ) : (
-              <View style={styles.messageBox}>
-                <Text style={sharedStyles.warningText}>当前没有启用的信用卡账户，请先在账户管理中新增或启用信用卡。</Text>
-              </View>
-            )}
-          </>
-        ) : null}
-
-        {type === "receivableRecognize" || type === "receivableCollect" ? (
-          <>
-            <Text style={styles.fieldLabel}>应收项目</Text>
-            {receivableAssets.length > 0 ? (
-              <View style={styles.chipWrap}>
-                {receivableAssets.map((asset) => {
-                  const isActive = relatedAssetId === asset.id;
-                  return (
-                    <Pressable
-                      key={asset.id}
-                      onPress={() => {
-                        setRelatedAssetId(asset.id);
-                        setSuccessMessage("");
-                      }}
-                      style={[sharedStyles.chip, isActive && sharedStyles.chipActiveDark]}
-                    >
-                      <Text style={[sharedStyles.chipText, isActive && sharedStyles.chipTextInverse]}>
-                        {asset.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            ) : (
-              <View style={styles.messageBox}>
-                <Text style={sharedStyles.warningText}>当前没有可用应收项目，请先在资产负债管理中新增应收款。</Text>
-              </View>
-            )}
-          </>
-        ) : null}
-
-        {type === "payableRecognize" || type === "payablePay" ? (
-          <>
-            <Text style={styles.fieldLabel}>应付项目</Text>
-            {payableLiabilities.length > 0 ? (
-              <View style={styles.chipWrap}>
-                {payableLiabilities.map((liability) => {
-                  const isActive = relatedLiabilityId === liability.id;
-                  return (
-                    <Pressable
-                      key={liability.id}
-                      onPress={() => {
-                        setRelatedLiabilityId(liability.id);
-                        setSuccessMessage("");
-                      }}
-                      style={[sharedStyles.chip, isActive && sharedStyles.chipActiveDark]}
-                    >
-                      <Text style={[sharedStyles.chipText, isActive && sharedStyles.chipTextInverse]}>
-                        {liability.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            ) : (
-              <View style={styles.messageBox}>
-                <Text style={sharedStyles.warningText}>当前没有可用应付项目，请先在资产负债管理中新增应付款。</Text>
-              </View>
-            )}
-          </>
-        ) : null}
-
-        <Text style={styles.fieldLabel}>日期</Text>
-        <TextInput
-          onChangeText={(value) => {
-            setDate(value);
-            setSuccessMessage("");
-          }}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={theme.colors.textMuted}
-          style={sharedStyles.input}
-          value={date}
-        />
-
-        <Text style={styles.fieldLabel}>备注</Text>
-        <TextInput
-          multiline
-          onChangeText={setNote}
-          placeholder="记录这笔事项的原因，可选"
-          placeholderTextColor={theme.colors.textMuted}
-          style={[sharedStyles.input, sharedStyles.textArea]}
-          value={note}
-        />
-
-        {successMessage ? (
-          <View style={styles.successBox}>
-            <Text style={sharedStyles.successText}>{successMessage}</Text>
-          </View>
-        ) : null}
-
-        <Pressable
-          disabled={isSaving}
-          onPress={() => void handleSubmit()}
-          style={[sharedStyles.secondaryButton, isSaving && styles.buttonDisabled]}
-        >
-          <Text style={sharedStyles.secondaryButtonText}>
-            {isSaving ? "保存中..." : "保存手动记录"}
-          </Text>
-        </Pressable>
       </View>
+
+      <SectionCard title="账务中心">
+        <View style={styles.centerGrid}>
+          <AccountCenterTile icon="account" onPress={handleOpenAccounts} subtitle="管理账户与余额" title="我的账户" />
+          <AccountCenterTile icon="asset" onPress={handleOpenAssets} subtitle="资产负债，一目了然" title="资产负债管理" />
+          <AccountCenterTile icon="reconcile" onPress={handleOpenAssets} subtitle="对账核对，盘点管理" title="对账与盘点" />
+          <AccountCenterTile icon="report" onPress={handleOpenTransactions} subtitle="收支流水，清晰明了" title="收支明细" />
+        </View>
+      </SectionCard>
 
       <Modal animationType="fade" onRequestClose={handleCloseModal} transparent visible={isModalVisible}>
         <View style={styles.modalOverlay}>
@@ -740,24 +702,20 @@ export default function RecordScreen({
                 </View>
                 <View style={styles.modalRow}>
                   <Text style={styles.modalLabel}>{type === "creditCardRepayment" ? "付款账户" : "账户"}</Text>
-                  <Text style={styles.modalValue}>{selectedAccount?.name ?? "未选择"}</Text>
                 </View>
                 {type === "creditCardRepayment" ? (
                   <View style={styles.modalRow}>
                     <Text style={styles.modalLabel}>信用卡账户</Text>
-                    <Text style={styles.modalValue}>{selectedCreditCardAccount?.name ?? "未选择"}</Text>
                   </View>
                 ) : null}
                 {type === "receivableRecognize" || type === "receivableCollect" ? (
                   <View style={styles.modalRow}>
                     <Text style={styles.modalLabel}>应收项目</Text>
-                    <Text style={styles.modalValue}>{selectedReceivableAsset?.name ?? "未选择"}</Text>
                   </View>
                 ) : null}
                 {type === "payableRecognize" || type === "payablePay" ? (
                   <View style={styles.modalRow}>
                     <Text style={styles.modalLabel}>应付项目</Text>
-                    <Text style={styles.modalValue}>{selectedPayableLiability?.name ?? "未选择"}</Text>
                   </View>
                 ) : null}
                 <View style={styles.modalRow}>
@@ -777,7 +735,7 @@ export default function RecordScreen({
                 <View style={styles.modalActionRow}>
                   <Pressable
                     disabled={isSaving}
-                    onPress={handleCloseModal}
+                    onPress={handleEditDraft}
                     style={[sharedStyles.secondaryButton, isSaving && styles.buttonDisabled, styles.modalAction]}
                   >
                     <Text style={sharedStyles.secondaryButtonText}>手动修改</Text>
@@ -904,6 +862,28 @@ interface MoreMenuOptionProps {
   title: string;
 }
 
+interface AccountCenterTileProps {
+  icon: AppIconName;
+  onPress: () => void;
+  subtitle: string;
+  title: string;
+}
+
+function AccountCenterTile({ icon, onPress, subtitle, title }: AccountCenterTileProps) {
+  return (
+    <Pressable onPress={onPress} style={styles.centerTile}>
+      <View style={styles.centerTileIcon}>
+        <AppIcon color="#FFFFFF" name={icon} size={27} strokeWidth={2.2} />
+      </View>
+      <View style={styles.centerTileCopy}>
+        <Text numberOfLines={1} style={styles.centerTileTitle}>{title}</Text>
+        <Text numberOfLines={1} style={styles.centerTileSubtitle}>{subtitle}</Text>
+      </View>
+      <AppIcon color={theme.colors.textMuted} name="chevronRight" size={18} strokeWidth={2.1} />
+    </Pressable>
+  );
+}
+
 function MoreMenuOption({ description, icon, onPress, title }: MoreMenuOptionProps) {
   return (
     <Pressable onPress={onPress} style={styles.moreOptionRow}>
@@ -920,22 +900,354 @@ function MoreMenuOption({ description, icon, onPress, title }: MoreMenuOptionPro
 }
 
 const styles = StyleSheet.create({
+  heroHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: theme.spacing.md,
+    justifyContent: "space-between",
+  },
+  brandBlock: {
+    flex: 1,
+    gap: 6,
+  },
+  brandRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  brandText: {
+    color: theme.colors.textPrimary,
+    fontSize: 32,
+    fontWeight: "900",
+  },
+  brandAccent: {
+    color: theme.colors.primaryDeep,
+    fontSize: 32,
+    fontWeight: "900",
+  },
+  versionBadge: {
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    color: theme.colors.primaryDeep,
+    fontSize: 15,
+    fontWeight: "800",
+    marginLeft: 4,
+    overflow: "hidden",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  brandSubtitle: {
+    color: theme.colors.textSecondary,
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  periodTools: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    paddingTop: 4,
+  },
+  periodButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 4,
+    minHeight: 46,
+    paddingHorizontal: 12,
+    shadowColor: theme.colors.shadowSoft,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
+  },
+  periodText: {
+    color: theme.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  periodArrow: {
+    color: theme.colors.textPrimary,
+    fontSize: 10,
+  },
+  calendarButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 46,
+    minWidth: 36,
+  },
+  titleMark: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.pill,
+    height: 24,
+    width: 5,
+  },
+  aiPanel: {
+    borderColor: "#FFD1A4",
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    gap: theme.spacing.md,
+    padding: 14,
+  },
+  aiPromptRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+  },
+  robotWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 64,
+  },
+  robotAntenna: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.pill,
+    height: 15,
+    marginBottom: -2,
+    width: 4,
+  },
+  robotHead: {
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#FFE2C7",
+    borderRadius: 22,
+    borderWidth: 6,
+    flexDirection: "row",
+    gap: 10,
+    height: 52,
+    justifyContent: "center",
+    shadowColor: theme.colors.primaryDeep,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    width: 64,
+  },
+  robotEye: {
+    backgroundColor: theme.colors.textPrimary,
+    borderRadius: theme.radius.pill,
+    height: 10,
+    width: 7,
+  },
+  aiTextBox: {
+    backgroundColor: theme.colors.surfaceElevated,
+    borderColor: "#F6D5B8",
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    flex: 1,
+    minHeight: 166,
+    padding: 14,
+  },
+  aiHintRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+  },
+  aiHintText: {
+    color: theme.colors.textMuted,
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  recognizeButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.md,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    justifyContent: "center",
+    minHeight: 56,
+  },
+  recognizeSpark: {
+    color: "#FFFFFF",
+    fontSize: 24,
+    fontWeight: "900",
+  },
+  recognizeButtonText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  segmentedShell: {
+    backgroundColor: theme.colors.surfaceSoft,
+    borderRadius: theme.radius.xl,
+    flexDirection: "row",
+    padding: 3,
+  },
+  segmentButton: {
+    alignItems: "center",
+    borderColor: "transparent",
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 48,
+  },
+  segmentButtonActive: {
+    backgroundColor: theme.colors.surface,
+    borderColor: "#F7C89F",
+  },
+  segmentButtonText: {
+    color: theme.colors.textPrimary,
+    fontSize: 17,
+    fontWeight: "800",
+  },
+  segmentButtonTextActive: {
+    color: theme.colors.primaryDeep,
+  },
+  amountDisplay: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surfaceElevated,
+    borderRadius: theme.radius.lg,
+    flexDirection: "row",
+    gap: 18,
+    minHeight: 88,
+    paddingHorizontal: 22,
+  },
+  amountCurrency: {
+    color: theme.colors.textPrimary,
+    fontSize: 40,
+    fontWeight: "900",
+  },
+  amountValue: {
+    color: theme.colors.textPrimary,
+    flex: 1,
+    fontSize: 48,
+    fontWeight: "300",
+  },
+  amountValueMuted: {
+    color: theme.colors.textMuted,
+  },
+  categoryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  categoryButton: {
+    alignItems: "center",
+    borderColor: "transparent",
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    flexBasis: "30%",
+    flexDirection: "row",
+    flexGrow: 1,
+    gap: 10,
+    minHeight: 64,
+    paddingHorizontal: 12,
+  },
+  categoryButtonActive: {
+    borderColor: theme.colors.primary,
+  },
+  categoryIcon: {
+    alignItems: "center",
+    borderRadius: theme.radius.pill,
+    height: 38,
+    justifyContent: "center",
+    width: 38,
+  },
+  categoryText: {
+    color: theme.colors.textPrimary,
+    flexShrink: 1,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  noteInputShell: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surfaceElevated,
+    borderRadius: theme.radius.lg,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    minHeight: 48,
+    paddingHorizontal: 12,
+  },
+  noteInput: {
+    color: theme.colors.textPrimary,
+    flex: 1,
+    fontSize: 15,
+    padding: 0,
+  },
+  noteCount: {
+    color: theme.colors.textMuted,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  todayKey: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+  },
+  keypadTextSmall: {
+    color: theme.colors.textPrimary,
+    fontSize: 17,
+    fontWeight: "800",
+  },
+  keypadDoneButton: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  keypadDoneText: {
+    color: "#FFFFFF",
+    fontSize: 20,
+    fontWeight: "900",
+  },
+  centerGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  centerTile: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surfaceElevated,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    flexBasis: "47%",
+    flexDirection: "row",
+    flexGrow: 1,
+    gap: 10,
+    minHeight: 78,
+    padding: 12,
+  },
+  centerTileIcon: {
+    alignItems: "center",
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.md,
+    height: 42,
+    justifyContent: "center",
+    width: 42,
+  },
+  centerTileCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  centerTileTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  centerTileSubtitle: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+  },
   amountInput: {
     backgroundColor: theme.colors.surfaceElevated,
-    borderBottomColor: theme.colors.primary,
-    borderBottomWidth: 2,
-    borderColor: theme.colors.primarySoft,
-    borderRadius: 22,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
     color: theme.colors.textPrimary,
     fontSize: 36,
-    fontWeight: "300",
+    fontWeight: "900",
     minHeight: 70,
     paddingHorizontal: theme.spacing.md,
-    shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
+  },
+  actionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
   },
   amountLabel: {
     color: theme.colors.textPrimary,
@@ -950,6 +1262,21 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: theme.spacing.sm,
   },
+  cardTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 25,
+    fontWeight: "900",
+  },
+  cardTitleLeft: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+  },
+  cardTitleRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
   fieldLabel: {
     color: theme.colors.textSecondary,
     fontSize: theme.typography.label,
@@ -957,7 +1284,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   formCard: {
-    gap: 14,
+    gap: 18,
+    padding: 18,
   },
   ghostButton: {
     alignItems: "center",
@@ -1031,14 +1359,14 @@ const styles = StyleSheet.create({
   moreButton: {
     alignItems: "center",
     backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.borderStrong,
+    borderColor: theme.colors.border,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     flexDirection: "row",
     gap: 6,
     justifyContent: "center",
     minHeight: 38,
-    minWidth: 64,
+    minWidth: 40,
     paddingHorizontal: 14,
   },
   moreButtonText: {
@@ -1143,9 +1471,67 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: -0.5,
   },
-  naturalInput: {
-    borderColor: theme.colors.primaryDeep,
+  aiInput: {
+    color: theme.colors.textPrimary,
+    fontSize: 16,
+    lineHeight: 24,
     minHeight: 136,
+    padding: 0,
+    textAlignVertical: "top",
+  },
+  aiInputShell: {
+    backgroundColor: theme.colors.surfaceElevated,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    minHeight: 152,
+    padding: theme.spacing.md,
+  },
+  keypad: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  keypadButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    flexBasis: "22.5%",
+    flexGrow: 1,
+    justifyContent: "center",
+    minHeight: 58,
+    shadowColor: theme.colors.shadowSoft,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+  },
+  keypadText: {
+    color: theme.colors.textPrimary,
+    fontSize: 22,
+    fontWeight: "800",
+  },
+  modeSwitchButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surface,
+    borderColor: "#F7C89F",
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    minHeight: 42,
+    paddingHorizontal: 16,
+  },
+  modeSwitchText: {
+    color: theme.colors.textPrimary,
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  naturalInput: {
+    borderColor: theme.colors.border,
+    minHeight: 54,
   },
   pageTitle: {
     color: theme.colors.textPrimary,
@@ -1172,5 +1558,32 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.lg,
     borderWidth: 1,
     padding: 14,
+  },
+  viewAllText: {
+    color: theme.colors.textMuted,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  utilityButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surface,
+    borderColor: "#F3D2B5",
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    minHeight: 54,
+    paddingHorizontal: 8,
+  },
+  utilityRow: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+  },
+  utilityText: {
+    color: theme.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "800",
   },
 });

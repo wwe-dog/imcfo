@@ -1,1567 +1,1639 @@
-import { useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import AppIcon from "../components/AppIcon";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BlurView } from "expo-blur";
+import { PanResponder, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useDerivedValue,
+  useFrameCallback,
+  useSharedValue,
+  withTiming,
+  type SharedValue,
+} from "react-native-reanimated";
+import {
+  BackdropBlur,
+  Canvas,
+  Circle,
+  Group,
+  Line as SkiaLine,
+  LinearGradient,
+  RadialGradient,
+  RoundedRect,
+  Text as SkiaText,
+  matchFont,
+  rect,
+  rrect,
+  useFont,
+  vec,
+  type SkFont,
+  type Transforms3d,
+} from "@shopify/react-native-skia";
+import Svg, { Path as SvgPath } from "react-native-svg";
+import AppIcon, { type AppIconName } from "../components/AppIcon";
 import ScreenTransition from "../components/ScreenTransition";
-import DonutChart from "../components/charts/DonutChart";
-import LineChart from "../components/charts/LineChart";
 import type { Asset, Liability, ReportSummary, Transaction } from "../domain/models";
-import { sharedStyles, theme } from "../styles/theme";
-import { formatCurrency } from "../utils/formatters";
+import OperatingAnalysisReportScreen from "./OperatingAnalysisReportScreen";
+import ProfitabilityAnalysisScreen from "./ProfitabilityAnalysisScreen";
 
 interface DashboardScreenProps {
   assets: Asset[];
   liabilities: Liability[];
+  onOpenAccounts?: () => void;
+  onOpenAssets?: () => void;
+  onOpenRecord?: () => void;
+  onOpenReports?: () => void;
+  onOpenSettings?: () => void;
+  onOpenTransactions?: () => void;
+  onScrollEnabledChange?: (enabled: boolean) => void;
   summary: ReportSummary;
   transactions: Transaction[];
 }
 
-type DashboardView = "cashFlow" | "balance";
-type PeriodLabel = "周线" | "月线" | "季度线" | "年线";
-type DashboardRoute =
-  | { name: "dashboard" }
-  | { name: "assetCompositionDetail" }
-  | { name: "liabilityCompositionDetail" }
-  | { name: "netWorthDetail" }
-  | { category: Asset["category"]; name: "assetCategoryDetail" }
-  | { category: Liability["category"]; name: "liabilityCategoryDetail" };
+type DashboardRoute = "home" | "operationAnalysisReport" | "profitabilityAnalysis";
+type HubAction = "accounts" | "assets" | "operation" | "profitability" | "record" | "reports" | "settings" | "transactions";
 
-interface CompositionItem {
-  key: string;
+const REFERENCE_VIEWPORT_WIDTH = 520;
+const REFERENCE_VIEWPORT_HEIGHT = 1157;
+const TAP_MOVEMENT_THRESHOLD = 7;
+const PROTOTYPE_DRAG_FACTOR = 0.0062;
+const PROTOTYPE_CARD_COUNT = 76;
+const PROTOTYPE_CARD_SIZE = 56;
+const PROTOTYPE_CENTER_CARD_HEIGHT = 98;
+const PROTOTYPE_CENTER_CARD_WIDTH = 112;
+const PROTOTYPE_EXPANDED_ZOOM = 1.18;
+const PROTOTYPE_GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+const PROTOTYPE_RADIUS_FACTOR = 0.425;
+const PROTOTYPE_PERSPECTIVE = 2.75;
+const PROTOTYPE_DEPTH_PROJECTION = 0.74;
+const PROTOTYPE_INITIAL_ROT_X = -0.18;
+const PROTOTYPE_INITIAL_ROT_Y = 0.36;
+const PROTOTYPE_INERTIA_DAMPING = 0.942;
+const PROTOTYPE_MAX_ROT_X = 0.68;
+const PROTOTYPE_MIN_ROT_X = -0.68;
+const PROTOTYPE_STOP_SPEED = 0.00006;
+const PROTOTYPE_COLLAPSED_IDLE_STEP = 0.0017;
+const PROTOTYPE_EXPANDED_IDLE_STEP = 0.0012;
+const EXPAND_TRANSITION_DURATION_MS = 560;
+const TAP_MAX_DURATION_MS = 180;
+const NOTO_SANS_SC_FONT = require("../../assets/fonts/NotoSansSC-Regular.otf");
+
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+const smoothstep = (edge0: number, edge1: number, value: number) => {
+  const x = clamp((value - edge0) / (edge1 - edge0), 0, 1);
+  return x * x * (3 - 2 * x);
+};
+
+interface FunctionNode {
+  action: HubAction;
+  accent: string;
+  glow: string;
+  icon: AppIconName;
+  id: string;
   label: string;
-  value: number;
-  color: string;
 }
 
-interface DetailTableRow {
-  color?: string;
-  key: string;
+interface VisualNode {
+  accent: string;
+  action?: HubAction;
+  glow: string;
+  icon: AppIconName;
+  id: string;
   label: string;
-  percent: number;
-  value: number;
 }
 
-interface TrendBucket {
-  label: string;
-  income: number;
-  outflow: number;
-  net: number;
-}
-
-interface EquityTrendPoint {
-  label: string;
-  value: number;
-}
-
-const viewOptions: Array<{ key: DashboardView; label: string }> = [
-  { key: "cashFlow", label: "收支现金流" },
-  { key: "balance", label: "资产负债结构" },
+const functionNodes: FunctionNode[] = [
+  { action: "record", accent: "#05AEBD", glow: "rgba(141,247,255,0.34)", icon: "mic", id: "record-entry", label: "自然语言记一笔" },
+  { action: "accounts", accent: "#7DD3FC", glow: "rgba(125,211,252,0.3)", icon: "wallet", id: "accounts", label: "账户" },
+  { action: "assets", accent: "#8DF7FF", glow: "rgba(141,247,255,0.3)", icon: "asset", id: "assets-liabilities", label: "资产负债" },
+  { action: "transactions", accent: "#93C5FD", glow: "rgba(147,197,253,0.3)", icon: "transaction", id: "transactions", label: "交易记录" },
+  { action: "reports", accent: "#FFD36F", glow: "rgba(255,211,111,0.28)", icon: "reports", id: "reports", label: "报表" },
+  { action: "operation", accent: "#9EF2C5", glow: "rgba(158,242,197,0.28)", icon: "chart", id: "operation", label: "经营分析" },
+  { action: "profitability", accent: "#F9A8D4", glow: "rgba(249,168,212,0.28)", icon: "chart", id: "profitability", label: "盈利能力" },
+  { action: "settings", accent: "#E5E7EB", glow: "rgba(229,231,235,0.24)", icon: "profile", id: "profile", label: "我的" },
 ];
 
-const periodOptions: PeriodLabel[] = ["周线", "月线", "季度线", "年线"];
-const netWorthPeriodOptions: PeriodLabel[] = ["月线", "季度线", "年线"];
-const chartColors = [
-  "#7C6CFF",
-  "#8DD7F7",
-  "#B88A00",
-  "#FF6B6B",
-  "#34D399",
-  "#F97316",
-  "#14B8A6",
-  "#E879F9",
-  "#6366F1",
-  "#A3E635",
-  "#F43F5E",
-  "#0EA5E9",
-  "#92400E",
-  "#64748B",
-  "#FACC15",
+const actionableModuleByPrototypeLabel: Record<string, FunctionNode> = {
+  Account: functionNodes[1],
+  Analysis: functionNodes[5],
+  Assets: functionNodes[2],
+  Forecast: functionNodes[6],
+  Liabilities: functionNodes[2],
+  Profile: functionNodes[7],
+  Reports: functionNodes[4],
+  Settings: functionNodes[7],
+  Transactions: functionNodes[3],
+  "Voice AI Input": functionNodes[0],
+};
+
+const functionNodeByAction = functionNodes.reduce<Record<HubAction, FunctionNode>>((map, node) => {
+  map[node.action] = node;
+  return map;
+}, {} as Record<HubAction, FunctionNode>);
+
+const createActionableVisualNode = (node: FunctionNode): VisualNode => ({
+  accent: node.accent,
+  action: node.action,
+  glow: node.glow,
+  icon: node.icon,
+  id: node.id,
+  label: node.label,
+});
+
+const createDecorativeVisualNode = (node: FunctionNode | VisualNode, id: string): VisualNode => ({
+  accent: node.accent,
+  glow: node.glow,
+  icon: node.icon,
+  id,
+  label: "",
+});
+
+const decorativeModuleByPrototypeLabel: Record<string, VisualNode> = {
+  "Cash Flow": { accent: "#B8FF7C", glow: "rgba(184,255,124,0.24)", icon: "cashFlow", id: "decor-cash-flow", label: "" },
+  Forecast: { accent: "#F9A8D4", glow: "rgba(249,168,212,0.2)", icon: "chart", id: "decor-forecast", label: "" },
+  Insights: { accent: "#FDE68A", glow: "rgba(253,230,138,0.2)", icon: "data", id: "decor-insights", label: "" },
+  Investments: { accent: "#8DF7FF", glow: "rgba(141,247,255,0.18)", icon: "securities", id: "decor-investments", label: "" },
+  Projects: { accent: "#B59CFF", glow: "rgba(181,156,255,0.18)", icon: "manage", id: "decor-projects", label: "" },
+  Reconciliation: { accent: "#C4F7FF", glow: "rgba(196,247,255,0.2)", icon: "reconcile", id: "decor-reconciliation", label: "" },
+  Safeguards: { accent: "#A7F3D0", glow: "rgba(167,243,208,0.2)", icon: "success", id: "decor-safeguards", label: "" },
+};
+
+const prototypeModuleOrder = [
+  "Account",
+  "Assets",
+  "Liabilities",
+  "Reports",
+  "Cash Flow",
+  "Analysis",
+  "Projects",
+  "Investments",
+  "Settings",
+  "Profile",
+  "Transactions",
+  "Reconciliation",
+  "Forecast",
+  "Safeguards",
+  "Insights",
+] as const;
+
+type CapturedCardTuple = readonly [
+  index: number,
+  prototypeLabel: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  opacity: number,
+  zIndex: number,
+  className: string,
 ];
-const MAX_CHART_ITEMS = 15;
-const OTHER_CHART_ITEM_COLOR = chartColors[MAX_CHART_ITEMS - 1];
 
-const assetCategoryLabels: Record<Asset["category"], string> = {
-  "A股股票": "A股股票",
-  bankDeposit: "银行卡",
-  cash: "现金",
-  fixedAsset: "固定资产",
-  investment: "投资资产",
-  other: "其他资产",
-  paymentAccount: "支付账户",
-  receivable: "应收款",
-  "保险现金价值": "保险现金价值",
-  "公募基金": "公募基金",
-  "大额存单": "大额存单",
-  "外币资产": "外币资产",
-  "宽基ETF": "宽基ETF",
-  "应收款": "应收款",
-  "房产": "房产",
-  "支付账户": "支付账户",
-  "现金": "现金",
-  "短债工具": "短债工具",
-  "行业ETF": "行业ETF",
-  "货币基金": "货币基金",
-  "车辆": "车辆",
-  "银行卡": "银行卡",
-  "项目权益": "项目权益",
-  "债券基金": "债券基金",
-  "港美股": "港美股",
-  "黄金": "黄金",
-};
+interface CapturedRect {
+  centerX: number;
+  centerY: number;
+  height: number;
+  opacity?: number;
+  width: number;
+  x: number;
+  y: number;
+}
 
-const liabilityCategoryLabels: Record<Liability["category"], string> = {
-  borrowing: "借款",
-  creditCard: "信用卡",
-  huabei: "花呗/白条",
-  loan: "贷款",
-  other: "其他负债",
-  payable: "应付款",
-  "借款": "借款",
-  "信用卡": "信用卡",
-  "应付款": "应付款",
-  "房贷": "房贷",
-  "消费分期": "消费分期",
-  "融资负债": "融资负债",
-  "车贷": "车贷",
-};
+interface OrbitCard {
+  isPrimary: boolean;
+  index: number;
+  moduleName: string;
+  point: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  visualNode: VisualNode;
+}
 
-const formatCompactCurrency = (value: number): string => {
-  const sign = value < 0 ? "-" : "";
-  const absoluteValue = Math.abs(value);
+interface ProjectedSphereCard {
+  centerX: number;
+  centerY: number;
+  depth: number;
+  height: number;
+  opacity: number;
+  scaleX: number;
+  scaleY: number;
+  width: number;
+}
 
-  if (absoluteValue >= 10000) {
-    const displayValue =
-      absoluteValue >= 100000 ? (absoluteValue / 10000).toFixed(0) : (absoluteValue / 10000).toFixed(1);
-    return `${sign}¥${displayValue}万`;
-  }
+interface SkiaSphereProjection {
+  labelOpacity: number;
+  opacity: number;
+  transform: Transforms3d;
+}
 
-  return formatCurrency(value);
-};
+interface SphereGestureState {
+  downX: number;
+  downY: number;
+  grantAt: number;
+  lastMoveAt: number;
+  lastX: number;
+  lastY: number;
+  moved: boolean;
+}
 
-const formatPercent = (value: number): string => {
-  if (!Number.isFinite(value)) return "0%";
-  return `${Math.round(value * 100)}%`;
-};
+const capturedPrototypeGeometry = {
+  collapsed: {
+    logo: { x: 157.13, y: 91, width: 205.73, height: 61, centerX: 259.99, centerY: 121.5, opacity: 1 },
+    sphereContainer: { x: 45, y: 357.5, width: 430, height: 430, centerX: 260, centerY: 572.5, opacity: 1 },
+    hint: { x: 142.44, y: 803.5, width: 235.13, height: 20, centerX: 260, centerY: 813.5, opacity: 1 },
+    cards: [
+      [0, "Reports", 210.72, 574.24, 19.51, 19.51, 0.680334, 25, "sphere-card is-back"],
+      [1, "Reconciliation", 265.17, 551.91, 19.65, 19.65, 0.682874, 29, "sphere-card is-back"],
+      [2, "Safeguards", 286.66, 604.58, 20.59, 20.59, 0.678707, 98, "sphere-card is-back"],
+      [3, "Profile", 243.74, 495.33, 20.51, 20.51, 0.66751, 100, "sphere-card is-back"],
+      [4, "Assets", 189.52, 518.37, 20.99, 20.99, 0.663734, 133, "sphere-card is-back"],
+      [5, "Analysis", 233.83, 626.98, 21.19, 21.19, 0.671754, 141, "sphere-card is-back"],
+      [6, "Cash Flow", 315, 526.67, 21.48, 21.48, 0.666327, 163, "sphere-card is-back"],
+      [7, "Projects", 338.75, 580.67, 22.5, 22.5, 0.663332, 237, "sphere-card is-back"],
+      [8, "Transactions", 159.06, 597.32, 22.46, 22.46, 0.661082, 238, "sphere-card is-back"],
+      [9, "Liabilities", 288.14, 468.14, 23.47, 23.47, 0.664621, 300, "sphere-card is-back"],
+      [10, "Forecast", 187.01, 656.23, 23.77, 23.77, 0.659514, 329, "sphere-card is-back"],
+      [11, "Account", 296.75, 658.84, 23.99, 23.99, 0.662719, 338, "sphere-card is-back"],
+      [12, "Settings", 136.02, 539.65, 24.1, 24.1, 0.660948, 348, "sphere-card is-back"],
+      [13, "Insights", 182.12, 458.62, 24.82, 24.82, 0.660294, 394, "sphere-card is-back"],
+      [14, "Forecast", 352.59, 493.48, 25.56, 25.56, 0.661353, 438, "sphere-card is-back"],
+      [15, "Investments", 244.96, 684.33, 25.75, 25.75, 0.66208, 449, "sphere-card is-back"],
+      [16, "Investments", 235.29, 430.73, 25.67, 25.67, 0.658389, 450, "sphere-card is-back"],
+      [17, "Settings", 349.98, 635.09, 25.77, 25.77, 0.660172, 453, "sphere-card is-back"],
+      [18, "Insights", 382.36, 550.71, 26.89, 26.89, 0.658726, 521, "sphere-card is-back"],
+      [19, "Liabilities", 120.09, 625.62, 27.68, 27.68, 0.656497, 569, "sphere-card is-back"],
+      [20, "Projects", 127.85, 479.67, 27.79, 27.79, 0.657399, 574, "sphere-card is-back"],
+      [21, "Transactions", 308.69, 424.78, 29.07, 29.07, 0.657624, 644, "sphere-card is-back"],
+      [22, "Account", 91.48, 564.01, 29.79, 29.79, 0.654161, 686, "sphere-card is-back"],
+      [23, "Cash Flow", 164.2, 692.43, 30.01, 30.01, 0.651403, 701, "sphere-card is-back"],
+      [24, "Assets", 395.93, 607.17, 30.67, 30.67, 0.651453, 735, "sphere-card is-back"],
+      [25, "Transactions", 332.52, 691.99, 31.08, 31.08, 0.650743, 756, "sphere-card"],
+      [26, "Analysis", 364.43, 448.4, 31.48, 31.48, 0.651325, 776, "sphere-card"],
+      [27, "Liabilities", 267.59, 717.76, 31.72, 31.72, 0.650942, 788, "sphere-card"],
+      [28, "Forecast", 220.81, 391.66, 32.54, 32.54, 0.649613, 830, "sphere-card"],
+      [29, "Cash Flow", 151.71, 417.49, 32.87, 32.87, 0.650429, 845, "sphere-card"],
+      [30, "Investments", 407.89, 510.57, 33.46, 33.46, 0.646841, 876, "sphere-card"],
+      [31, "Safeguards", 81.57, 501.06, 34.03, 34.03, 0.648766, 901, "sphere-card"],
+      [32, "Profile", 107.65, 663.26, 34.49, 34.49, 0.646747, 924, "sphere-card"],
+      [33, "Voice AI Input", 210.95, 723.87, 35.27, 35.27, 0.650057, 957, "sphere-card"],
+      [34, "Reports", 382.58, 665.89, 35.87, 35.87, 0.642109, 991, "sphere-card"],
+      [35, "Safeguards", 318.13, 389.66, 37.15, 37.15, 0.642257, 1047, "sphere-card"],
+      [36, "Investments", 66.28, 596.02, 37.6, 37.6, 0.64496, 1064, "sphere-card"],
+      [37, "Profile", 425.17, 569.82, 38.46, 38.46, 0.639719, 1104, "sphere-card"],
+      [38, "Reconciliation", 101.31, 436.91, 38.89, 38.89, 0.645825, 1118, "sphere-card"],
+      [39, "Assets", 148.63, 712.4, 39.93, 39.93, 0.643933, 1162, "sphere-card"],
+      [40, "Analysis", 320.01, 723.85, 40.28, 40.28, 0.637365, 1181, "sphere-card"],
+      [41, "Insights", 247.96, 363.43, 40.81, 40.81, 0.638925, 1201, "sphere-card"],
+      [42, "Account", 403.67, 458.52, 40.85, 40.85, 0.638924, 1203, "sphere-card"],
+      [43, "Profile", 172.38, 380.93, 41.28, 41.28, 0.647375, 1214, "sphere-card"],
+      [44, "Analysis", 53.47, 528.62, 43.08, 43.08, 0.64658, 1284, "sphere-card"],
+      [45, "Account", 251.41, 736.89, 43.85, 43.85, 0.647262, 1313, "sphere-card"],
+      [46, "Reconciliation", 412.73, 631.81, 44.59, 44.59, 0.639015, 1346, "sphere-card"],
+      [47, "Settings", 360.27, 400.66, 45.24, 45.24, 0.639712, 1369, "sphere-card"],
+      [48, "Insights", 72.35, 638.62, 45.68, 45.68, 0.64963, 1379, "sphere-card"],
+      [49, "Liabilities", 426.87, 519.35, 48.06, 48.06, 0.644211, 1466, "sphere-card is-front"],
+      [50, "Reports", 72.73, 460.11, 48.62, 48.62, 0.657955, 1478, "sphere-card is-front"],
+      [51, "Safeguards", 356.05, 688.97, 48.64, 48.64, 0.657995, 1479, "sphere-card is-front"],
+      [52, "Projects", 117.13, 689.32, 49.77, 49.77, 0.661324, 1515, "sphere-card is-front"],
+      [53, "Reconciliation", 277.6, 365.63, 49.99, 49.99, 0.657525, 1525, "sphere-card is-front"],
+      [54, "Assets", 125.15, 390.33, 51.12, 51.12, 0.652128, 1565, "sphere-card is-front"],
+      [55, "Forecast", 54.71, 567.14, 53.4, 53.4, 0.675696, 1627, "sphere-card is-front"],
+      [56, "Reports", 204.36, 727.64, 54.01, 54.01, 0.668268, 1649, "sphere-card is-front"],
+      [57, "Cash Flow", 404.21, 582.51, 55.46, 55.46, 0.686624, 1685, "sphere-card is-front"],
+      [58, "Transactions", 386.42, 461.89, 55.89, 55.89, 0.689191, 1697, "sphere-card is-front"],
+      [59, "Projects", 205.56, 366.52, 56.46, 56.46, 0.681258, 1718, "sphere-card is-front"],
+      [60, "Settings", 282.29, 711.67, 57.1, 57.1, 0.691058, 1733, "sphere-card is-front"],
+      [61, "Reports", 329.75, 403.42, 58.05, 58.05, 0.700506, 1757, "sphere-card is-front"],
+      [62, "Projects", 355.76, 648.44, 60.36, 60.36, 0.718531, 1816, "sphere-card is-front"],
+      [63, "Transactions", 67.35, 491.01, 61.29, 61.29, 0.709712, 1845, "sphere-card is-front"],
+      [64, "Cash Flow", 83.28, 621.04, 62.46, 62.46, 0.720022, 1873, "sphere-card is-front"],
+      [65, "Reconciliation", 147.28, 679.52, 63.45, 63.45, 0.733079, 1895, "sphere-card is-front"],
+      [66, "Settings", 125.53, 418.67, 63.8, 63.8, 0.736577, 1903, "sphere-card is-front"],
+      [67, "Forecast", 367.43, 522.97, 66.25, 66.25, 0.779148, 1952, "sphere-card is-front"],
+      [68, "Safeguards", 237.5, 401.35, 67.81, 67.81, 0.790626, 1988, "sphere-card is-front"],
+      [69, "Assets", 248.4, 664.76, 69.4, 69.4, 0.812095, 2021, "sphere-card is-front"],
+      [70, "Analysis", 302.64, 457.48, 71.79, 71.79, 0.852099, 2066, "sphere-card is-front"],
+      [71, "Insights", 314.22, 592.2, 72.49, 72.49, 0.863303, 2079, "sphere-card is-front"],
+      [72, "Liabilities", 109.03, 541.51, 72.36, 72.36, 0.847375, 2081, "sphere-card is-front"],
+      [73, "Account", 169.07, 464.37, 75.29, 75.29, 0.901649, 2133, "sphere-card is-front"],
+      [74, "Profile", 179.49, 603.59, 76.01, 76.01, 0.914832, 2145, "sphere-card is-front"],
+      [75, "Investments", 242.2, 526.1, 79.07, 79.07, 0.949864, 2195, "sphere-card is-front"],
+    ] as readonly CapturedCardTuple[],
+  },
+  expanded: {
+    logo: { x: 157.13, y: 91, width: 205.73, height: 61, centerX: 259.99, centerY: 121.5, opacity: 1 },
+    sphereContainer: { x: 45, y: 357.5, width: 430, height: 430, centerX: 260, centerY: 572.5, opacity: 1 },
+    hint: { x: 104.17, y: 857.5, width: 311.66, height: 20, centerX: 260, centerY: 867.5, opacity: 0.56 },
+    cards: [
+      [0, "Projects", 254.61, 582.92, 23.71, 23.71, 0.741891, 17, "sphere-card is-back"],
+      [1, "Cash Flow", 226.22, 520.13, 24.25, 24.25, 0.74326, 53, "sphere-card is-back"],
+      [2, "Insights", 315.53, 551.56, 24.72, 24.72, 0.736325, 90, "sphere-card is-back"],
+      [3, "Safeguards", 192.23, 610.32, 25.2, 25.2, 0.733823, 121, "sphere-card is-back"],
+      [4, "Forecast", 282.93, 486.71, 25.36, 25.36, 0.72914, 134, "sphere-card is-back"],
+      [5, "Reconciliation", 164.09, 546.74, 25.73, 25.73, 0.729058, 157, "sphere-card is-back"],
+      [6, "Settings", 281.4, 643.87, 25.7, 25.7, 0.724003, 159, "sphere-card is-back"],
+      [7, "Assets", 343.98, 612.61, 26.73, 26.73, 0.722095, 232, "sphere-card is-back"],
+      [8, "Account", 221.18, 673.6, 27.45, 27.45, 0.72345, 277, "sphere-card is-back"],
+      [9, "Liabilities", 209.85, 450.09, 27.52, 27.52, 0.724998, 279, "sphere-card is-back"],
+      [10, "Profile", 145.97, 476.37, 27.8, 27.8, 0.720054, 306, "sphere-card is-back"],
+      [11, "Investments", 365.75, 511.76, 28.01, 28.01, 0.721577, 316, "sphere-card is-back"],
+      [12, "Analysis", 137.7, 638.6, 29.13, 29.13, 0.724255, 382, "sphere-card is-back"],
+      [13, "Analysis", 321.31, 440.85, 29.12, 29.12, 0.721617, 385, "sphere-card is-back"],
+      [14, "Reports", 101.16, 572.47, 29.16, 29.16, 0.718877, 392, "sphere-card is-back"],
+      [15, "Profile", 399.32, 574.69, 30.42, 30.42, 0.718333, 467, "sphere-card is-back"],
+      [16, "Transactions", 259.31, 405.6, 30.76, 30.76, 0.721828, 482, "sphere-card is-back"],
+      [17, "Transactions", 290.94, 707.69, 30.83, 30.83, 0.718777, 491, "sphere-card is-back"],
+      [18, "Reports", 355.34, 675.25, 31.2, 31.2, 0.717257, 514, "sphere-card is-back"],
+      [19, "Assets", 84.55, 500.04, 32.09, 32.09, 0.715929, 564, "sphere-card is-back"],
+      [20, "Investments", 176.42, 707.58, 32.42, 32.42, 0.71972, 577, "sphere-card is-back"],
+      [21, "Investments", 166.53, 398.45, 32.97, 32.97, 0.7145, 613, "sphere-card is-back"],
+      [22, "Account", 392.55, 459.77, 33.28, 33.28, 0.713976, 630, "sphere-card is-back"],
+      [23, "Forecast", 98.65, 677.6, 34.96, 34.96, 0.709853, 721, "sphere-card is-back"],
+      [24, "Reconciliation", 413.48, 638.41, 35.22, 35.22, 0.709401, 734, "sphere-card is-back"],
+      [25, "Liabilities", 231.84, 743.58, 35.8, 35.8, 0.712156, 759, "sphere-card"],
+      [26, "Transactions", 55.08, 601.93, 35.96, 35.96, 0.709352, 770, "sphere-card"],
+      [27, "Insights", 99.46, 423.8, 36.31, 36.31, 0.710052, 786, "sphere-card"],
+      [28, "Safeguards", 306.38, 372.23, 36.31, 36.31, 0.71004, 786, "sphere-card"],
+      [29, "Liabilities", 436.61, 525.58, 36.52, 36.52, 0.707093, 799, "sphere-card"],
+      [30, "Analysis", 321.35, 742.41, 38.56, 38.56, 0.703734, 897, "sphere-card"],
+      [31, "Settings", 376.04, 395.63, 39.11, 39.11, 0.702914, 922, "sphere-card"],
+      [32, "Settings", 35.48, 524.39, 39.59, 39.59, 0.705097, 941, "sphere-card"],
+      [33, "Forecast", 188.11, 352.2, 40.05, 40.05, 0.705958, 961, "sphere-card"],
+      [34, "Safeguards", 384.62, 700.25, 41.82, 41.82, 0.708703, 1034, "sphere-card"],
+      [35, "Cash Flow", 445.33, 589.44, 42.69, 42.69, 0.708126, 1071, "sphere-card"],
+      [36, "Cash Flow", 108.25, 724.84, 42.79, 42.79, 0.70024, 1081, "sphere-card"],
+      [37, "Projects", 48.65, 444.23, 44.02, 44.02, 0.702693, 1129, "sphere-card"],
+      [38, "Transactions", 434.23, 466.79, 44.21, 44.21, 0.707503, 1133, "sphere-card"],
+      [39, "Insights", 257.65, 330.3, 44.55, 44.55, 0.699267, 1152, "sphere-card"],
+      [40, "Liabilities", 37.22, 640.31, 44.72, 44.72, 0.700835, 1158, "sphere-card"],
+      [41, "Cash Flow", 110.12, 369.65, 46.55, 46.55, 0.704166, 1226, "sphere-card"],
+      [42, "Account", 273.59, 764.53, 46.75, 46.75, 0.705957, 1233, "sphere-card"],
+      [43, "Reconciliation", 325.25, 345.17, 48.94, 48.94, 0.705558, 1314, "sphere-card"],
+      [44, "Projects", 426.74, 657.49, 49.38, 49.38, 0.707846, 1328, "sphere-card"],
+      [45, "Account", 11.61, 555.93, 49.81, 49.81, 0.704591, 1346, "sphere-card"],
+      [46, "Reports", 399.33, 399.95, 50.01, 50.01, 0.708582, 1350, "sphere-card"],
+      [47, "Forecast", 454.4, 530.26, 51.88, 51.88, 0.711506, 1414, "sphere-card"],
+      [48, "Profile", 180.12, 333.76, 52, 52, 0.713756, 1416, "sphere-card"],
+      [49, "Profile", 63.08, 690.81, 52.74, 52.74, 0.709127, 1444, "sphere-card"],
+      [50, "Assets", 145.09, 749.41, 53.37, 53.37, 0.712549, 1464, "sphere-card is-front"],
+      [51, "Settings", 356.84, 729.76, 53.62, 53.62, 0.713129, 1472, "sphere-card is-front"],
+      [52, "Safeguards", 25.25, 469.23, 55.21, 55.21, 0.717361, 1521, "sphere-card is-front"],
+      [53, "Reconciliation", 81.46, 388.06, 57.63, 57.63, 0.728087, 1592, "sphere-card is-front"],
+      [54, "Reports", 273.6, 757.02, 59.07, 59.07, 0.726576, 1637, "sphere-card is-front"],
+      [55, "Insights", 434.75, 600.82, 60.15, 60.15, 0.736895, 1665, "sphere-card is-front"],
+      [56, "Investments", 26.05, 600.2, 60.74, 60.74, 0.73996, 1681, "sphere-card is-front"],
+      [57, "Projects", 286.05, 334.48, 60.67, 60.67, 0.734098, 1681, "sphere-card is-front"],
+      [58, "Analysis", 424.09, 459.03, 60.83, 60.83, 0.740439, 1683, "sphere-card is-front"],
+      [59, "Assets", 372.79, 679.7, 65.07, 65.07, 0.764499, 1793, "sphere-card is-front"],
+      [60, "Safeguards", 358.54, 387.12, 65.15, 65.15, 0.765102, 1795, "sphere-card is-front"],
+      [61, "Projects", 159.38, 720.82, 65.83, 65.83, 0.780132, 1808, "sphere-card is-front"],
+      [62, "Assets", 177.46, 340.79, 65.74, 65.74, 0.75979, 1814, "sphere-card is-front"],
+      [63, "Insights", 82.07, 658.02, 68.01, 68.01, 0.795648, 1860, "sphere-card is-front"],
+      [64, "Analysis", 41.75, 506.85, 68.04, 68.04, 0.796005, 1861, "sphere-card is-front"],
+      [65, "Reports", 99.34, 418.51, 70.77, 70.77, 0.827225, 1920, "sphere-card is-front"],
+      [66, "Investments", 398.79, 529.16, 71.62, 71.62, 0.825149, 1942, "sphere-card is-front"],
+      [67, "Reconciliation", 256.76, 703.47, 73.21, 73.21, 0.835607, 1978, "sphere-card is-front"],
+      [68, "Settings", 236.03, 383.65, 76.46, 76.46, 0.877512, 2041, "sphere-card is-front"],
+      [69, "Profile", 334.87, 612.77, 77.86, 77.86, 0.902165, 2066, "sphere-card is-front"],
+      [70, "Forecast", 101.35, 561.37, 78.37, 78.37, 0.928285, 2069, "sphere-card is-front"],
+      [71, "Account", 323.07, 450.98, 78.79, 78.79, 0.916378, 2083, "sphere-card is-front"],
+      [72, "Cash Flow", 182.6, 633.3, 82.03, 82.03, 0.959767, 2142, "sphere-card is-front"],
+      [73, "Transactions", 158.58, 463.63, 83.62, 83.62, 0.98, 2168, "sphere-card is-front"],
+      [74, "Liabilities", 252.79, 535.39, 85.98, 85.98, 0.98, 2200, "sphere-card is-front"],
+      [75, "Voice AI Input", 193.92, 514.68, 132.16, 115.64, 1, 4000, "sphere-card is-center is-front"],
+    ] as readonly CapturedCardTuple[],
+  },
+} as const;
 
-const getAssetValue = (asset: Asset): number => asset.currentValue || asset.amount || 0;
+export default function DashboardScreen({
+  onOpenAccounts,
+  onOpenAssets,
+  onOpenRecord,
+  onOpenReports,
+  onOpenSettings,
+  onOpenTransactions,
+  onScrollEnabledChange,
+}: DashboardScreenProps) {
+  const [route, setRoute] = useState<DashboardRoute>("home");
 
-const getLiabilityValue = (liability: Liability): number => liability.amount || 0;
+  useEffect(() => {
+    onScrollEnabledChange?.(route !== "home");
 
-const isCashInflow = (transaction: Transaction): boolean =>
-  transaction.type === "income" ||
-  transaction.type === "investmentSell" ||
-  transaction.type === "assetIncrease" ||
-  transaction.type === "liabilityIncrease";
-
-const getCashFlowDirection = (transaction: Transaction): "inflow" | "outflow" | "none" => {
-  if (transaction.cashFlowType === "nonCash") return "none";
-  return isCashInflow(transaction) ? "inflow" : "outflow";
-};
-
-const getEquityImpact = (transaction: Transaction): number => {
-  if (transaction.type === "income") return transaction.amount;
-  if (transaction.type === "expense" || transaction.type === "creditCardExpense") return -transaction.amount;
-  return 0;
-};
-
-const startOfDay = (date: Date): Date => new Date(date.getFullYear(), date.getMonth(), date.getDate());
-
-const addDays = (date: Date, days: number): Date => {
-  const nextDate = new Date(date);
-  nextDate.setDate(nextDate.getDate() + days);
-  return nextDate;
-};
-
-const addMonths = (date: Date, months: number): Date => {
-  const nextDate = new Date(date);
-  nextDate.setMonth(nextDate.getMonth() + months);
-  return nextDate;
-};
-
-const formatMonthLabel = (date: Date): string => `${date.getMonth() + 1}月`;
-
-const formatQuarterLabel = (date: Date): string => `${date.getFullYear()}Q${Math.floor(date.getMonth() / 3) + 1}`;
-
-const buildBucketRanges = (periodLabel: PeriodLabel, now = new Date()): Array<{ label: string; start: Date; end: Date }> => {
-  if (periodLabel === "周线") {
-    const today = startOfDay(now);
-    return Array.from({ length: 7 }, (_, index) => {
-      const start = addDays(today, index - 6);
-      return {
-        label: index === 6 ? "今天" : `${start.getMonth() + 1}/${start.getDate()}`,
-        start,
-        end: addDays(start, 1),
-      };
-    });
-  }
-
-  if (periodLabel === "季度线") {
-    const currentQuarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
-    return Array.from({ length: 4 }, (_, index) => {
-      const start = addMonths(currentQuarterStart, (index - 3) * 3);
-      return {
-        label: formatQuarterLabel(start),
-        start,
-        end: addMonths(start, 3),
-      };
-    });
-  }
-
-  if (periodLabel === "年线") {
-    return Array.from({ length: 5 }, (_, index) => {
-      const year = now.getFullYear() + index - 4;
-      return {
-        label: `${year}`,
-        start: new Date(year, 0, 1),
-        end: new Date(year + 1, 0, 1),
-      };
-    });
-  }
-
-  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  return Array.from({ length: 6 }, (_, index) => {
-    const start = addMonths(currentMonthStart, index - 5);
-    return {
-      label: formatMonthLabel(start),
-      start,
-      end: addMonths(start, 1),
+    return () => {
+      onScrollEnabledChange?.(true);
     };
-  });
-};
+  }, [onScrollEnabledChange, route]);
 
-const parseTransactionDate = (transaction: Transaction): Date => startOfDay(new Date(`${transaction.date}T00:00:00`));
-
-const buildCashFlowTrend = (transactions: Transaction[], periodLabel: PeriodLabel): TrendBucket[] => {
-  const buckets = buildBucketRanges(periodLabel);
-
-  return buckets.map((bucket) => {
-    const bucketTransactions = transactions.filter((transaction) => {
-      const transactionDate = parseTransactionDate(transaction);
-      return transactionDate >= bucket.start && transactionDate < bucket.end;
-    });
-
-    return bucketTransactions.reduce<TrendBucket>(
-      (result, transaction) => {
-        const direction = getCashFlowDirection(transaction);
-
-        if (direction === "inflow") {
-          return {
-            ...result,
-            income: result.income + transaction.amount,
-            net: result.net + transaction.amount,
-          };
-        }
-
-        if (direction === "outflow") {
-          return {
-            ...result,
-            outflow: result.outflow + transaction.amount,
-            net: result.net - transaction.amount,
-          };
-        }
-
-        return result;
-      },
-      { income: 0, label: bucket.label, net: 0, outflow: 0 },
-    );
-  });
-};
-
-const buildEquityTrend = (
-  transactions: Transaction[],
-  periodLabel: PeriodLabel,
-  currentOwnerEquity: number,
-): EquityTrendPoint[] => {
-  const cashFlowBuckets = buildBucketRanges(periodLabel).map((bucket) => {
-    const impact = transactions
-      .filter((transaction) => {
-        const transactionDate = parseTransactionDate(transaction);
-        return transactionDate >= bucket.start && transactionDate < bucket.end;
-      })
-      .reduce((sum, transaction) => sum + getEquityImpact(transaction), 0);
-
-    return {
-      impact,
-      label: bucket.label,
-    };
-  });
-
-  const totalImpact = cashFlowBuckets.reduce((sum, bucket) => sum + bucket.impact, 0);
-  let runningEquity = currentOwnerEquity - totalImpact;
-
-  return cashFlowBuckets.map((bucket) => {
-    runningEquity += bucket.impact;
-    return {
-      label: bucket.label,
-      value: runningEquity,
-    };
-  });
-};
-
-const buildCompositionItems = <T extends { category: string }>(
-  records: T[],
-  getValue: (record: T) => number,
-  fallbackCategory: string,
-  labels: Record<string, string>,
-): CompositionItem[] => {
-  const grouped = records.reduce<Record<string, number>>((result, record) => {
-    const value = getValue(record);
-    const category = record.category || fallbackCategory;
-    if (value <= 0) return result;
-    return {
-      ...result,
-      [category]: (result[category] ?? 0) + value,
-    };
-  }, {});
-
-  const sortedItems = Object.entries(grouped)
-    .map(([category, value]) => ({
-      key: category,
-      label: labels[category] ?? category,
-      value,
-    }))
-    .sort((left, right) => right.value - left.value);
-
-  return assignChartColors(sortedItems);
-};
-
-const assignChartColors = <T extends Omit<CompositionItem, "color">>(items: T[]): CompositionItem[] => {
-  const positiveItems = items.filter((item) => item.value > 0).sort((left, right) => right.value - left.value);
-  const visibleItems = positiveItems.length > MAX_CHART_ITEMS ? positiveItems.slice(0, MAX_CHART_ITEMS - 1) : positiveItems;
-  const overflowItems = positiveItems.slice(MAX_CHART_ITEMS - 1);
-  const normalizedItems =
-    overflowItems.length > 0
-      ? [
-          ...visibleItems,
-          {
-            key: "other-overflow",
-            label: "其他",
-            value: overflowItems.reduce((sum, item) => sum + item.value, 0),
-          },
-        ]
-      : visibleItems;
-
-  return normalizedItems.map((item, index) => ({
-    ...item,
-    color: index === MAX_CHART_ITEMS - 1 ? OTHER_CHART_ITEM_COLOR : chartColors[index],
-  }));
-};
-
-const buildDetailRows = (items: CompositionItem[], totalValue: number): DetailTableRow[] =>
-  items.map((item) => ({
-    color: item.color,
-    key: item.key,
-    label: item.label,
-    percent: totalValue > 0 ? item.value / totalValue : 0,
-    value: item.value,
-  }));
-
-const buildRecordCompositionItems = <T,>(
-  records: T[],
-  getKey: (record: T) => string,
-  getLabel: (record: T) => string,
-  getValue: (record: T) => number,
-): CompositionItem[] =>
-  assignChartColors(
-    records
-      .map((record) => ({
-        key: getKey(record),
-        label: getLabel(record),
-        value: getValue(record),
-      }))
-      .filter((item) => item.value > 0),
-  );
-
-export default function DashboardScreen({ assets, liabilities, summary, transactions }: DashboardScreenProps) {
-  const [selectedView, setSelectedView] = useState<DashboardView>("balance");
-  const [periodLabel, setPeriodLabel] = useState<PeriodLabel>("月线");
-  const [isPeriodSelectorVisible, setIsPeriodSelectorVisible] = useState(false);
-  const [route, setRoute] = useState<DashboardRoute>({ name: "dashboard" });
-
-  const handleOpenPeriodSelector = () => {
-    setIsPeriodSelectorVisible(true);
-  };
-
-  const handleClosePeriodSelector = () => {
-    setIsPeriodSelectorVisible(false);
-  };
-
-  const handleSelectPeriod = (label: PeriodLabel) => {
-    setPeriodLabel(label);
-    setIsPeriodSelectorVisible(false);
-  };
-
-  if (route.name === "assetCompositionDetail") {
+  if (route === "operationAnalysisReport") {
     return (
-      <ScreenTransition animateOnMount transitionKey="assetCompositionDetail" variant="drilldown">
-        <AssetCompositionDetailScreen
-          assets={assets}
-          onBack={() => setRoute({ name: "dashboard" })}
-          onOpenCategory={(category) => setRoute({ category, name: "assetCategoryDetail" })}
-          totalAssets={summary.totalAssets}
+      <ScreenTransition animateOnMount transitionKey="operationAnalysisReport" variant="drilldown">
+        <OperatingAnalysisReportScreen
+          onBack={() => setRoute("home")}
+          onOpenProfitabilityAnalysis={() => setRoute("profitabilityAnalysis")}
         />
       </ScreenTransition>
     );
   }
 
-  if (route.name === "liabilityCompositionDetail") {
+  if (route === "profitabilityAnalysis") {
     return (
-      <ScreenTransition animateOnMount transitionKey="liabilityCompositionDetail" variant="drilldown">
-        <LiabilityCompositionDetailScreen
-          liabilities={liabilities}
-          onBack={() => setRoute({ name: "dashboard" })}
-          onOpenCategory={(category) => setRoute({ category, name: "liabilityCategoryDetail" })}
-          totalLiabilities={summary.totalLiabilities}
-        />
-      </ScreenTransition>
-    );
-  }
-
-  if (route.name === "netWorthDetail") {
-    return (
-      <ScreenTransition animateOnMount transitionKey="netWorthDetail" variant="drilldown">
-        <NetWorthDetailScreen
-          onBack={() => setRoute({ name: "dashboard" })}
-          summary={summary}
-          transactions={transactions}
-        />
-      </ScreenTransition>
-    );
-  }
-
-  if (route.name === "assetCategoryDetail") {
-    return (
-      <ScreenTransition animateOnMount transitionKey={`assetCategoryDetail-${route.category}`} variant="drilldown">
-        <AssetCategoryDetailScreen
-          assets={assets}
-          category={route.category}
-          onBack={() => setRoute({ name: "assetCompositionDetail" })}
-          totalAssets={summary.totalAssets}
-        />
-      </ScreenTransition>
-    );
-  }
-
-  if (route.name === "liabilityCategoryDetail") {
-    return (
-      <ScreenTransition animateOnMount transitionKey={`liabilityCategoryDetail-${route.category}`} variant="drilldown">
-        <LiabilityCategoryDetailScreen
-          category={route.category}
-          liabilities={liabilities}
-          onBack={() => setRoute({ name: "liabilityCompositionDetail" })}
-          totalLiabilities={summary.totalLiabilities}
-        />
+      <ScreenTransition animateOnMount transitionKey="profitabilityAnalysis" variant="drilldown">
+        <ProfitabilityAnalysisScreen onBack={() => setRoute("operationAnalysisReport")} />
       </ScreenTransition>
     );
   }
 
   return (
-    <View style={styles.stack}>
-      <View style={styles.segmentedControl}>
-        {viewOptions.map((option) => {
-          const isActive = selectedView === option.key;
-          return (
-            <Pressable
-              key={option.key}
-              onPress={() => setSelectedView(option.key)}
-              style={[styles.segmentButton, isActive && styles.segmentButtonActive]}
-            >
-              <Text style={[styles.segmentText, isActive && styles.segmentTextActive]}>{option.label}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {selectedView === "balance" ? (
-        <BalanceStructureCard
-          assets={assets}
-          liabilities={liabilities}
-          onOpenAssetDetail={() => setRoute({ name: "assetCompositionDetail" })}
-          onOpenLiabilityDetail={() => setRoute({ name: "liabilityCompositionDetail" })}
-          onOpenNetWorthDetail={() => setRoute({ name: "netWorthDetail" })}
-          periodLabel={periodLabel}
-          summary={summary}
-          transactions={transactions}
-        />
-      ) : (
-        <CashFlowCard
-          onOpenPeriodSelector={handleOpenPeriodSelector}
-          periodLabel={periodLabel}
-          summary={summary}
-          transactions={transactions}
-        />
-      )}
-
-      {isPeriodSelectorVisible ? (
-        <Modal
-          animationType="fade"
-          onRequestClose={handleClosePeriodSelector}
-          transparent
-          visible={isPeriodSelectorVisible}
-        >
-          <View style={styles.periodModalRoot}>
-            <Pressable
-              accessibilityLabel="关闭时间周期选择器"
-              onPress={handleClosePeriodSelector}
-              style={styles.periodModalBackdrop}
-            />
-            <View style={[sharedStyles.card, styles.periodModalCard]}>
-              <View style={styles.periodModalHeader}>
-                <Text style={styles.periodModalTitle}>选择时间周期</Text>
-                <Text style={styles.periodModalSubtitle}>收支趋势会按所选周期重新汇总。</Text>
-              </View>
-
-              <View style={styles.periodOptionList}>
-                {periodOptions.map((label) => {
-                  const isSelected = periodLabel === label;
-
-                  return (
-                    <Pressable
-                      key={label}
-                      onPress={() => handleSelectPeriod(label)}
-                      style={[styles.periodOptionButton, isSelected && styles.periodOptionButtonActive]}
-                    >
-                      <Text style={[styles.periodOptionText, isSelected && styles.periodOptionTextActive]}>{label}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <Pressable onPress={handleClosePeriodSelector} style={sharedStyles.secondaryButton}>
-                <Text style={sharedStyles.secondaryButtonText}>取消</Text>
-              </Pressable>
-            </View>
-          </View>
-        </Modal>
-      ) : null}
-    </View>
+    <FuturisticDashboardHome
+      onOpenAccounts={onOpenAccounts}
+      onOpenAssets={onOpenAssets}
+      onOpenOperationReport={() => setRoute("operationAnalysisReport")}
+      onOpenProfitabilityAnalysis={() => setRoute("profitabilityAnalysis")}
+      onOpenRecord={onOpenRecord}
+      onOpenReports={onOpenReports}
+      onOpenSettings={onOpenSettings}
+      onOpenTransactions={onOpenTransactions}
+    />
   );
 }
 
-interface BalanceStructureCardProps extends DashboardScreenProps {
-  onOpenAssetDetail: () => void;
-  onOpenLiabilityDetail: () => void;
-  onOpenNetWorthDetail: () => void;
-  periodLabel: PeriodLabel;
-}
+function FuturisticDashboardHome({
+  onOpenAccounts,
+  onOpenAssets,
+  onOpenOperationReport,
+  onOpenProfitabilityAnalysis,
+  onOpenRecord,
+  onOpenReports,
+  onOpenSettings,
+  onOpenTransactions,
+}: {
+  onOpenAccounts?: () => void;
+  onOpenAssets?: () => void;
+  onOpenOperationReport: () => void;
+  onOpenProfitabilityAnalysis: () => void;
+  onOpenRecord?: () => void;
+  onOpenReports?: () => void;
+  onOpenSettings?: () => void;
+  onOpenTransactions?: () => void;
+}) {
+  const { height, width } = useWindowDimensions();
+  const [isHubExpanded, setIsHubExpanded] = useState(false);
 
-function BalanceStructureCard({
-  assets,
-  liabilities,
-  onOpenAssetDetail,
-  onOpenLiabilityDetail,
-  onOpenNetWorthDetail,
-  periodLabel,
-  summary,
-  transactions,
-}: BalanceStructureCardProps) {
-  const assetComposition = buildCompositionItems(assets, getAssetValue, "other", assetCategoryLabels);
-  const liabilityComposition = buildCompositionItems(liabilities, getLiabilityValue, "other", liabilityCategoryLabels);
-  const equityTrend = buildEquityTrend(transactions, periodLabel, summary.ownerEquity);
+  const handleExpandHub = useCallback(() => {
+    setIsHubExpanded(true);
+  }, []);
+
+  const handleCollapseHub = useCallback(() => {
+    setIsHubExpanded(false);
+  }, []);
+
+  const handleHubAction = useCallback((node: FunctionNode) => {
+    switch (node.action) {
+      case "accounts":
+        onOpenAccounts?.();
+        return;
+      case "assets":
+        onOpenAssets?.();
+        return;
+      case "operation":
+        onOpenOperationReport();
+        return;
+      case "profitability":
+        onOpenProfitabilityAnalysis();
+        return;
+      case "record":
+        onOpenRecord?.();
+        return;
+      case "reports":
+        onOpenReports?.();
+        return;
+      case "settings":
+        onOpenSettings?.();
+        return;
+      case "transactions":
+        onOpenTransactions?.();
+        return;
+    }
+  }, [
+    onOpenAccounts,
+    onOpenAssets,
+    onOpenOperationReport,
+    onOpenProfitabilityAnalysis,
+    onOpenRecord,
+    onOpenReports,
+    onOpenSettings,
+    onOpenTransactions,
+  ]);
+
+  const geometryScale = width / REFERENCE_VIEWPORT_WIDTH;
+  const contentHeight = REFERENCE_VIEWPORT_HEIGHT * geometryScale;
 
   return (
-    <View style={[sharedStyles.card, styles.mainCard]}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>资产负债结构</Text>
-        <Text style={styles.cardMeta}>截至今日</Text>
-      </View>
-
-      <View style={styles.metricRow}>
-        <MetricPill icon="asset" label="资产" onPress={onOpenAssetDetail} value={formatCompactCurrency(summary.totalAssets)} />
-        <MetricPill
-          icon="liability"
-          label="负债"
-          onPress={onOpenLiabilityDetail}
-          tone="muted"
-          value={formatCompactCurrency(summary.totalLiabilities)}
+    <View style={[styles.root, { minHeight: Math.max(690, height - 128, contentHeight * 0.76) }]}>
+      <TechSpaceBackground height={Math.max(720, height, contentHeight)} width={width} />
+      {isHubExpanded ? <Pressable onPress={handleCollapseHub} style={styles.collapseLayer} /> : null}
+        <CapturedGeometryLayer
+          isExpanded={isHubExpanded}
+          onCollapse={handleCollapseHub}
+          onExpand={handleExpandHub}
+          onPressNode={handleHubAction}
+          scale={geometryScale}
         />
-        <MetricPill
-          icon="netWorth"
-          label="净资产"
-          onPress={onOpenNetWorthDetail}
-          tone="blue"
-          value={formatCompactCurrency(summary.ownerEquity)}
-        />
-      </View>
-
-      <View style={styles.chartGrid}>
-        <CompositionChartCard
-          emptyText="暂无资产构成数据"
-          items={assetComposition}
-          label="资产构成"
-          onPress={onOpenAssetDetail}
-          primaryText={formatCompactCurrency(summary.totalAssets)}
-        />
-        <CompositionChartCard
-          emptyText="暂无负债构成数据"
-          items={liabilityComposition}
-          label="负债构成"
-          onPress={onOpenLiabilityDetail}
-          primaryText={formatCompactCurrency(summary.totalLiabilities)}
-        />
-      </View>
-
-      <View style={styles.trendSection}>
-        <View style={styles.trendHeader}>
-          <Text style={styles.sectionLabel}>净资产趋势</Text>
-          <Text style={styles.dataTag}>本期趋势</Text>
-        </View>
-        <LineChart emptyText="暂无净资产趋势数据" points={equityTrend} />
-      </View>
     </View>
   );
 }
 
-interface AssetCompositionDetailScreenProps {
-  assets: Asset[];
-  onBack: () => void;
-  onOpenCategory: (category: Asset["category"]) => void;
-  totalAssets: number;
-}
+function TechSpaceBackground({ height, width }: { height: number; width: number }) {
+  const hexPaths = useMemo(() => {
+    const size = 84;
+    const hexHeight = Math.sqrt(3) * size;
+    const rows = Math.ceil(height / (hexHeight * 0.5)) + 3;
+    const columns = Math.ceil(width / (size * 1.5)) + 3;
+    const result: string[] = [];
 
-function AssetCompositionDetailScreen({
-  assets,
-  onBack,
-  onOpenCategory,
-  totalAssets,
-}: AssetCompositionDetailScreenProps) {
-  const items = buildCompositionItems(assets, getAssetValue, "other", assetCategoryLabels);
-  const rows = buildDetailRows(items, totalAssets);
+    for (let row = -1; row < rows; row += 1) {
+      for (let column = -1; column < columns; column += 1) {
+        const cx = column * size * 1.5 + (row % 2 ? size * 0.75 : 0);
+        const cy = row * hexHeight * 0.5;
+        const points = Array.from({ length: 6 }, (_, pointIndex) => {
+          const angle = (Math.PI / 3) * pointIndex + Math.PI / 6;
+          return `${cx + size * Math.cos(angle)},${cy + size * Math.sin(angle)}`;
+        });
+        result.push(`M ${points.join(" L ")} Z`);
+      }
+    }
+
+    return result;
+  }, [height, width]);
 
   return (
-    <View style={styles.detailStack}>
-      <DetailHeader onBack={onBack} rightText="截至今日" title="资产构成详情" />
-      <SummaryStrip label="总资产" value={formatCompactCurrency(totalAssets)} />
-      <DetailTable
-        description="你可以先在管理页添加资产，用于生成资产构成。"
-        emptyText="暂无资产数据"
-        nameHeader="种类"
-        onRowPress={(row) => onOpenCategory(row.key as Asset["category"])}
-        rows={rows}
-        title="资产详情"
-        valueHeader="金额"
-      />
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <Svg height={height} pointerEvents="none" style={StyleSheet.absoluteFill} width={width}>
+        {hexPaths.map((path, index) => (
+          <SvgPath key={`hex-${index}`} d={path} fill="none" opacity={0.18} stroke="#626872" strokeWidth={1.1} />
+        ))}
+        <SvgPath d={`M 0 0 H ${width} V ${height} H 0 Z`} fill="rgba(0,0,0,0.18)" />
+      </Svg>
     </View>
   );
 }
 
-interface AssetCategoryDetailScreenProps {
-  assets: Asset[];
-  category: Asset["category"];
-  onBack: () => void;
-  totalAssets: number;
-}
-
-function AssetCategoryDetailScreen({ assets, category, onBack, totalAssets }: AssetCategoryDetailScreenProps) {
-  const categoryName = assetCategoryLabels[category] ?? "其他资产";
-  const categoryAssets = assets.filter((asset) => asset.category === category && getAssetValue(asset) > 0);
-  const categoryTotal = categoryAssets.reduce((sum, asset) => sum + getAssetValue(asset), 0);
-  const itemComposition = buildRecordCompositionItems(
-    categoryAssets,
-    (asset) => asset.id,
-    (asset) => asset.name || "未命名资产",
-    getAssetValue,
-  );
-  const rows = buildDetailRows(itemComposition, categoryTotal);
-
-  return (
-    <View style={styles.detailStack}>
-      <DetailHeader onBack={onBack} rightText="截至今日" title={`${categoryName}资产明细`} />
-      <SummaryStrip
-        helperText={`占总资产 ${formatPercent(totalAssets > 0 ? categoryTotal / totalAssets : 0)}`}
-        label={`${categoryName}合计`}
-        value={formatCompactCurrency(categoryTotal)}
-      />
-      <DetailTable
-        description="暂无明细数据"
-        emptyText="暂无明细数据"
-        nameHeader="名称"
-        rows={rows}
-        title={`${categoryName}详情`}
-        valueHeader="金额"
-      />
-    </View>
-  );
-}
-
-interface LiabilityCompositionDetailScreenProps {
-  liabilities: Liability[];
-  onBack: () => void;
-  onOpenCategory: (category: Liability["category"]) => void;
-  totalLiabilities: number;
-}
-
-function LiabilityCompositionDetailScreen({
-  liabilities,
-  onBack,
-  onOpenCategory,
-  totalLiabilities,
-}: LiabilityCompositionDetailScreenProps) {
-  const items = buildCompositionItems(liabilities, getLiabilityValue, "other", liabilityCategoryLabels);
-  const rows = buildDetailRows(items, totalLiabilities);
-
-  return (
-    <View style={styles.detailStack}>
-      <DetailHeader onBack={onBack} rightText="截至今日" title="负债构成详情" />
-      <SummaryStrip label="总负债" value={formatCompactCurrency(totalLiabilities)} />
-      <DetailTable
-        description="你可以先在管理页添加负债，用于生成负债构成。"
-        emptyText="暂无负债数据"
-        nameHeader="种类"
-        onRowPress={(row) => onOpenCategory(row.key as Liability["category"])}
-        rows={rows}
-        title="负债详情"
-        valueHeader="金额"
-      />
-    </View>
-  );
-}
-
-interface LiabilityCategoryDetailScreenProps {
-  category: Liability["category"];
-  liabilities: Liability[];
-  onBack: () => void;
-  totalLiabilities: number;
-}
-
-function LiabilityCategoryDetailScreen({
-  category,
-  liabilities,
-  onBack,
-  totalLiabilities,
-}: LiabilityCategoryDetailScreenProps) {
-  const categoryName = liabilityCategoryLabels[category] ?? "其他负债";
-  const categoryLiabilities = liabilities.filter(
-    (liability) => liability.category === category && getLiabilityValue(liability) > 0,
-  );
-  const categoryTotal = categoryLiabilities.reduce((sum, liability) => sum + getLiabilityValue(liability), 0);
-  const itemComposition = buildRecordCompositionItems(
-    categoryLiabilities,
-    (liability) => liability.id,
-    (liability) => liability.name || "未命名负债",
-    getLiabilityValue,
-  );
-  const rows = buildDetailRows(itemComposition, categoryTotal);
-
-  return (
-    <View style={styles.detailStack}>
-      <DetailHeader onBack={onBack} rightText="截至今日" title={`${categoryName}负债明细`} />
-      <SummaryStrip
-        helperText={`占总负债 ${formatPercent(totalLiabilities > 0 ? categoryTotal / totalLiabilities : 0)}`}
-        label={`${categoryName}合计`}
-        value={formatCompactCurrency(categoryTotal)}
-      />
-      <DetailTable
-        description="暂无明细数据"
-        emptyText="暂无明细数据"
-        nameHeader="名称"
-        rows={rows}
-        title={`${categoryName}详情`}
-        valueHeader="金额"
-      />
-    </View>
-  );
-}
-
-interface NetWorthDetailScreenProps {
-  onBack: () => void;
-  summary: ReportSummary;
-  transactions: Transaction[];
-}
-
-function NetWorthDetailScreen({ onBack, summary, transactions }: NetWorthDetailScreenProps) {
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodLabel>("月线");
-  const [isPeriodSelectorVisible, setIsPeriodSelectorVisible] = useState(false);
-  const trendPoints = buildEquityTrend(transactions, selectedPeriod, summary.ownerEquity);
-  const endingNetWorth = summary.ownerEquity;
-  const currentNetInflow = summary.cashNetChange;
-  // V0.1 has no persisted historical net worth snapshot yet, so beginning net worth is approximated from current cash net change.
-  const beginningNetWorth = endingNetWorth - currentNetInflow;
-  const changeRows = [
-    { label: "期初净资产", value: beginningNetWorth },
-    { label: "本期净流入", value: currentNetInflow },
-    { label: "资产调整", value: 0 },
-    { label: "负债变化", value: 0 },
-    { label: "期末净资产", value: endingNetWorth },
-  ];
-
-  const handleClosePeriodSelector = () => {
-    setIsPeriodSelectorVisible(false);
-  };
-
-  const handleSelectPeriod = (period: PeriodLabel) => {
-    setSelectedPeriod(period);
-    setIsPeriodSelectorVisible(false);
+function MetallicLogo({ geometry, scale }: { geometry: CapturedRect; scale: number }) {
+  const logoTypeStyle = {
+    fontSize: 48 * scale,
+    letterSpacing: 9.6 * scale,
+    lineHeight: 61 * scale,
   };
 
   return (
-    <View style={styles.detailStack}>
-      <DetailHeader onBack={onBack} rightText="截至今日" title="净资产详情" />
-
-      <View style={styles.netWorthPill}>
-        <Text style={styles.netWorthPillLabel}>净资产</Text>
-        <Text style={styles.netWorthPillValue}>{formatCompactCurrency(endingNetWorth)}</Text>
-      </View>
-
-      <View style={[sharedStyles.card, styles.netWorthTrendCard]}>
-        <View style={styles.trendHeader}>
-          <Text style={styles.sectionLabel}>净资产趋势</Text>
-          <Pressable onPress={() => setIsPeriodSelectorVisible(true)} style={styles.periodButton}>
-            <Text style={styles.periodButtonText}>{selectedPeriod}</Text>
-            <AppIcon color={theme.colors.textMuted} name="calendar" size={15} />
-          </Pressable>
-        </View>
-        <LineChart emptyText="暂无净资产趋势数据" points={trendPoints} />
-      </View>
-
-      <View style={[sharedStyles.card, styles.changeCard]}>
-        <Text style={styles.sectionLabel}>本期变化</Text>
-        <View style={styles.changeRowList}>
-          {changeRows.map((row) => (
-            <View key={row.label} style={styles.changeRow}>
-              <Text style={styles.changeLabel}>{row.label}</Text>
-              <Text style={styles.changeValue}>{formatCompactCurrency(row.value)}</Text>
-            </View>
-          ))}
-        </View>
-      </View>
-
-      {isPeriodSelectorVisible ? (
-        <Modal
-          animationType="fade"
-          onRequestClose={handleClosePeriodSelector}
-          transparent
-          visible={isPeriodSelectorVisible}
-        >
-          <View style={styles.periodModalRoot}>
-            <Pressable
-              accessibilityLabel="关闭净资产趋势周期选择器"
-              onPress={handleClosePeriodSelector}
-              style={styles.periodModalBackdrop}
-            />
-            <View style={[sharedStyles.card, styles.periodModalCard]}>
-              <View style={styles.periodModalHeader}>
-                <Text style={styles.periodModalTitle}>选择净资产趋势周期</Text>
-                <Text style={styles.periodModalSubtitle}>趋势会按所选周期重新展示。</Text>
-              </View>
-
-              <View style={styles.periodOptionList}>
-                {netWorthPeriodOptions.map((period) => {
-                  const isSelected = selectedPeriod === period;
-
-                  return (
-                    <Pressable
-                      key={period}
-                      onPress={() => handleSelectPeriod(period)}
-                      style={[styles.periodOptionButton, isSelected && styles.periodOptionButtonActive]}
-                    >
-                      <Text style={[styles.periodOptionText, isSelected && styles.periodOptionTextActive]}>{period}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <Pressable onPress={handleClosePeriodSelector} style={sharedStyles.secondaryButton}>
-                <Text style={sharedStyles.secondaryButtonText}>取消</Text>
-              </Pressable>
-            </View>
-          </View>
-        </Modal>
-      ) : null}
-    </View>
-  );
-}
-
-interface DetailHeaderProps {
-  onBack: () => void;
-  rightText: string;
-  title: string;
-}
-
-function DetailHeader({ onBack, rightText, title }: DetailHeaderProps) {
-  return (
-    <View style={styles.detailHeader}>
-      <Pressable onPress={onBack} style={styles.backButton}>
-        <AppIcon color={theme.colors.backButtonText} name="back" size={15} strokeWidth={2.2} />
-        <Text style={styles.backButtonText}>返回</Text>
-      </Pressable>
-      <Text style={styles.detailTitle} numberOfLines={1}>
-        {title}
-      </Text>
-      <Text style={styles.detailMeta}>{rightText}</Text>
-    </View>
-  );
-}
-
-interface SummaryStripProps {
-  helperText?: string;
-  label: string;
-  value: string;
-}
-
-function SummaryStrip({ helperText, label, value }: SummaryStripProps) {
-  return (
-    <View style={styles.summaryStrip}>
-      <View>
-        <Text style={styles.summaryLabel}>{label}</Text>
-        {helperText ? <Text style={styles.summaryHelper}>{helperText}</Text> : null}
-      </View>
-      <Text style={styles.summaryValue}>{value}</Text>
-    </View>
-  );
-}
-
-interface DetailChartCardProps {
-  emptyText: string;
-  items: CompositionItem[];
-  title: string;
-}
-
-function DetailChartCard({ emptyText, items, title }: DetailChartCardProps) {
-  return (
-    <View style={[sharedStyles.card, styles.detailChartCard]}>
-      <Text style={styles.sectionLabel}>{title}</Text>
-      <DonutChart
-        data={items}
-        detailMode
-        emptyText={emptyText}
-        labelMinPercent={0.01}
-        showCalloutLabels
-        showAmountInLabel
-        size={140}
-        strokeWidth={20}
-      />
-    </View>
-  );
-}
-
-interface DetailTableProps {
-  description: string;
-  emptyText: string;
-  nameHeader: string;
-  onRowPress?: (row: DetailTableRow) => void;
-  rows: DetailTableRow[];
-  title: string;
-  valueHeader: string;
-}
-
-function DetailTable({ description, emptyText, nameHeader, onRowPress, rows, title, valueHeader }: DetailTableProps) {
-  return (
-    <View style={styles.tableCard}>
-      <Text style={styles.sectionLabel}>{title}</Text>
-      <View style={styles.tableHeader}>
-        <Text style={[styles.tableHeaderText, styles.tableNameColumn]}>{nameHeader}</Text>
-        <Text style={styles.tableHeaderText}>占比</Text>
-        <Text style={[styles.tableHeaderText, styles.tableAmountColumn]}>{valueHeader}</Text>
-      </View>
-      {rows.length > 0 ? (
-        rows.map((row) => {
-          const Container = onRowPress ? Pressable : View;
-          return (
-            <Container
-              key={row.key}
-              onPress={onRowPress ? () => onRowPress(row) : undefined}
-              style={styles.tableRow}
-            >
-              <View style={[styles.tableNameCell, styles.tableNameColumn]}>
-                {row.color ? <View style={[styles.tableColorDot, { backgroundColor: row.color }]} /> : null}
-                <Text style={styles.tableNameText} numberOfLines={1}>
-                  {row.label}
-                </Text>
-              </View>
-              <Text style={styles.tableCellText}>{formatPercent(row.percent)}</Text>
-              <Text style={[styles.tableCellTextStrong, styles.tableAmountColumn]}>
-                {formatCompactCurrency(row.value)}
-              </Text>
-              {onRowPress ? <AppIcon color={theme.colors.textMuted} name="chevronRight" size={15} /> : null}
-            </Container>
-          );
-        })
-      ) : (
-        <View style={styles.emptyStateBox}>
-          <Text style={styles.emptyStateTitle}>{emptyText}</Text>
-          <Text style={styles.emptyStateDescription}>{description}</Text>
-        </View>
-      )}
-    </View>
-  );
-}
-
-interface CashFlowCardProps {
-  periodLabel: PeriodLabel;
-  onOpenPeriodSelector: () => void;
-  summary: ReportSummary;
-  transactions: Transaction[];
-}
-
-function CashFlowCard({ onOpenPeriodSelector, periodLabel, summary, transactions }: CashFlowCardProps) {
-  const trendBuckets = buildCashFlowTrend(transactions, periodLabel);
-
-  return (
-    <View style={[sharedStyles.card, styles.mainCard]}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>收支现金流</Text>
-        <Pressable onPress={onOpenPeriodSelector} style={styles.periodButton}>
-          <Text style={styles.periodButtonText}>{periodLabel}</Text>
-          <AppIcon color={theme.colors.textMuted} name="calendar" size={15} />
-        </Pressable>
-      </View>
-
-      <View style={styles.metricRow}>
-        <MetricPill icon="cashFlow" label="收入" value={formatCompactCurrency(summary.totalIncome)} />
-        <MetricPill icon="transaction" label="支出" tone="muted" value={formatCompactCurrency(summary.totalExpenses)} />
-        <MetricPill icon="cashFlow" label="净流入" tone="strong" value={formatCompactCurrency(summary.cashNetChange)} />
-      </View>
-
-      <View style={styles.trendSection}>
-        <View style={styles.trendHeader}>
-          <Text style={styles.sectionLabel}>收支趋势</Text>
-          <Text style={styles.dataTag}>{periodLabel}</Text>
-        </View>
-        <CashFlowTrendPreview buckets={trendBuckets} />
-      </View>
-    </View>
-  );
-}
-
-interface MetricPillProps {
-  icon?: "asset" | "cashFlow" | "liability" | "netWorth" | "transaction";
-  label: string;
-  onPress?: () => void;
-  value: string;
-  tone?: "blue" | "default" | "muted" | "strong";
-}
-
-function MetricPill({ icon, label, onPress, tone = "default", value }: MetricPillProps) {
-  const isStrong = tone === "strong";
-  const isBlue = tone === "blue";
-  const Container = onPress ? Pressable : View;
-
-  return (
-    <Container
-      onPress={onPress}
+    <View
+      pointerEvents="none"
       style={[
-        styles.metricPill,
-        tone === "muted" && styles.metricPillMuted,
-        isStrong && styles.metricPillStrong,
-        isBlue && styles.metricPillBlue,
+        styles.logoWrap,
+        {
+          height: geometry.height * scale,
+          left: geometry.x * scale,
+          minWidth: 0,
+          top: geometry.y * scale,
+          width: geometry.width * scale,
+        },
       ]}
     >
-      {icon ? (
-        <AppIcon
-          color={isStrong ? theme.colors.textInverse : isBlue ? theme.colors.blueText : theme.colors.primaryDeep}
-          name={icon}
-          size={17}
+      <Text maxFontSizeMultiplier={1} style={[styles.logoShadow, logoTypeStyle, { top: 4 * scale }]}>
+        IMCFO
+      </Text>
+      <Text maxFontSizeMultiplier={1} style={[styles.logoText, logoTypeStyle]}>
+        IMCFO
+      </Text>
+      <Text maxFontSizeMultiplier={1} style={[styles.logoHighlight, logoTypeStyle, { top: -1 * scale }]}>
+        IMCFO
+      </Text>
+    </View>
+  );
+}
+
+function createPrototypeOrbitCards(): OrbitCard[] {
+  const usedActions = new Set<HubAction>();
+
+  return Array.from({ length: PROTOTYPE_CARD_COUNT }, (_, index): OrbitCard => {
+    const isPrimary = index === 0;
+    const moduleName = isPrimary ? "Voice AI Input" : prototypeModuleOrder[(index - 1) % prototypeModuleOrder.length];
+    const t = (index + 0.5) / PROTOTYPE_CARD_COUNT;
+    const phi = Math.acos(1 - 2 * t);
+    const theta = index * PROTOTYPE_GOLDEN_ANGLE;
+    const radialOffset = 0.982 + (index % 7) * 0.006;
+    const actionableNode = actionableModuleByPrototypeLabel[moduleName];
+    const decorativeNode = decorativeModuleByPrototypeLabel[moduleName] ?? decorativeModuleByPrototypeLabel.Insights;
+    let visualNode: VisualNode;
+
+    if (actionableNode && !usedActions.has(actionableNode.action)) {
+      usedActions.add(actionableNode.action);
+      visualNode = createActionableVisualNode(actionableNode);
+    } else if (actionableNode) {
+      visualNode = createDecorativeVisualNode(actionableNode, `decor-${actionableNode.id}-${index}`);
+    } else {
+      visualNode = createDecorativeVisualNode(decorativeNode, `decor-${decorativeNode.id}-${index}`);
+    }
+
+    return {
+      index,
+      isPrimary,
+      moduleName,
+      point: {
+        x: Math.sin(phi) * Math.cos(theta) * radialOffset,
+        y: Math.cos(phi) * radialOffset,
+        z: Math.sin(phi) * Math.sin(theta) * radialOffset,
+      },
+      visualNode,
+    };
+  });
+}
+
+function projectOrbitCard(
+  card: OrbitCard,
+  rotX: number,
+  rotY: number,
+  expandedProgress: number,
+  scale: number,
+  stageWidth: number,
+  stageHeight: number,
+): ProjectedSphereCard {
+  const centerX = stageWidth / 2;
+  const centerY = stageHeight / 2;
+  const radius = Math.min(stageWidth, stageHeight) * PROTOTYPE_RADIUS_FACTOR;
+  const sphereZoom = 1 + (PROTOTYPE_EXPANDED_ZOOM - 1) * expandedProgress;
+  const cosX = Math.cos(rotX);
+  const sinX = Math.sin(rotX);
+  const cosY = Math.cos(rotY);
+  const sinY = Math.sin(rotY);
+  const point = card.point;
+  const y1 = point.y * cosX - point.z * sinX;
+  const z1 = point.y * sinX + point.z * cosX;
+  const rotatedX = point.x * cosY + z1 * sinY;
+  const rotatedZ = -point.x * sinY + z1 * cosY;
+  const projected = PROTOTYPE_PERSPECTIVE / (PROTOTYPE_PERSPECTIVE - rotatedZ * PROTOTYPE_DEPTH_PROJECTION);
+  const depth = clamp((rotatedZ + 1) / 2, 0, 1);
+  const centerProgress = card.isPrimary ? smoothstep(0.02, 1, expandedProgress) : 0;
+  const orbitCenterX = centerX + rotatedX * radius * projected;
+  const orbitCenterY = centerY + y1 * radius * projected;
+  const radial = clamp(Math.hypot(orbitCenterX - centerX, orbitCenterY - centerY) / (radius * 1.08), 0, 1);
+  const centerSolid = 1 - smoothstep(0.22, 0.42, radial);
+  const centerFactor = Math.pow(1 - smoothstep(0.08, 1, radial), 0.56);
+  const frontFactor = Math.pow(depth, 1.18);
+  const visibility = clamp((0.26 + frontFactor * 0.74) * (0.32 + centerFactor * 0.82), 0, 1);
+  const focusBoost = centerFactor * depth * (0.1 + expandedProgress * 0.01);
+  const compactScale = 0.38 + depth * 0.6 + centerFactor * 0.055;
+  const expandedScale = 0.4 + depth * 0.5 + centerFactor * 0.05;
+  const orbitScale = (compactScale + (expandedScale - compactScale) * expandedProgress) * projected;
+  const minOpacity = 0.56 + expandedProgress * 0.06;
+  const maxOpacity = 0.96 + expandedProgress * 0.02;
+  const orbitOpacity = clamp(
+    minOpacity + visibility * 0.34 + focusBoost * 0.3 + centerSolid * 0.02,
+    minOpacity,
+    maxOpacity,
+  );
+  const targetWidth = (PROTOTYPE_CARD_SIZE + (PROTOTYPE_CENTER_CARD_WIDTH - PROTOTYPE_CARD_SIZE) * centerProgress) * scale;
+  const targetHeight = (PROTOTYPE_CARD_SIZE + (PROTOTYPE_CENTER_CARD_HEIGHT - PROTOTYPE_CARD_SIZE) * centerProgress) * scale;
+  const frameWidth = (card.isPrimary ? PROTOTYPE_CENTER_CARD_WIDTH : PROTOTYPE_CARD_SIZE) * scale;
+  const frameHeight = (card.isPrimary ? PROTOTYPE_CENTER_CARD_HEIGHT : PROTOTYPE_CARD_SIZE) * scale;
+  const sampleCenterX = orbitCenterX + (centerX - orbitCenterX) * centerProgress;
+  const sampleCenterY = orbitCenterY + (centerY - orbitCenterY) * centerProgress;
+  const sampleScale = orbitScale + (1 - orbitScale) * centerProgress;
+  const sampleOpacity = orbitOpacity + (1 - orbitOpacity) * centerProgress;
+  const sampleDepth = rotatedZ + (2 - rotatedZ) * centerProgress;
+  const zoomedCenterX = centerX + (sampleCenterX - centerX) * sphereZoom;
+  const zoomedCenterY = centerY + (sampleCenterY - centerY) * sphereZoom;
+  const scaleX = sampleScale * sphereZoom * (targetWidth / frameWidth);
+  const scaleY = sampleScale * sphereZoom * (targetHeight / frameHeight);
+
+  return {
+    centerX: zoomedCenterX,
+    centerY: zoomedCenterY,
+    depth: sampleDepth,
+    height: frameHeight * scaleY,
+    opacity: sampleOpacity,
+    scaleX,
+    scaleY,
+    width: frameWidth * scaleX,
+  };
+}
+
+function CapturedGeometryLayer({
+  isExpanded,
+  onCollapse,
+  onExpand,
+  onPressNode,
+  scale,
+}: {
+  isExpanded: boolean;
+  onCollapse: () => void;
+  onExpand: () => void;
+  onPressNode: (node: FunctionNode) => void;
+  scale: number;
+}) {
+  const collapsedGeometry = capturedPrototypeGeometry.collapsed;
+  const expandedGeometry = capturedPrototypeGeometry.expanded;
+  const stage = collapsedGeometry.sphereContainer;
+  const hintGeometry = isExpanded ? expandedGeometry.hint : collapsedGeometry.hint;
+  const hintText = isExpanded ? "拖动旋转 / 点击空白处收起" : "拖动旋转 / 点击展开";
+  const stageWidth = stage.width * scale;
+  const stageHeight = stage.height * scale;
+  const stageFrame = {
+    height: stageHeight,
+    left: stage.x * scale,
+    top: stage.y * scale,
+    width: stageWidth,
+  };
+  const orbitCards = useMemo(createPrototypeOrbitCards, []);
+  const renderedOrbitCards = useMemo(
+    () => (isExpanded ? [...orbitCards.filter((card) => !card.isPrimary), ...orbitCards.filter((card) => card.isPrimary)] : orbitCards),
+    [isExpanded, orbitCards],
+  );
+  const fallbackLabelFont = useMemo(() => matchFont({ fontSize: 7 * scale, fontWeight: "700" }), [scale]);
+  const fallbackCenterLabelFont = useMemo(() => matchFont({ fontSize: 11 * scale, fontWeight: "700" }), [scale]);
+  const loadedLabelFont = useFont(NOTO_SANS_SC_FONT, 7 * scale);
+  const loadedCenterLabelFont = useFont(NOTO_SANS_SC_FONT, 11 * scale);
+  const labelFont = loadedLabelFont ?? fallbackLabelFont;
+  const centerLabelFont = loadedCenterLabelFont ?? fallbackCenterLabelFont;
+  const rotX = useSharedValue(PROTOTYPE_INITIAL_ROT_X);
+  const rotY = useSharedValue(PROTOTYPE_INITIAL_ROT_Y);
+  const velocityX = useSharedValue(0);
+  const velocityY = useSharedValue(0);
+  const dragging = useSharedValue(0);
+  const expandedTarget = useSharedValue(isExpanded ? 1 : 0);
+  const expandProgress = useSharedValue(isExpanded ? 1 : 0);
+  const idleHoldUntil = useSharedValue(0);
+  const canvasOverscan = Math.max(72 * scale, stageWidth * 0.18);
+  const canvasFrame = {
+    height: stageHeight + canvasOverscan * 2,
+    left: -canvasOverscan,
+    top: -canvasOverscan,
+    width: stageWidth + canvasOverscan * 2,
+  };
+  const gestureRef = useRef<SphereGestureState>({
+    downX: 0,
+    downY: 0,
+    grantAt: 0,
+    lastMoveAt: 0,
+    lastX: 0,
+    lastY: 0,
+    moved: false,
+  });
+
+  useEffect(() => {
+    const now = performance.now();
+    expandedTarget.value = isExpanded ? 1 : 0;
+    expandProgress.value = withTiming(isExpanded ? 1 : 0, { duration: EXPAND_TRANSITION_DURATION_MS });
+    idleHoldUntil.value = now + 180;
+  }, [expandProgress, expandedTarget, idleHoldUntil, isExpanded]);
+
+  useFrameCallback((frame) => {
+    "worklet";
+
+    if (dragging.value > 0.5) {
+      return;
+    }
+
+    const dt = Math.min(34, Math.max(8, frame.timeSincePreviousFrame ?? 16.67));
+    const speed = Math.abs(velocityX.value) + Math.abs(velocityY.value);
+
+    if (speed > PROTOTYPE_STOP_SPEED) {
+      const nextRotX = rotX.value + velocityX.value * dt;
+      rotX.value = Math.max(PROTOTYPE_MIN_ROT_X, Math.min(PROTOTYPE_MAX_ROT_X, nextRotX));
+      rotY.value += velocityY.value * dt;
+      velocityX.value *= PROTOTYPE_INERTIA_DAMPING;
+      velocityY.value *= PROTOTYPE_INERTIA_DAMPING;
+    } else if (frame.timestamp > idleHoldUntil.value) {
+      velocityX.value = 0;
+      velocityY.value = 0;
+      rotY.value += expandedTarget.value > 0.5 ? PROTOTYPE_EXPANDED_IDLE_STEP : PROTOTYPE_COLLAPSED_IDLE_STEP;
+      const nextRotX = rotX.value + Math.sin(frame.timestamp * 0.00033) * 0.00028;
+      rotX.value = Math.max(PROTOTYPE_MIN_ROT_X, Math.min(PROTOTYPE_MAX_ROT_X, nextRotX));
+    }
+  }, true);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponderCapture: (_, gesture) => Math.hypot(gesture.dx, gesture.dy) > 4,
+        onMoveShouldSetPanResponder: (_, gesture) => Math.hypot(gesture.dx, gesture.dy) > 4,
+        onPanResponderGrant: (_, gesture) => {
+          const now = performance.now();
+          const gestureState = gestureRef.current;
+          dragging.value = 1;
+          gestureState.grantAt = now;
+          gestureState.downX = gesture.x0;
+          gestureState.downY = gesture.y0;
+          gestureState.lastX = gesture.moveX || gesture.x0;
+          gestureState.lastY = gesture.moveY || gesture.y0;
+          gestureState.lastMoveAt = now;
+          gestureState.moved = Math.hypot(gesture.dx, gesture.dy) > 1;
+          velocityX.value = 0;
+          velocityY.value = 0;
+          idleHoldUntil.value = now + 100000;
+        },
+        onPanResponderMove: (_, gesture) => {
+          const gestureState = gestureRef.current;
+          const now = performance.now();
+          const nextX = gesture.moveX;
+          const nextY = gesture.moveY;
+          const dx = nextX - gestureState.lastX;
+          const dy = nextY - gestureState.lastY;
+          const distance = Math.hypot(gesture.dx, gesture.dy);
+          const dt = Math.max(8, now - gestureState.lastMoveAt);
+
+          if (distance > TAP_MOVEMENT_THRESHOLD) {
+            gestureState.moved = true;
+          }
+
+          if (gestureState.moved) {
+            rotY.value += dx * PROTOTYPE_DRAG_FACTOR;
+            rotX.value = clamp(rotX.value - dy * PROTOTYPE_DRAG_FACTOR, PROTOTYPE_MIN_ROT_X, PROTOTYPE_MAX_ROT_X);
+            velocityY.value = (dx / dt) * PROTOTYPE_DRAG_FACTOR;
+            velocityX.value = (-dy / dt) * PROTOTYPE_DRAG_FACTOR;
+          }
+
+          gestureState.lastX = nextX;
+          gestureState.lastY = nextY;
+          gestureState.lastMoveAt = now;
+        },
+        onPanResponderRelease: (_, gesture) => {
+          const now = performance.now();
+          const gestureState = gestureRef.current;
+          const touchDuration = now - gestureState.grantAt;
+          const wasDrag = gestureState.moved || Math.hypot(gesture.dx, gesture.dy) > TAP_MOVEMENT_THRESHOLD;
+          const wasTap = !wasDrag && touchDuration <= TAP_MAX_DURATION_MS;
+          dragging.value = 0;
+          gestureState.moved = false;
+          idleHoldUntil.value = now + (wasDrag ? 450 : 180);
+
+          if (wasTap) {
+            if (!isExpanded) {
+              onExpand();
+            } else {
+              const localX = gesture.x0 - stageFrame.left;
+              const localY = gesture.y0 - stageFrame.top;
+              let hitTarget: { depth: number; node: FunctionNode } | null = null;
+
+              for (const card of orbitCards) {
+                const node = card.visualNode.action ? functionNodeByAction[card.visualNode.action] : undefined;
+
+                if (!node) {
+                  continue;
+                }
+
+                const projected = projectOrbitCard(card, rotX.value, rotY.value, expandProgress.value, scale, stageWidth, stageHeight);
+
+                if (
+                  projected.opacity > 0.48 &&
+                  Math.abs(localX - projected.centerX) <= projected.width / 2 &&
+                  Math.abs(localY - projected.centerY) <= projected.height / 2 &&
+                  (!hitTarget || projected.depth > hitTarget.depth)
+                ) {
+                  hitTarget = { depth: projected.depth, node };
+                }
+              }
+
+              if (hitTarget) {
+                onPressNode(hitTarget.node);
+              } else {
+                onCollapse();
+              }
+            }
+          }
+        },
+        onPanResponderTerminate: () => {
+          const now = performance.now();
+          dragging.value = 0;
+          gestureRef.current.moved = false;
+          idleHoldUntil.value = now + 240;
+        },
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
+      }),
+    [
+      dragging,
+      expandProgress,
+      idleHoldUntil,
+      isExpanded,
+      onCollapse,
+      onExpand,
+      onPressNode,
+      orbitCards,
+      rotX,
+      rotY,
+      scale,
+      stageFrame.left,
+      stageFrame.top,
+      stageHeight,
+      stageWidth,
+      velocityX,
+      velocityY,
+    ],
+  );
+
+  return (
+    <>
+      <MetallicLogo geometry={collapsedGeometry.logo} scale={scale} />
+      <View {...panResponder.panHandlers} style={[styles.capturedSphereStage, stageFrame]}>
+        <Canvas style={[styles.capturedSphereCanvas, canvasFrame]}>
+          <Group transform={[{ translateX: canvasOverscan }, { translateY: canvasOverscan }]}>
+            <Circle cx={stageWidth / 2} cy={stageHeight / 2} r={stageWidth * 0.38} color="rgba(141,247,255,0.035)" />
+            <Circle
+              cx={stageWidth / 2}
+              cy={stageHeight / 2}
+              r={stageWidth * 0.36}
+              color="rgba(141,247,255,0.09)"
+              style="stroke"
+              strokeWidth={1 * scale}
+            />
+            {renderedOrbitCards.map((orbitCard) => (
+              <SkiaSphereCard
+                centerLabelFont={centerLabelFont}
+                expandProgress={expandProgress}
+                isExpanded={isExpanded}
+                key={`skia-sphere-card-${orbitCard.index}`}
+                labelFont={labelFont}
+                orbitCard={orbitCard}
+                rotX={rotX}
+                rotY={rotY}
+                scale={scale}
+                stageHeight={stageHeight}
+                stageWidth={stageWidth}
+              />
+            ))}
+          </Group>
+        </Canvas>
+        {isExpanded ? (
+          <RealBlurVoiceHero
+            expandProgress={expandProgress}
+            scale={scale}
+            stageHeight={stageHeight}
+            stageWidth={stageWidth}
+          />
+        ) : null}
+      </View>
+      <View
+        pointerEvents="none"
+        style={[
+          styles.capturedHint,
+          {
+            height: hintGeometry.height * scale,
+            left: hintGeometry.x * scale,
+            opacity: hintGeometry.opacity,
+            top: hintGeometry.y * scale,
+            width: hintGeometry.width * scale,
+          },
+        ]}
+      >
+        <Text maxFontSizeMultiplier={1} numberOfLines={1} style={styles.hintText}>
+          {hintText}
+        </Text>
+      </View>
+    </>
+  );
+}
+
+function RealBlurVoiceHero({
+  expandProgress,
+  scale,
+  stageHeight,
+  stageWidth,
+}: {
+  expandProgress: SharedValue<number>;
+  scale: number;
+  stageHeight: number;
+  stageWidth: number;
+}) {
+  const heroWidth = PROTOTYPE_CENTER_CARD_WIDTH * PROTOTYPE_EXPANDED_ZOOM * scale;
+  const heroHeight = PROTOTYPE_CENTER_CARD_HEIGHT * PROTOTYPE_EXPANDED_ZOOM * scale;
+  const heroRadius = 22 * scale;
+  const iconSize = 34 * scale;
+  const animatedStyle = useAnimatedStyle(() => {
+    const rawProgress = Math.max(0, Math.min(1, (expandProgress.value - 0.58) / 0.42));
+    const easedProgress = rawProgress * rawProgress * (3 - 2 * rawProgress);
+
+    return {
+      opacity: easedProgress,
+      transform: [{ scale: 0.92 + easedProgress * 0.08 }],
+    };
+  });
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.realBlurHeroWrap,
+        {
+          borderRadius: heroRadius,
+          height: heroHeight,
+          left: (stageWidth - heroWidth) / 2,
+          top: (stageHeight - heroHeight) / 2,
+          width: heroWidth,
+        },
+        animatedStyle,
+      ]}
+    >
+      <BlurView
+        blurReductionFactor={1.2}
+        experimentalBlurMethod="dimezisBlurView"
+        intensity={96}
+        style={[StyleSheet.absoluteFillObject, { borderRadius: heroRadius }]}
+        tint="systemMaterialLight"
+      />
+      <View style={styles.realBlurHeroMilky} />
+      <View style={styles.realBlurHeroCoolBleed} />
+      <View style={styles.realBlurHeroWarmBleed} />
+      <View style={styles.realBlurHeroTopHaze} />
+      <View style={styles.realBlurHeroInnerBloom} />
+      <View style={styles.realBlurHeroBottomShade} />
+      <View style={styles.realBlurHeroContent}>
+        <View style={styles.realBlurHeroIconHalo} />
+        <AppIcon color="#079AA7" name="mic" size={iconSize} strokeWidth={2.4 * scale} />
+        <Text maxFontSizeMultiplier={1} numberOfLines={1} style={[styles.realBlurHeroLabel, { fontSize: 11 * scale }]}>
+          自然语言记一笔
+        </Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+function SkiaSphereCard({
+  centerLabelFont,
+  expandProgress,
+  isExpanded,
+  labelFont,
+  orbitCard,
+  rotX,
+  rotY,
+  scale,
+  stageHeight,
+  stageWidth,
+}: {
+  centerLabelFont: SkFont;
+  expandProgress: SharedValue<number>;
+  isExpanded: boolean;
+  labelFont: SkFont;
+  orbitCard: OrbitCard;
+  rotX: SharedValue<number>;
+  rotY: SharedValue<number>;
+  scale: number;
+  stageHeight: number;
+  stageWidth: number;
+}) {
+  const visualNode = orbitCard.visualNode;
+  const actionableNode = visualNode.action ? functionNodeByAction[visualNode.action] : undefined;
+  const isCenterCard = orbitCard.isPrimary && isExpanded;
+  const frameWidth = (orbitCard.isPrimary ? PROTOTYPE_CENTER_CARD_WIDTH : PROTOTYPE_CARD_SIZE) * scale;
+  const frameHeight = (orbitCard.isPrimary ? PROTOTYPE_CENTER_CARD_HEIGHT : PROTOTYPE_CARD_SIZE) * scale;
+  const radius = (isCenterCard ? 18 : 12) * scale;
+  const cardX = -frameWidth / 2;
+  const cardY = -frameHeight / 2;
+  const iconSize = (isCenterCard ? 38 : 31) * scale;
+  const label = visualNode.label;
+  const activeLabelFont = isCenterCard ? centerLabelFont : labelFont;
+  const labelWidth = label ? activeLabelFont.measureText(label).width : 0;
+  const labelBaseline = isCenterCard ? frameHeight / 2 - 18 * scale : frameHeight / 2 - 6 * scale;
+  const iconOffsetY = isCenterCard ? -15 * scale : isExpanded && actionableNode ? -7 * scale : 0;
+  const hasBackdropBlur = isCenterCard || Boolean(actionableNode);
+  const blurAmount = isCenterCard ? 18 * scale : 8 * scale;
+  const cardClip = rrect(rect(cardX, cardY, frameWidth, frameHeight), radius, radius);
+  const materialAura = isCenterCard
+    ? "rgba(150,245,255,0.3)"
+    : actionableNode
+      ? "rgba(165,238,246,0.16)"
+      : "rgba(175,218,226,0.07)";
+  const materialShadow = isCenterCard ? "rgba(0,0,0,0.36)" : actionableNode ? "rgba(0,0,0,0.2)" : "rgba(0,0,0,0.1)";
+  const materialStroke = isCenterCard
+    ? "rgba(255,255,255,0.14)"
+    : actionableNode
+      ? "rgba(255,255,255,0.085)"
+      : "rgba(255,255,255,0.045)";
+  const materialStrokeWidth = isCenterCard ? 0.5 * scale : actionableNode ? 0.34 * scale : 0.24 * scale;
+  const surfaceGradient = isCenterCard
+    ? ["rgba(255,255,255,0.92)", "rgba(232,249,251,0.76)", "rgba(181,229,235,0.48)"]
+    : actionableNode
+      ? ["rgba(252,255,255,0.74)", "rgba(222,241,245,0.54)", "rgba(167,214,222,0.34)"]
+      : ["rgba(239,248,249,0.46)", "rgba(207,225,229,0.34)", "rgba(158,190,199,0.22)"];
+  const mistGradient = isCenterCard
+    ? ["rgba(255,255,255,0.68)", "rgba(255,255,255,0.2)", "rgba(255,255,255,0)"]
+    : actionableNode
+      ? ["rgba(255,255,255,0.44)", "rgba(255,255,255,0.14)", "rgba(255,255,255,0)"]
+      : ["rgba(255,255,255,0.23)", "rgba(255,255,255,0.08)", "rgba(255,255,255,0)"];
+  const coolBleedGradient = isCenterCard
+    ? ["rgba(93,236,226,0.34)", "rgba(93,236,226,0.12)", "rgba(93,236,226,0)"]
+    : actionableNode
+      ? ["rgba(107,223,220,0.2)", "rgba(107,223,220,0.07)", "rgba(107,223,220,0)"]
+      : ["rgba(111,205,210,0.1)", "rgba(111,205,210,0.035)", "rgba(111,205,210,0)"];
+  const warmBleedGradient = isCenterCard
+    ? ["rgba(255,179,158,0.16)", "rgba(255,179,158,0.05)", "rgba(255,179,158,0)"]
+    : actionableNode
+      ? ["rgba(255,181,165,0.09)", "rgba(255,181,165,0.03)", "rgba(255,181,165,0)"]
+      : ["rgba(255,181,165,0.05)", "rgba(255,181,165,0.018)", "rgba(255,181,165,0)"];
+  const topHighlightGradient = isCenterCard
+    ? ["rgba(255,255,255,0.72)", "rgba(255,255,255,0.28)", "rgba(255,255,255,0)"]
+    : actionableNode
+      ? ["rgba(255,255,255,0.45)", "rgba(255,255,255,0.16)", "rgba(255,255,255,0)"]
+      : ["rgba(255,255,255,0.22)", "rgba(255,255,255,0.08)", "rgba(255,255,255,0)"];
+  const materialShade = isCenterCard ? "rgba(8,25,34,0.13)" : actionableNode ? "rgba(8,24,34,0.085)" : "rgba(8,24,34,0.052)";
+  const materialInnerGlow = isCenterCard ? "rgba(255,255,255,0.26)" : actionableNode ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.045)";
+  const hasActionableLabel = Boolean(actionableNode);
+  const cardProjection = useDerivedValue<SkiaSphereProjection>(() => {
+    const progress = Math.max(0, Math.min(1, expandProgress.value));
+    const centerX = stageWidth / 2;
+    const centerY = stageHeight / 2;
+    const radiusValue = Math.min(stageWidth, stageHeight) * PROTOTYPE_RADIUS_FACTOR;
+    const sphereZoom = 1 + (PROTOTYPE_EXPANDED_ZOOM - 1) * progress;
+    const cosX = Math.cos(rotX.value);
+    const sinX = Math.sin(rotX.value);
+    const cosY = Math.cos(rotY.value);
+    const sinY = Math.sin(rotY.value);
+    const point = orbitCard.point;
+    const y1 = point.y * cosX - point.z * sinX;
+    const z1 = point.y * sinX + point.z * cosX;
+    const rotatedX = point.x * cosY + z1 * sinY;
+    const rotatedZ = -point.x * sinY + z1 * cosY;
+    const projected = PROTOTYPE_PERSPECTIVE / (PROTOTYPE_PERSPECTIVE - rotatedZ * PROTOTYPE_DEPTH_PROJECTION);
+    const depth = Math.max(0, Math.min(1, (rotatedZ + 1) / 2));
+    let centerProgress = 0;
+
+    if (orbitCard.isPrimary) {
+      const centerProgressX = Math.max(0, Math.min(1, (progress - 0.02) / 0.98));
+      centerProgress = centerProgressX * centerProgressX * (3 - 2 * centerProgressX);
+    }
+
+    const orbitCenterX = centerX + rotatedX * radiusValue * projected;
+    const orbitCenterY = centerY + y1 * radiusValue * projected;
+    const radial = Math.max(0, Math.min(1, Math.hypot(orbitCenterX - centerX, orbitCenterY - centerY) / (radiusValue * 1.08)));
+    const centerSolidX = Math.max(0, Math.min(1, (radial - 0.22) / 0.2));
+    const centerSolid = 1 - centerSolidX * centerSolidX * (3 - 2 * centerSolidX);
+    const centerStepX = Math.max(0, Math.min(1, (radial - 0.08) / 0.92));
+    const centerFactor = Math.pow(1 - centerStepX * centerStepX * (3 - 2 * centerStepX), 0.56);
+    const frontFactor = Math.pow(depth, 1.18);
+    const visibility = Math.max(0, Math.min(1, (0.26 + frontFactor * 0.74) * (0.32 + centerFactor * 0.82)));
+    const focusBoost = centerFactor * depth * (0.1 + progress * 0.01);
+    const compactScale = 0.38 + depth * 0.6 + centerFactor * 0.055;
+    const expandedScale = 0.4 + depth * 0.5 + centerFactor * 0.05;
+    const orbitScale = (compactScale + (expandedScale - compactScale) * progress) * projected;
+    const minOpacity = 0.64 + progress * 0.04;
+    const maxOpacity = 0.96 + progress * 0.02;
+    const orbitOpacity = Math.max(minOpacity, Math.min(maxOpacity, minOpacity + visibility * 0.34 + focusBoost * 0.3 + centerSolid * 0.02));
+    const targetWidth = (PROTOTYPE_CARD_SIZE + (PROTOTYPE_CENTER_CARD_WIDTH - PROTOTYPE_CARD_SIZE) * centerProgress) * scale;
+    const targetHeight = (PROTOTYPE_CARD_SIZE + (PROTOTYPE_CENTER_CARD_HEIGHT - PROTOTYPE_CARD_SIZE) * centerProgress) * scale;
+    const sampleCenterX = orbitCenterX + (centerX - orbitCenterX) * centerProgress;
+    const sampleCenterY = orbitCenterY + (centerY - orbitCenterY) * centerProgress;
+    const sampleScale = orbitScale + (1 - orbitScale) * centerProgress;
+    const sampleOpacity = orbitOpacity + (1 - orbitOpacity) * centerProgress;
+    const zoomedCenterX = centerX + (sampleCenterX - centerX) * sphereZoom;
+    const zoomedCenterY = centerY + (sampleCenterY - centerY) * sphereZoom;
+    const scaleX = sampleScale * sphereZoom * (targetWidth / frameWidth);
+    const scaleY = sampleScale * sphereZoom * (targetHeight / frameHeight);
+    let labelOpacity = 0;
+
+    if (hasActionableLabel) {
+      const labelProgress = Math.max(0, Math.min(1, (progress - 0.68) / 0.32));
+      labelOpacity = labelProgress * labelProgress * (3 - 2 * labelProgress);
+    }
+
+    return {
+      labelOpacity,
+      opacity: sampleOpacity,
+      transform: [{ translateX: zoomedCenterX }, { translateY: zoomedCenterY }, { scaleX }, { scaleY }],
+    };
+  });
+  const cardTransform = useDerivedValue<Transforms3d>(() => cardProjection.value.transform);
+  const cardOpacity = useDerivedValue(() => cardProjection.value.opacity);
+  const labelOpacity = useDerivedValue(() => cardProjection.value.labelOpacity);
+
+  return (
+    <Group opacity={cardOpacity} transform={cardTransform}>
+      <RoundedRect
+        color={materialShadow}
+        height={frameHeight}
+        r={radius}
+        width={frameWidth}
+        x={cardX + (isCenterCard ? 4.5 : 2.6) * scale}
+        y={cardY + (isCenterCard ? 8 : 4.2) * scale}
+      />
+      <RoundedRect
+        color={materialAura}
+        height={frameHeight + (isCenterCard ? 24 : 16) * scale}
+        r={radius + (isCenterCard ? 12 : 8) * scale}
+        width={frameWidth + (isCenterCard ? 24 : 16) * scale}
+        x={cardX - (isCenterCard ? 12 : 8) * scale}
+        y={cardY - (isCenterCard ? 10 : 7) * scale}
+      />
+      {hasBackdropBlur ? (
+        <BackdropBlur blur={blurAmount} clip={cardClip}>
+          <RoundedRect height={frameHeight} r={radius} width={frameWidth} x={cardX} y={cardY}>
+            <LinearGradient
+              colors={surfaceGradient}
+              end={vec(cardX + frameWidth, cardY + frameHeight)}
+              positions={[0, 0.56, 1]}
+              start={vec(cardX, cardY)}
+            />
+          </RoundedRect>
+        </BackdropBlur>
+      ) : (
+        <RoundedRect height={frameHeight} r={radius} width={frameWidth} x={cardX} y={cardY}>
+          <LinearGradient
+            colors={surfaceGradient}
+            end={vec(cardX + frameWidth, cardY + frameHeight)}
+            positions={[0, 0.56, 1]}
+            start={vec(cardX, cardY)}
+          />
+        </RoundedRect>
+      )}
+      <RoundedRect height={frameHeight} r={radius} width={frameWidth} x={cardX} y={cardY}>
+        <RadialGradient
+          c={vec(cardX + frameWidth * 0.24, cardY + frameHeight * 0.22)}
+          colors={mistGradient}
+          positions={[0, 0.48, 1]}
+          r={frameWidth * (isCenterCard ? 0.78 : 0.72)}
+        />
+      </RoundedRect>
+      <RoundedRect height={frameHeight} r={radius} width={frameWidth} x={cardX} y={cardY}>
+        <RadialGradient
+          c={vec(cardX + frameWidth * 0.92, cardY + frameHeight * 0.2)}
+          colors={coolBleedGradient}
+          positions={[0, 0.5, 1]}
+          r={frameWidth * (isCenterCard ? 0.82 : 0.72)}
+        />
+      </RoundedRect>
+      <RoundedRect height={frameHeight} r={radius} width={frameWidth} x={cardX} y={cardY}>
+        <RadialGradient
+          c={vec(cardX + frameWidth * 0.08, cardY + frameHeight * 0.86)}
+          colors={warmBleedGradient}
+          positions={[0, 0.5, 1]}
+          r={frameWidth * 0.68}
+        />
+      </RoundedRect>
+      <RoundedRect
+        color={materialShade}
+        height={frameHeight * 0.42}
+        r={radius}
+        width={frameWidth}
+        x={cardX}
+        y={cardY + frameHeight * 0.58}
+      />
+      {isCenterCard ? (
+        <>
+          <RoundedRect color={materialInnerGlow} height={frameHeight * 0.72} r={radius * 0.9} width={frameWidth * 0.7} x={-frameWidth * 0.38} y={-frameHeight * 0.38} />
+          <RoundedRect height={frameHeight} r={radius} width={frameWidth} x={cardX} y={cardY}>
+            <RadialGradient
+              c={vec(cardX + frameWidth * 0.52, cardY + frameHeight * 0.5)}
+              colors={["rgba(255,255,255,0.34)", "rgba(255,255,255,0.1)", "rgba(255,255,255,0)"]}
+              positions={[0, 0.46, 1]}
+              r={frameWidth * 0.58}
+            />
+          </RoundedRect>
+        </>
+      ) : null}
+      <RoundedRect
+        color={materialStroke}
+        height={frameHeight}
+        r={radius}
+        style="stroke"
+        strokeWidth={materialStrokeWidth}
+        width={frameWidth}
+        x={cardX}
+        y={cardY}
+      />
+      <RoundedRect height={frameHeight * (isCenterCard ? 0.34 : 0.28)} r={radius} width={frameWidth * 0.9} x={-frameWidth * 0.45} y={cardY + 3 * scale}>
+        <LinearGradient
+          colors={topHighlightGradient}
+          end={vec(0, cardY + frameHeight * 0.32)}
+          positions={[0, 0.52, 1]}
+          start={vec(0, cardY + 3 * scale)}
+        />
+      </RoundedRect>
+      <RoundedRect
+        color={isCenterCard ? "rgba(255,255,255,0.38)" : actionableNode ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.1)"}
+        height={Math.max(1.4 * scale, frameHeight * 0.045)}
+        r={radius}
+        width={frameWidth * (isCenterCard ? 0.72 : 0.62)}
+        x={-frameWidth * (isCenterCard ? 0.36 : 0.31)}
+        y={cardY + 6 * scale}
+      />
+      <SkiaSphereIcon color={visualNode.accent} icon={visualNode.icon} size={iconSize} strokeWidth={(isCenterCard ? 2.35 : 2) * scale} y={iconOffsetY} />
+      {actionableNode && isExpanded ? (
+        <SkiaText
+          color={isCenterCard ? "rgba(18,31,39,0.94)" : "rgba(25,39,75,0.78)"}
+          font={activeLabelFont}
+          opacity={labelOpacity}
+          text={label}
+          x={-labelWidth / 2}
+          y={labelBaseline}
         />
       ) : null}
-      <Text style={[styles.metricLabel, isStrong && styles.metricLabelStrong, isBlue && styles.metricLabelBlue]}>
-        {label}
-      </Text>
-      <Text style={[styles.metricValue, isStrong && styles.metricValueStrong, isBlue && styles.metricValueBlue]} numberOfLines={1}>
-        {value}
-      </Text>
-    </Container>
+    </Group>
   );
 }
 
-interface CompositionChartCardProps {
-  emptyText: string;
-  items: CompositionItem[];
-  label: string;
-  onPress?: () => void;
-  primaryText: string;
-}
+function SkiaSphereIcon({
+  color,
+  icon,
+  size,
+  strokeWidth,
+  y = 0,
+}: {
+  color: string;
+  icon: AppIconName;
+  size: number;
+  strokeWidth: number;
+  y?: number;
+}) {
+  const s = size / 2;
+  const strokeProps = { color, strokeCap: "round" as const, strokeWidth, style: "stroke" as const };
 
-function CompositionChartCard({ emptyText, items, label, onPress, primaryText }: CompositionChartCardProps) {
+  if (icon === "mic") {
+    return (
+      <Group transform={[{ translateY: y }]}>
+        <RoundedRect {...strokeProps} height={s * 1.25} r={s * 0.32} width={s * 0.55} x={-s * 0.275} y={-s * 0.78} />
+        <SkiaLine {...strokeProps} p1={{ x: -s * 0.58, y: -s * 0.02 }} p2={{ x: -s * 0.58, y: s * 0.2 }} />
+        <SkiaLine {...strokeProps} p1={{ x: s * 0.58, y: -s * 0.02 }} p2={{ x: s * 0.58, y: s * 0.2 }} />
+        <SkiaLine {...strokeProps} p1={{ x: 0, y: s * 0.46 }} p2={{ x: 0, y: s * 0.82 }} />
+        <SkiaLine {...strokeProps} p1={{ x: -s * 0.45, y: s * 0.82 }} p2={{ x: s * 0.45, y: s * 0.82 }} />
+        <Circle color={color} cx={s * 0.75} cy={-s * 0.52} r={s * 0.11} />
+      </Group>
+    );
+  }
+
+  if (icon === "wallet") {
+    return (
+      <Group transform={[{ translateY: y }]}>
+        <RoundedRect {...strokeProps} height={s * 1.05} r={s * 0.18} width={s * 1.45} x={-s * 0.72} y={-s * 0.48} />
+        <SkiaLine {...strokeProps} p1={{ x: -s * 0.42, y: -s * 0.48 }} p2={{ x: s * 0.5, y: -s * 0.48 }} />
+        <Circle color={color} cx={s * 0.42} cy={s * 0.05} r={s * 0.1} />
+      </Group>
+    );
+  }
+
+  if (icon === "asset") {
+    return (
+      <Group transform={[{ translateY: y }]}>
+        <SkiaLine {...strokeProps} p1={{ x: -s * 0.72, y: -s * 0.1 }} p2={{ x: 0, y: -s * 0.68 }} />
+        <SkiaLine {...strokeProps} p1={{ x: 0, y: -s * 0.68 }} p2={{ x: s * 0.72, y: -s * 0.1 }} />
+        <RoundedRect {...strokeProps} height={s * 0.9} r={s * 0.1} width={s * 1.05} x={-s * 0.52} y={-s * 0.1} />
+        <SkiaLine {...strokeProps} p1={{ x: -s * 0.15, y: s * 0.8 }} p2={{ x: -s * 0.15, y: s * 0.28 }} />
+        <SkiaLine {...strokeProps} p1={{ x: s * 0.15, y: s * 0.8 }} p2={{ x: s * 0.15, y: s * 0.28 }} />
+      </Group>
+    );
+  }
+
+  if (icon === "transaction") {
+    return (
+      <Group transform={[{ translateY: y }]}>
+        <SkiaLine {...strokeProps} p1={{ x: -s * 0.72, y: -s * 0.34 }} p2={{ x: s * 0.56, y: -s * 0.34 }} />
+        <SkiaLine {...strokeProps} p1={{ x: s * 0.24, y: -s * 0.66 }} p2={{ x: s * 0.56, y: -s * 0.34 }} />
+        <SkiaLine {...strokeProps} p1={{ x: s * 0.24, y: -s * 0.02 }} p2={{ x: s * 0.56, y: -s * 0.34 }} />
+        <SkiaLine {...strokeProps} p1={{ x: s * 0.72, y: s * 0.36 }} p2={{ x: -s * 0.56, y: s * 0.36 }} />
+        <SkiaLine {...strokeProps} p1={{ x: -s * 0.24, y: s * 0.04 }} p2={{ x: -s * 0.56, y: s * 0.36 }} />
+        <SkiaLine {...strokeProps} p1={{ x: -s * 0.24, y: s * 0.68 }} p2={{ x: -s * 0.56, y: s * 0.36 }} />
+      </Group>
+    );
+  }
+
+  if (icon === "reports") {
+    return (
+      <Group transform={[{ translateY: y }]}>
+        <SkiaLine {...strokeProps} p1={{ x: -s * 0.6, y: s * 0.7 }} p2={{ x: s * 0.62, y: s * 0.7 }} />
+        <SkiaLine {...strokeProps} p1={{ x: -s * 0.42, y: s * 0.7 }} p2={{ x: -s * 0.42, y: -s * 0.12 }} />
+        <SkiaLine {...strokeProps} p1={{ x: 0, y: s * 0.7 }} p2={{ x: 0, y: -s * 0.58 }} />
+        <SkiaLine {...strokeProps} p1={{ x: s * 0.42, y: s * 0.7 }} p2={{ x: s * 0.42, y: -s * 0.28 }} />
+      </Group>
+    );
+  }
+
+  if (icon === "chart" || icon === "cashFlow") {
+    return (
+      <Group transform={[{ translateY: y }]}>
+        <SkiaLine {...strokeProps} p1={{ x: -s * 0.72, y: s * 0.54 }} p2={{ x: -s * 0.18, y: s * 0.12 }} />
+        <SkiaLine {...strokeProps} p1={{ x: -s * 0.18, y: s * 0.12 }} p2={{ x: s * 0.18, y: s * 0.2 }} />
+        <SkiaLine {...strokeProps} p1={{ x: s * 0.18, y: s * 0.2 }} p2={{ x: s * 0.7, y: -s * 0.48 }} />
+        <SkiaLine {...strokeProps} p1={{ x: s * 0.38, y: -s * 0.48 }} p2={{ x: s * 0.7, y: -s * 0.48 }} />
+        <SkiaLine {...strokeProps} p1={{ x: s * 0.7, y: -s * 0.48 }} p2={{ x: s * 0.7, y: -s * 0.16 }} />
+      </Group>
+    );
+  }
+
+  if (icon === "profile") {
+    return (
+      <Group transform={[{ translateY: y }]}>
+        <Circle {...strokeProps} cx={0} cy={-s * 0.38} r={s * 0.32} />
+        <RoundedRect {...strokeProps} height={s * 0.7} r={s * 0.32} width={s * 1.12} x={-s * 0.56} y={s * 0.16} />
+      </Group>
+    );
+  }
+
+  if (icon === "success" || icon === "reconcile") {
+    return (
+      <Group transform={[{ translateY: y }]}>
+        <Circle {...strokeProps} cx={0} cy={0} r={s * 0.72} />
+        <SkiaLine {...strokeProps} p1={{ x: -s * 0.34, y: s * 0.02 }} p2={{ x: -s * 0.08, y: s * 0.3 }} />
+        <SkiaLine {...strokeProps} p1={{ x: -s * 0.08, y: s * 0.3 }} p2={{ x: s * 0.42, y: -s * 0.34 }} />
+      </Group>
+    );
+  }
+
+  if (icon === "manage" || icon === "securities" || icon === "data") {
+    return (
+      <Group transform={[{ translateY: y }]}>
+        <RoundedRect {...strokeProps} height={s * 0.44} r={s * 0.08} width={s * 1.16} x={-s * 0.58} y={-s * 0.58} />
+        <RoundedRect {...strokeProps} height={s * 0.44} r={s * 0.08} width={s * 1.16} x={-s * 0.58} y={-s * 0.12} />
+        <RoundedRect {...strokeProps} height={s * 0.44} r={s * 0.08} width={s * 1.16} x={-s * 0.58} y={s * 0.34} />
+      </Group>
+    );
+  }
+
   return (
-    <Pressable onPress={onPress} style={styles.chartCard}>
-      <Text style={styles.sectionLabel}>{label}</Text>
-      <Text style={styles.chartValue}>{primaryText}</Text>
-      <DonutChart data={items} emptyText={emptyText} size={92} strokeWidth={15} />
-    </Pressable>
-  );
-}
-
-interface CashFlowTrendPreviewProps {
-  buckets: TrendBucket[];
-}
-
-function CashFlowTrendPreview({ buckets }: CashFlowTrendPreviewProps) {
-  const maxValue = Math.max(...buckets.map((bucket) => Math.abs(bucket.net)), 1);
-
-  return (
-    <View style={styles.trendChart}>
-      {buckets.map((bucket) => {
-        const barHeight = Math.max(8, (Math.abs(bucket.net) / maxValue) * 74);
-        const isPositive = bucket.net >= 0;
-
-        return (
-          <View key={bucket.label} style={styles.trendColumn}>
-            <View style={styles.trendBarTrack}>
-              <View
-                style={[
-                  styles.trendBar,
-                  { height: barHeight },
-                  isPositive ? styles.trendBarPositive : styles.trendBarNegative,
-                ]}
-              />
-            </View>
-            <Text style={styles.trendLabel}>{bucket.label}</Text>
-          </View>
-        );
-      })}
-    </View>
+    <Group transform={[{ translateY: y }]}>
+      <Circle {...strokeProps} cx={0} cy={0} r={s * 0.72} />
+      <SkiaLine {...strokeProps} p1={{ x: -s * 0.36, y: 0 }} p2={{ x: s * 0.36, y: 0 }} />
+    </Group>
   );
 }
 
 const styles = StyleSheet.create({
-  cardHeader: {
+  collapseLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
+  },
+  capturedHint: {
     alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "center",
+    position: "absolute",
+    zIndex: 2,
   },
-  cardMeta: {
-    color: theme.colors.textMuted,
-    fontSize: 13,
-    fontWeight: "600",
+  capturedSphereCanvas: {
+    position: "absolute",
   },
-  cardTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 20,
-    fontWeight: "900",
-    letterSpacing: -0.4,
+  capturedSphereStage: {
+    overflow: "visible",
+    position: "absolute",
+    zIndex: 3,
   },
-  chartCard: {
-    backgroundColor: theme.colors.surfaceElevated,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    flex: 1,
-    gap: theme.spacing.sm,
-    minHeight: 166,
-    padding: 14,
+  realBlurHeroBottomShade: {
+    backgroundColor: "rgba(9,23,31,0.12)",
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
+    bottom: 0,
+    height: "30%",
+    left: 0,
+    position: "absolute",
+    right: 0,
   },
-  chartGrid: {
-    flexDirection: "row",
-    gap: theme.spacing.sm,
-  },
-  chartValue: {
-    color: theme.colors.textPrimary,
-    fontSize: 17,
-    fontWeight: "800",
-    letterSpacing: -0.3,
-  },
-  changeCard: {
-    gap: theme.spacing.sm,
-  },
-  changeLabel: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  changeRow: {
+  realBlurHeroContent: {
     alignItems: "center",
-    borderBottomColor: theme.colors.border,
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    minHeight: 42,
-    paddingVertical: 8,
-  },
-  changeRowList: {
-    gap: 2,
-  },
-  changeValue: {
-    color: theme.colors.textPrimary,
-    fontSize: 14,
-    fontWeight: "900",
-  },
-  dataTag: {
-    backgroundColor: theme.colors.successSoft,
-    borderRadius: theme.radius.pill,
-    color: theme.colors.success,
-    fontSize: 12,
-    fontWeight: "700",
-    overflow: "hidden",
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-  },
-  backButton: {
-    alignItems: "center",
-    backgroundColor: theme.colors.backButtonBackground,
-    borderColor: theme.colors.backButtonBorder,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  backButtonText: {
-    color: theme.colors.backButtonText,
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  detailChartCard: {
-    alignItems: "center",
-    gap: 10,
+    gap: 7,
+    height: "100%",
+    justifyContent: "center",
+    position: "relative",
     width: "100%",
   },
-  detailHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: theme.spacing.sm,
-    justifyContent: "space-between",
+  realBlurHeroCoolBleed: {
+    backgroundColor: "rgba(105,235,226,0.24)",
+    borderRadius: 80,
+    height: "78%",
+    position: "absolute",
+    right: "-18%",
+    top: "-12%",
+    transform: [{ rotate: "12deg" }],
+    width: "72%",
   },
-  detailMeta: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    fontWeight: "700",
-    minWidth: 52,
-    textAlign: "right",
+  realBlurHeroIconHalo: {
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderRadius: 24,
+    height: 44,
+    position: "absolute",
+    top: "30%",
+    width: 44,
   },
-  detailStack: {
-    gap: theme.spacing.md,
+  realBlurHeroInnerBloom: {
+    backgroundColor: "rgba(255,255,255,0.26)",
+    borderRadius: 80,
+    height: "68%",
+    left: "16%",
+    position: "absolute",
+    top: "12%",
+    width: "62%",
   },
-  detailTitle: {
-    color: theme.colors.textPrimary,
-    flex: 1,
-    fontSize: 20,
-    fontWeight: "900",
-    letterSpacing: -0.5,
+  realBlurHeroLabel: {
+    color: "rgba(20,34,42,0.9)",
+    fontWeight: "800",
+    letterSpacing: 0,
+    lineHeight: 15,
+    marginTop: -1,
     textAlign: "center",
   },
-  emptyStateBox: {
-    backgroundColor: theme.colors.surfaceSoft,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    gap: 4,
-    padding: theme.spacing.md,
-  },
-  emptyStateDescription: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  emptyStateTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  mainCard: {
-    gap: 14,
-  },
-  metricLabel: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  metricLabelStrong: {
-    color: theme.colors.textInverse,
-  },
-  metricPill: {
-    backgroundColor: theme.colors.primarySoft,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    flex: 1,
-    gap: 4,
-    minHeight: 66,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-  },
-  metricPillMuted: {
-    backgroundColor: theme.colors.surfaceMuted,
-  },
-  metricPillBlue: {
-    backgroundColor: theme.colors.blueSoft,
-    borderColor: theme.colors.blueBorder,
-  },
-  metricPillStrong: {
-    backgroundColor: theme.colors.surfaceStrong,
-  },
-  metricRow: {
-    flexDirection: "row",
-    gap: theme.spacing.sm,
-  },
-  metricValue: {
-    color: theme.colors.textPrimary,
-    fontSize: 16,
-    fontWeight: "800",
-    letterSpacing: -0.4,
-  },
-  metricValueStrong: {
-    color: theme.colors.textInverse,
-  },
-  metricLabelBlue: {
-    color: "#375A6F",
-  },
-  metricValueBlue: {
-    color: "#17384F",
-  },
-  netWorthPill: {
-    alignItems: "center",
-    alignSelf: "flex-start",
-    backgroundColor: "#EAF6FF",
-    borderColor: "#B7DDF8",
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: theme.spacing.sm,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  netWorthPillLabel: {
-    color: "#375A6F",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  netWorthPillValue: {
-    color: "#17384F",
-    fontSize: 15,
-    fontWeight: "900",
-    letterSpacing: -0.2,
-  },
-  netWorthTrendCard: {
-    gap: theme.spacing.sm,
-  },
-  periodButton: {
-    alignItems: "center",
-    backgroundColor: theme.colors.primarySoft,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 6,
-    minHeight: 36,
-    paddingHorizontal: 12,
-  },
-  periodButtonText: {
-    color: theme.colors.primaryDeep,
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  periodModalBackdrop: {
+  realBlurHeroMilky: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(24, 16, 44, 0.18)",
+    backgroundColor: "rgba(247,253,253,0.34)",
   },
-  periodModalCard: {
-    gap: theme.spacing.md,
-    width: "100%",
+  realBlurHeroTopHaze: {
+    backgroundColor: "rgba(255,255,255,0.46)",
+    borderRadius: 80,
+    height: "42%",
+    left: "5%",
+    position: "absolute",
+    top: "4%",
+    width: "82%",
   },
-  periodModalHeader: {
-    gap: 6,
+  realBlurHeroWarmBleed: {
+    backgroundColor: "rgba(255,180,158,0.13)",
+    borderRadius: 80,
+    bottom: "-18%",
+    height: "58%",
+    left: "-12%",
+    position: "absolute",
+    transform: [{ rotate: "-16deg" }],
+    width: "58%",
   },
-  periodModalRoot: {
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "center",
-    padding: theme.spacing.container,
+  realBlurHeroWrap: {
+    elevation: 14,
+    overflow: "hidden",
+    position: "absolute",
+    shadowColor: "#000000",
+    shadowOffset: { height: 14, width: 0 },
+    shadowOpacity: 0.32,
+    shadowRadius: 24,
+    zIndex: 8,
   },
-  periodModalSubtitle: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  periodModalTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 18,
-    fontWeight: "800",
-    letterSpacing: -0.3,
-  },
-  periodOptionButton: {
-    alignItems: "center",
-    backgroundColor: theme.colors.surfaceSoft,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    minHeight: 48,
-    paddingHorizontal: theme.spacing.md,
-    justifyContent: "center",
-  },
-  periodOptionButtonActive: {
-    backgroundColor: theme.colors.primarySoft,
-    borderColor: theme.colors.primary,
-  },
-  periodOptionList: {
-    gap: theme.spacing.sm,
-  },
-  periodOptionText: {
-    color: theme.colors.textPrimary,
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  periodOptionTextActive: {
-    color: theme.colors.primaryDeep,
-  },
-  sectionLabel: {
-    color: theme.colors.textPrimary,
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  summaryHelper: {
-    color: theme.colors.textMuted,
+  hintText: {
+    color: "rgba(202,211,225,0.62)",
     fontSize: 12,
-    fontWeight: "600",
-    marginTop: 3,
+    fontWeight: "500",
+    letterSpacing: 0.96,
+    textAlign: "center",
+    textShadowColor: "rgba(160,180,220,0.18)",
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 18,
   },
-  summaryLabel: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: "700",
+
+
+
+
+
+
+
+
+
+
+  logoHighlight: {
+    color: "rgba(255,255,255,0.45)",
+    fontSize: 48,
+    fontWeight: "500",
+    letterSpacing: 9.6,
+    lineHeight: 62,
+    position: "absolute",
+    textShadowColor: "rgba(255,255,255,0.24)",
+    textShadowOffset: { width: 0, height: -1 },
+    textShadowRadius: 8,
+    top: -1,
   },
-  summaryStrip: {
+  logoShadow: {
+    color: "rgba(70,76,84,0.64)",
+    fontSize: 48,
+    fontWeight: "500",
+    letterSpacing: 9.6,
+    lineHeight: 62,
+    position: "absolute",
+    textShadowColor: "rgba(0,0,0,0.85)",
+    textShadowOffset: { width: 0, height: 6 },
+    textShadowRadius: 12,
+    top: 4,
+  },
+  logoText: {
+    color: "rgba(246,249,255,0.94)",
+    fontSize: 48,
+    fontWeight: "500",
+    letterSpacing: 9.6,
+    lineHeight: 62,
+    textShadowColor: "rgba(255,255,255,0.32)",
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 4,
+  },
+  logoWrap: {
     alignItems: "center",
-    borderBottomColor: theme.colors.divider,
-    borderBottomWidth: 1,
-    borderTopColor: theme.colors.divider,
-    borderTopWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 14,
-  },
-  summaryValue: {
-    color: theme.colors.textPrimary,
-    fontSize: 22,
-    fontWeight: "900",
-    letterSpacing: -0.6,
-  },
-  tableAmountColumn: {
-    flex: 1,
-    textAlign: "right",
-  },
-  tableCard: {
-    gap: 0,
-  },
-  tableCellText: {
-    color: theme.colors.textSecondary,
-    flex: 0.7,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  tableCellTextStrong: {
-    color: theme.colors.textPrimary,
-    fontSize: 13,
-    fontWeight: "900",
-  },
-  tableColorDot: {
-    borderRadius: 5,
-    height: 10,
-    width: 10,
-  },
-  tableHeader: {
-    borderBottomColor: theme.colors.divider,
-    borderBottomWidth: 1,
-    borderTopColor: theme.colors.divider,
-    borderTopWidth: 1,
-    flexDirection: "row",
-    paddingVertical: 9,
-  },
-  tableHeaderText: {
-    color: theme.colors.textMuted,
-    flex: 0.7,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  tableNameColumn: {
-    flex: 1.4,
-  },
-  tableNameCell: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 7,
-    minWidth: 0,
-  },
-  tableNameText: {
-    color: theme.colors.textSecondary,
-    flex: 1,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  tableRow: {
-    alignItems: "center",
-    borderBottomColor: theme.colors.divider,
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    minHeight: 46,
-    paddingVertical: 10,
-  },
-  segmentButton: {
-    alignItems: "center",
-    borderRadius: theme.radius.pill,
-    flex: 1,
+    height: 72,
     justifyContent: "center",
-    minHeight: 44,
-    paddingHorizontal: theme.spacing.sm,
+    minWidth: 310,
+    position: "absolute",
+    zIndex: 2,
   },
-  segmentButtonActive: {
-    backgroundColor: theme.colors.surfaceStrong,
-  },
-  segmentText: {
-    color: theme.colors.textMuted,
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  segmentTextActive: {
-    color: theme.colors.textInverse,
-  },
-  segmentedControl: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: theme.spacing.xs,
-    padding: theme.spacing.xs,
-  },
-  stack: {
-    gap: theme.spacing.md,
-  },
-  trendBar: {
-    borderRadius: theme.radius.pill,
-    width: 14,
-  },
-  trendBarNegative: {
-    backgroundColor: theme.colors.warning,
-  },
-  trendBarPositive: {
-    backgroundColor: theme.colors.primary,
-  },
-  trendBarTrack: {
+  root: {
     alignItems: "center",
+    backgroundColor: "#050609",
     flex: 1,
-    justifyContent: "flex-end",
+    overflow: "hidden",
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    position: "relative",
   },
-  trendChart: {
-    alignItems: "stretch",
-    backgroundColor: theme.colors.surfaceElevated,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    height: 118,
-    justifyContent: "space-between",
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-  },
-  trendColumn: {
-    alignItems: "center",
-    flex: 1,
-    gap: 6,
-    justifyContent: "flex-end",
-  },
-  trendHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  trendLabel: {
-    color: theme.colors.textMuted,
-    fontSize: 10,
-    fontWeight: "600",
-  },
-  trendSection: {
-    gap: theme.spacing.sm,
-  },
+
+
+
 });
+
+

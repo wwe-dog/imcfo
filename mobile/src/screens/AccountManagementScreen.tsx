@@ -8,7 +8,18 @@ import {
 } from "../domain/accounting/reconciliationRules";
 import type { AccountInput } from "../domain/accounting/transactionRules";
 import type { Account, AccountType, Transaction } from "../domain/models";
-import AppIcon, { type AppIconName } from "../components/AppIcon";
+import type { AppIconName } from "../components/AppIcon";
+import {
+  AmountText,
+  BottomSheetFrame,
+  DangerActionButton,
+  InfoLineRow,
+  LineListRow,
+  SectionCard,
+  StatusTag,
+  SummaryHeroCard,
+  TopBar as FinanceTopBar,
+} from "../components/financeUI";
 import ScreenTransition from "../components/ScreenTransition";
 import { sharedStyles, theme } from "../styles/theme";
 import { formatCurrency } from "../utils/formatters";
@@ -63,6 +74,15 @@ interface AccountCategoryMeta {
   countUnit: string;
 }
 
+type AccountAccent = "blue" | "green" | "orange" | "purple" | "red";
+
+interface AccountGroupMeta {
+  title: string;
+  subtitle: string;
+  types: AccountType[];
+  accent: AccountAccent;
+}
+
 const accountCategories: AccountCategoryMeta[] = [
   { type: "cash", label: "现金账户", detailTitle: "现金账户", countUnit: "个账户" },
   { type: "bank", label: "银行卡", detailTitle: "银行卡账户", countUnit: "张卡" },
@@ -72,6 +92,13 @@ const accountCategories: AccountCategoryMeta[] = [
   { type: "fund", label: "基金账户", detailTitle: "基金账户", countUnit: "个账户" },
   { type: "creditCard", label: "信用卡", detailTitle: "信用卡", countUnit: "张卡" },
   { type: "other", label: "其他账户", detailTitle: "其他账户", countUnit: "个账户" },
+];
+
+const accountGroups: AccountGroupMeta[] = [
+  { title: "现金与活期", subtitle: "现金、微信、支付宝", types: ["cash", "wechat", "alipay"], accent: "orange" },
+  { title: "信用与借记", subtitle: "银行卡、信用卡", types: ["bank", "creditCard"], accent: "blue" },
+  { title: "投资账户", subtitle: "证券、基金", types: ["securities", "fund"], accent: "purple" },
+  { title: "其他", subtitle: "其他自定义账户", types: ["other"], accent: "green" },
 ];
 
 const emptyForm = (type: AccountType = "bank"): AccountFormState => ({
@@ -467,6 +494,8 @@ export default function AccountManagementScreen({
     <AccountFormSheet
       form={form}
       isSaving={isSaving}
+      onDelete={selectedAccount ? () => handleDelete(selectedAccount) : undefined}
+      onDisable={selectedAccount ? () => handleDisable(selectedAccount) : undefined}
       onClose={closeFormSheet}
       onOpenReconciliation={selectedAccount ? () => openAccountReconciliation(selectedAccount) : undefined}
       onSave={handleSave}
@@ -489,21 +518,31 @@ export default function AccountManagementScreen({
   if (route.name === "categoryDetail") {
     const meta = getCategoryMeta(route.type);
     const categoryAccounts = accounts.filter((account) => normalizeAccountType(account.type) === route.type);
+    const categoryAccountIds = new Set(categoryAccounts.map((account) => account.id));
+    const recentCategoryTransactions = transactions
+      .filter(
+        (transaction) =>
+          categoryAccountIds.has(transaction.accountId) ||
+          (transaction.counterAccountId ? categoryAccountIds.has(transaction.counterAccountId) : false),
+      )
+      .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
+      .slice(0, 3);
 
     return (
       <ScreenTransition animateOnMount transitionKey={`account-category-${route.type}`} variant="drilldown">
         <View style={styles.stack}>
-          <TopBar onBack={handleBack} onAdd={() => openCreateForm(route.type, route.type)} title={meta.detailTitle} />
+          <FinanceTopBar
+            onBack={handleBack}
+            onRightPress={() => openCreateForm(route.type, route.type)}
+            title={meta.detailTitle}
+          />
           <CategorySummaryCard accounts={categoryAccounts} meta={meta} />
-          <View style={styles.listSection}>
-            <Text style={sharedStyles.sectionTitle}>具体账户</Text>
+          <SectionCard title="账户列表">
             {categoryAccounts.length > 0 ? (
               categoryAccounts.map((account) => (
                 <AccountDetailRow
                   account={account}
                   key={account.id}
-                  onDelete={() => handleDelete(account)}
-                  onDisable={() => handleDisable(account)}
                   onEdit={() => openEditForm(account, route.type)}
                 />
               ))
@@ -518,7 +557,27 @@ export default function AccountManagementScreen({
                 </Pressable>
               </View>
             )}
-          </View>
+          </SectionCard>
+
+          <SectionCard right={<Text style={styles.groupSubtitle}>最近 3 笔</Text>} title="近期变动">
+            {recentCategoryTransactions.length > 0 ? (
+              recentCategoryTransactions.map((transaction) => (
+                <LineListRow
+                  accent={transaction.amount >= 0 ? "green" : "orange"}
+                  amount={formatCurrency(transaction.amount)}
+                  icon="transaction"
+                  key={transaction.id}
+                  subtitle={`${transaction.date.slice(5, 10)} · ${transaction.category}`}
+                  title={transaction.note || transaction.category}
+                />
+              ))
+            ) : (
+              <View style={styles.emptyStateBox}>
+                <Text style={styles.emptyStateTitle}>暂无近期变动</Text>
+                <Text style={styles.emptyStateDescription}>这个分类下暂时没有可展示的交易记录。</Text>
+              </View>
+            )}
+          </SectionCard>
         </View>
         {renderAccountFormSheet()}
         {renderReconciliationModal()}
@@ -528,73 +587,45 @@ export default function AccountManagementScreen({
 
   return (
     <View style={styles.stack}>
-      <TopBar onBack={handleBack} onAdd={() => openCreateForm()} title="账户管理" />
-      <View style={styles.overviewCard}>
-        <View>
-          <Text style={styles.overviewLabel}>账户余额合计</Text>
-          <Text style={styles.overviewValue}>{formatCurrency(enabledAssetBalance)}</Text>
-          <Text style={styles.overviewHint}>不含信用卡欠款</Text>
+      <FinanceTopBar onBack={handleBack} onRightPress={() => openCreateForm()} title="账户管理" />
+      <SummaryHeroCard>
+        <View style={styles.overviewSummaryGrid}>
+          <View style={styles.overviewSummaryItem}>
+            <Text style={styles.overviewLabel}>账户总数</Text>
+            <AmountText size="large">{`${accounts.length} 个`}</AmountText>
+            <Text style={styles.overviewHint}>已纳入总资产 {enabledAccounts.length} 个</Text>
+          </View>
+          <View style={styles.overviewSummaryItem}>
+            <Text style={styles.overviewLabel}>可用资金</Text>
+            <AmountText size="large">{formatCurrency(enabledAssetBalance)}</AmountText>
+            <Text style={styles.overviewHint}>不含信用卡欠款 {formatCurrency(enabledCreditCardDebt)}</Text>
+          </View>
         </View>
-        <View style={styles.overviewRight}>
-          <Text style={styles.enabledBadgeText}>启用账户 {enabledAccounts.length} 个</Text>
-          <Text style={styles.creditDebtText}>信用卡欠款 {formatCurrency(enabledCreditCardDebt)}</Text>
-        </View>
-      </View>
+      </SummaryHeroCard>
 
-      <View style={styles.listSection}>
-        <Text style={sharedStyles.sectionTitle}>账户大类总览</Text>
-        {accountCategories.map((category) => {
-          const categoryAccounts = accounts.filter((account) => normalizeAccountType(account.type) === category.type);
-          const categoryAmount = getCategoryAmount(accounts, category.type);
+      {accountGroups.map((group) => (
+        <SectionCard key={group.title} right={<Text style={styles.groupSubtitle}>{group.subtitle}</Text>} title={group.title}>
+          {group.types.map((type) => {
+            const category = getCategoryMeta(type);
+            const categoryAccounts = accounts.filter((account) => normalizeAccountType(account.type) === type);
+            const categoryAmount = getCategoryAmount(accounts, type);
 
-          return (
-            <Pressable
-              key={category.type}
-              onPress={() => openCategoryDetail(category.type)}
-              style={styles.categoryRow}
-            >
-              <View style={styles.categoryIcon}>
-                <AppIcon color={theme.colors.primaryDeep} name={getAccountTypeIcon(category.type)} size={20} />
-              </View>
-              <View style={styles.categoryMain}>
-                <Text style={styles.categoryTitle}>{category.label}</Text>
-                <Text style={styles.categorySubtitle}>
-                  {categoryAccounts.length} {category.countUnit}
-                </Text>
-              </View>
-              <View style={styles.categoryRight}>
-                <Text style={styles.categoryAmount}>{formatCategoryAmount(category.type, categoryAmount)}</Text>
-                <AppIcon color={theme.colors.textMuted} name="chevronRight" size={17} />
-              </View>
-            </Pressable>
-          );
-        })}
-      </View>
+            return (
+              <LineListRow
+                accent={group.accent}
+                amount={formatCategoryAmount(type, categoryAmount)}
+                icon={getAccountTypeIcon(type)}
+                key={type}
+                onPress={() => openCategoryDetail(type)}
+                subtitle={`${categoryAccounts.length} ${category.countUnit}`}
+                title={category.label}
+              />
+            );
+          })}
+        </SectionCard>
+      ))}
       {renderAccountFormSheet()}
       {renderReconciliationModal()}
-    </View>
-  );
-}
-
-interface TopBarProps {
-  actionLabel?: string;
-  onBack: () => void;
-  onAdd: () => void;
-  title: string;
-}
-
-function TopBar({ actionLabel = "新增", onBack, onAdd, title }: TopBarProps) {
-  return (
-    <View style={styles.headerRow}>
-      <Pressable onPress={onBack} style={styles.backButton}>
-        <AppIcon color={theme.colors.backButtonText} name="back" size={15} strokeWidth={2.2} />
-        <Text style={styles.backButtonText}>返回</Text>
-      </Pressable>
-      <Text style={styles.pageTitle}>{title}</Text>
-      <Pressable onPress={onAdd} style={styles.addButton}>
-        <AppIcon color="#FFFFFF" name="add" size={16} strokeWidth={2.1} />
-        <Text style={styles.addButtonText}>{actionLabel}</Text>
-      </Pressable>
     </View>
   );
 }
@@ -610,58 +641,48 @@ function CategorySummaryCard({ accounts, meta }: CategorySummaryCardProps) {
   const creditLimitTotal = accounts.reduce((sum, account) => sum + (account.creditLimit ?? 0), 0);
 
   return (
-    <View style={styles.summaryCard}>
-      <Text style={styles.summaryLabel}>{meta.type === "creditCard" ? "信用卡合计" : `${meta.label}合计`}</Text>
-      <Text style={styles.summaryValue}>{formatCategoryAmount(meta.type, total)}</Text>
-      {meta.type === "creditCard" ? (
-        <Text style={styles.summaryHint}>信用额度 {formatCurrency(creditLimitTotal)}</Text>
-      ) : null}
-      <Text style={styles.summaryHint}>启用账户 {enabledCount} 个</Text>
-    </View>
+    <SummaryHeroCard style={styles.categorySummaryStrip}>
+      <View style={styles.summaryStripItem}>
+        <Text style={styles.summaryLabel}>账户数</Text>
+        <AmountText size="normal">{`${enabledCount} 个`}</AmountText>
+      </View>
+      <View style={styles.summaryStripDivider} />
+      <View style={styles.summaryStripItem}>
+        <Text style={styles.summaryLabel}>合计金额</Text>
+        <AmountText tone={meta.type === "creditCard" ? "negative" : "default"} size="normal">
+          {formatCategoryAmount(meta.type, total)}
+        </AmountText>
+        {meta.type === "creditCard" ? <Text style={styles.summaryHint}>信用额度 {formatCurrency(creditLimitTotal)}</Text> : null}
+      </View>
+    </SummaryHeroCard>
   );
 }
 
 interface AccountDetailRowProps {
   account: Account;
-  onDelete: () => void;
-  onDisable: () => void;
   onEdit: () => void;
 }
 
-function AccountDetailRow({ account, onDelete, onDisable, onEdit }: AccountDetailRowProps) {
+function AccountDetailRow({ account, onEdit }: AccountDetailRowProps) {
   const enabled = isAccountEnabled(account);
   const isCreditCard = normalizeAccountType(account.type) === "creditCard";
+  const noteText = account.note ? ` · ${account.note}` : "";
+  const creditLimitText = isCreditCard && account.creditLimit ? ` · 额度 ${formatCurrency(account.creditLimit)}` : "";
 
   return (
-    <View style={styles.accountRow}>
-      <Pressable onPress={onEdit} style={styles.accountMain}>
-        <View style={styles.accountTitleRow}>
-          <Text style={styles.accountName}>{account.name}</Text>
-          <View style={[styles.statusPill, !enabled && styles.statusPillMuted]}>
-            <AppIcon
-              color={enabled ? theme.colors.success : theme.colors.textMuted}
-              name={enabled ? "enabled" : "disabled"}
-              size={12}
-              strokeWidth={2}
-            />
-            <Text style={[styles.statusBadge, !enabled && styles.statusBadgeMuted]}>{enabled ? "启用" : "停用"}</Text>
-          </View>
+    <LineListRow
+      accent={enabled ? "orange" : "red"}
+      icon={getAccountTypeIcon(account.type)}
+      onPress={onEdit}
+      right={
+        <View style={styles.accountRowRight}>
+          <Text style={styles.accountRowAmount}>{formatAccountBalance(account)}</Text>
+          <StatusTag text={enabled ? "纳入" : "未纳入"} tone={enabled ? "green" : "red"} />
         </View>
-        <Text style={styles.accountBalance}>{formatAccountBalance(account)}</Text>
-        {isCreditCard && account.creditLimit ? (
-          <Text style={styles.accountMeta}>信用额度 {formatCurrency(account.creditLimit)}</Text>
-        ) : null}
-        <Text style={styles.accountMeta}>用途：{account.note || "未填写"}</Text>
-      </Pressable>
-      <View style={styles.rowActionGroup}>
-        <Pressable onPress={onDisable} style={styles.smallActionButton}>
-          <Text style={styles.smallActionText}>{enabled ? "停用" : "已停用"}</Text>
-        </Pressable>
-        <Pressable onPress={onDelete} style={styles.smallDangerButton}>
-          <Text style={styles.smallDangerText}>删除</Text>
-        </Pressable>
-      </View>
-    </View>
+      }
+      subtitle={`${getAccountTypeLabel(account.type)}${creditLimitText}${noteText || " · 未填写备注"}`}
+      title={account.name}
+    />
   );
 }
 
@@ -669,6 +690,8 @@ interface AccountFormSheetProps {
   form: AccountFormState;
   isSaving: boolean;
   onClose: () => void;
+  onDelete?: () => void;
+  onDisable?: () => void;
   onOpenReconciliation?: () => void;
   onSave: () => void;
   updateForm: (patch: Partial<AccountFormState>) => void;
@@ -679,6 +702,8 @@ function AccountFormSheet({
   form,
   isSaving,
   onClose,
+  onDelete,
+  onDisable,
   onOpenReconciliation,
   onSave,
   updateForm,
@@ -689,38 +714,35 @@ function AccountFormSheet({
 
   return (
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
-      <Pressable onPress={onClose} style={styles.sheetBackdrop}>
-        <Pressable onPress={(event) => event.stopPropagation()} style={styles.accountSheet}>
-          <View style={styles.sheetHeader}>
-            <Pressable disabled={isSaving} onPress={onClose} style={styles.sheetHeaderButton}>
-              <Text style={styles.sheetCancelText}>{isSaving ? "保存中" : "取消"}</Text>
-            </Pressable>
-            <Text style={styles.sheetTitle}>{isAccountDetail ? "账户详情" : "新增账户"}</Text>
-            <Pressable disabled={isSaving} onPress={onSave} style={styles.sheetHeaderButton}>
-              <Text style={[styles.sheetSaveText, isSaving && styles.sheetSaveTextDisabled]}>
-                {isSaving ? "保存中" : "保存"}
-              </Text>
-            </Pressable>
-          </View>
-          <ScrollView
-            contentContainerStyle={styles.formContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.formLineRow}>
-              <Text style={styles.fieldLabel}>账户名称</Text>
+      <BottomSheetFrame
+        onClose={onClose}
+        onSave={onSave}
+        saveDisabled={isSaving}
+        saveLabel={isSaving ? "保存中" : "保存"}
+        title={isAccountDetail ? "账户详情" : "新增账户"}
+      >
+        <ScrollView
+          contentContainerStyle={styles.formContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <InfoLineRow
+            label="账户名称"
+            value={
               <TextInput
                 onChangeText={(value) => updateForm({ name: value })}
                 placeholder="例如 招商银行卡"
                 placeholderTextColor={theme.colors.textMuted}
-                style={sharedStyles.input}
+                style={styles.lineInput}
                 value={form.name}
               />
-            </View>
+            }
+          />
 
-            <View style={styles.formLineRow}>
-              <Text style={styles.fieldLabel}>账户类型</Text>
-              {isAccountDetail ? (
+          <InfoLineRow
+            label="账户类型"
+            value={
+              isAccountDetail ? (
                 <View style={styles.readonlyTypePill}>
                   <Text style={styles.readonlyTypeText}>{accountTypeLabel}</Text>
                 </View>
@@ -741,11 +763,13 @@ function AccountFormSheet({
                     );
                   })}
                 </View>
-              )}
-            </View>
+              )
+            }
+          />
 
-            <View style={styles.formLineRow}>
-              <Text style={styles.fieldLabel}>{form.type === "creditCard" ? "当前欠款" : "当前余额"}</Text>
+          <InfoLineRow
+            label="当前余额"
+            value={
               <TextInput
                 keyboardType="decimal-pad"
                 onChangeText={(value) =>
@@ -753,93 +777,113 @@ function AccountFormSheet({
                 }
                 placeholder="0"
                 placeholderTextColor={theme.colors.textMuted}
-                style={sharedStyles.input}
+                style={styles.lineInput}
                 value={form.balance}
               />
-            </View>
+            }
+          />
 
-            {form.type === "creditCard" ? (
-              <>
-                <View style={styles.formLineRow}>
-                  <Text style={styles.fieldLabel}>信用额度</Text>
+          {form.type === "creditCard" ? (
+            <>
+              <InfoLineRow
+                label="信用额度"
+                value={
                   <TextInput
                     keyboardType="decimal-pad"
                     onChangeText={(value) => updateForm({ creditLimit: value })}
                     placeholder="可选"
                     placeholderTextColor={theme.colors.textMuted}
-                    style={sharedStyles.input}
+                    style={styles.lineInput}
                     value={form.creditLimit}
                   />
-                </View>
-                <View style={styles.formLineRow}>
+                }
+              />
+              <InfoLineRow
+                label="账单日期"
+                value={
                   <View style={styles.twoColumnRow}>
                     <View style={styles.twoColumnItem}>
-                      <Text style={styles.fieldLabel}>账单日</Text>
                       <TextInput
                         keyboardType="number-pad"
                         onChangeText={(value) => updateForm({ billDay: value })}
-                        placeholder="1-31"
+                        placeholder="账单日"
                         placeholderTextColor={theme.colors.textMuted}
-                        style={sharedStyles.input}
+                        style={styles.lineInput}
                         value={form.billDay}
                       />
                     </View>
                     <View style={styles.twoColumnItem}>
-                      <Text style={styles.fieldLabel}>还款日</Text>
                       <TextInput
                         keyboardType="number-pad"
                         onChangeText={(value) => updateForm({ repaymentDay: value })}
-                        placeholder="1-31"
+                        placeholder="还款日"
                         placeholderTextColor={theme.colors.textMuted}
-                        style={sharedStyles.input}
+                        style={styles.lineInput}
                         value={form.repaymentDay}
                       />
                     </View>
                   </View>
-                </View>
-              </>
-            ) : null}
+                }
+              />
+            </>
+          ) : null}
 
-            <View style={styles.formLineRow}>
-              <Text style={styles.fieldLabel}>是否启用</Text>
+          <InfoLineRow label="币种" value="人民币 CNY" />
+
+          <InfoLineRow
+            label="是否纳入总资产"
+            value={
               <View style={styles.chipWrap}>
                 <Pressable
                   onPress={() => updateForm({ isEnabled: true })}
                   style={[sharedStyles.chip, form.isEnabled && sharedStyles.chipActiveDark]}
                 >
-                  <Text style={[sharedStyles.chipText, form.isEnabled && sharedStyles.chipTextInverse]}>启用</Text>
+                  <Text style={[sharedStyles.chipText, form.isEnabled && sharedStyles.chipTextInverse]}>纳入</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => updateForm({ isEnabled: false })}
                   style={[sharedStyles.chip, !form.isEnabled && sharedStyles.chipActiveDark]}
                 >
-                  <Text style={[sharedStyles.chipText, !form.isEnabled && sharedStyles.chipTextInverse]}>停用</Text>
+                  <Text style={[sharedStyles.chipText, !form.isEnabled && sharedStyles.chipTextInverse]}>不纳入</Text>
                 </Pressable>
               </View>
-            </View>
+            }
+          />
 
-            <View style={styles.formLineRow}>
-              <Text style={styles.fieldLabel}>备注 / 用途</Text>
+          <InfoLineRow
+            label="备注"
+            value={
               <TextInput
                 multiline
                 onChangeText={(value) => updateForm({ note: value })}
                 placeholder="例如 工资卡 / 日常消费 / 投资账户"
                 placeholderTextColor={theme.colors.textMuted}
-                style={[sharedStyles.input, sharedStyles.textArea]}
+                style={[styles.lineInput, styles.lineTextArea]}
                 value={form.note}
               />
-            </View>
+            }
+          />
 
-            {isAccountDetail && onOpenReconciliation ? (
-              <View style={styles.formLineRow}>
+          {isAccountDetail && onOpenReconciliation ? (
+            <View style={styles.sheetActionBlock}>
                 <Pressable onPress={onOpenReconciliation} style={sharedStyles.secondaryButton}>
                   <Text style={sharedStyles.secondaryButtonText}>对账 / 更新余额</Text>
                 </Pressable>
-              </View>
-            ) : null}
-          </ScrollView>
-        </Pressable>
-      </Pressable>
+                {form.isEnabled && onDisable ? (
+                  <Pressable onPress={onDisable} style={sharedStyles.secondaryButton}>
+                    <Text style={sharedStyles.secondaryButtonText}>停用账户</Text>
+                  </Pressable>
+                ) : null}
+            </View>
+          ) : null}
+
+          {isAccountDetail && onDelete ? (
+            <View style={styles.sheetDangerBlock}>
+              <DangerActionButton label="删除账户" onPress={onDelete} />
+            </View>
+          ) : null}
+        </ScrollView>
+      </BottomSheetFrame>
     </Modal>
   );
 }
@@ -1164,6 +1208,16 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     textAlign: "right",
   },
+  accountRowAmount: {
+    color: theme.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "900",
+    textAlign: "right",
+  },
+  accountRowRight: {
+    alignItems: "flex-end",
+    gap: 5,
+  },
   fieldLabel: {
     color: theme.colors.textSecondary,
     fontSize: theme.typography.label,
@@ -1187,10 +1241,23 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     justifyContent: "space-between",
   },
+  groupSubtitle: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: "700",
+  },
   listSection: {
-    borderTopColor: theme.colors.divider,
-    borderTopWidth: 1,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
     gap: 2,
+    padding: theme.spacing.md,
+    shadowColor: theme.colors.shadowSoft,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    elevation: 2,
   },
   modalActions: {
     flexDirection: "row",
@@ -1225,15 +1292,29 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "900",
   },
+  overviewSummaryGrid: {
+    flexDirection: "row",
+    gap: theme.spacing.md,
+  },
+  overviewSummaryItem: {
+    flex: 1,
+    gap: 4,
+  },
   overviewCard: {
     alignItems: "center",
-    borderBottomColor: theme.colors.divider,
-    borderBottomWidth: 1,
-    borderTopColor: theme.colors.divider,
-    borderTopWidth: 1,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
     flexDirection: "row",
     justifyContent: "space-between",
+    paddingHorizontal: theme.spacing.md,
     paddingVertical: 14,
+    shadowColor: theme.colors.shadowSoft,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    elevation: 2,
   },
   overviewHint: {
     color: theme.colors.textMuted,
@@ -1288,8 +1369,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: theme.spacing.sm,
   },
+  sheetActionBlock: {
+    gap: theme.spacing.sm,
+    paddingTop: theme.spacing.md,
+  },
   sheetBackdrop: {
-    backgroundColor: "rgba(0, 0, 0, 0.18)",
+    backgroundColor: "rgba(0, 0, 0, 0.28)",
     flex: 1,
     justifyContent: "flex-end",
     paddingTop: theme.spacing.xl,
@@ -1320,6 +1405,9 @@ const styles = StyleSheet.create({
   },
   sheetSaveTextDisabled: {
     color: theme.colors.textMuted,
+  },
+  sheetDangerBlock: {
+    paddingTop: theme.spacing.sm,
   },
   sheetTitle: {
     color: theme.colors.textPrimary,
@@ -1389,6 +1477,18 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginTop: 2,
   },
+  summaryStripDivider: {
+    backgroundColor: theme.colors.divider,
+    width: 1,
+  },
+  summaryStripItem: {
+    flex: 1,
+    gap: 3,
+  },
+  categorySummaryStrip: {
+    flexDirection: "row",
+    gap: theme.spacing.md,
+  },
   summaryLabel: {
     color: theme.colors.textSecondary,
     fontSize: 13,
@@ -1406,6 +1506,21 @@ const styles = StyleSheet.create({
   twoColumnRow: {
     flexDirection: "row",
     gap: theme.spacing.sm,
+  },
+  lineInput: {
+    color: theme.colors.textPrimary,
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "800",
+    minHeight: 40,
+    padding: 0,
+    textAlign: "right",
+  },
+  lineTextArea: {
+    lineHeight: 21,
+    minHeight: 72,
+    paddingTop: 8,
+    textAlignVertical: "top",
   },
   diffBookValue: {
     color: theme.colors.textPrimary,

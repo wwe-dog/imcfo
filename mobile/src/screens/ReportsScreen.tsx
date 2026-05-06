@@ -1,19 +1,23 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import AppIcon, { type AppIconName } from "../components/AppIcon";
-import ReportBlock from "../components/ReportBlock";
 import type { Asset, Liability, ReportMode, ReportPeriod, Transaction } from "../domain/models";
 import { buildBalanceSheetSummary } from "../domain/reports/balanceSheet";
 import { buildCashFlowStatementSummary } from "../domain/reports/cashFlowStatement";
 import { buildIncomeStatementSummary } from "../domain/reports/incomeStatement";
-import { sharedStyles, theme } from "../styles/theme";
-import { formatCurrency } from "../utils/formatters";
+import { theme } from "../styles/theme";
 
 interface ReportsScreenProps {
   assets: Asset[];
   liabilities: Liability[];
   period: ReportPeriod;
   transactions: Transaction[];
+}
+
+interface ReportRow {
+  emphasis?: boolean;
+  label: string;
+  value: string;
 }
 
 type ReportKey = "balanceSheet" | "cashFlow" | "incomeStatement";
@@ -24,31 +28,226 @@ const reportTabs: Array<{ key: ReportKey; label: string }> = [
   { key: "incomeStatement", label: "利润表" },
 ];
 
-const getReportIcon = (key: ReportKey): AppIconName => {
-  switch (key) {
-    case "balanceSheet":
-      return "asset";
-    case "cashFlow":
-      return "cashFlow";
-    case "incomeStatement":
-      return "report";
-  }
+const formatMoney = (value: number): string =>
+  new Intl.NumberFormat("zh-CN", {
+    currency: "CNY",
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+    style: "currency",
+  }).format(value);
+
+const formatPercent = (value: number | null): string => {
+  if (value === null) return "不可计算";
+  return `${(value * 100).toFixed(1)}%`;
 };
 
-const getCashFlowDirection = (cashNetChange: number): string => {
-  if (cashNetChange > 0) return "本期现金以净流入为主。";
-  if (cashNetChange < 0) return "本期现金以净流出为主。";
-  return "本期现金整体保持平衡。";
+const formatPeriodLabel = (period: ReportPeriod): string => {
+  const [year, month] = period.startDate.split("-");
+  if (year && month) return `${year}年${Number(month)}月`;
+  return period.label || "本期";
 };
 
-const getBalanceHint = (
-  totalAssets: number,
-  totalLiabilities: number,
-  ownerEquity: number,
-): string => {
-  const isBalanced = Math.abs(totalAssets - (totalLiabilities + ownerEquity)) < 0.01;
-  return isBalanced ? "资产 = 负债 + 所有者权益" : "当前数据未平衡，请检查资产和负债录入。";
-};
+function Header({ periodLabel }: { periodLabel: string }) {
+  return (
+    <View style={styles.header}>
+      <View style={styles.brandRow}>
+        <View style={styles.brandCopy}>
+          <View style={styles.logoRow}>
+            <Text style={styles.logoText}>我为 </Text>
+            <Text style={styles.logoAccent}>CFO</Text>
+            <Text style={styles.versionBadge}>V0.1</Text>
+          </View>
+          <Text style={styles.brandSubtitle}>把自己当成一家公司经营</Text>
+        </View>
+
+        <View style={styles.periodControls}>
+          <View style={styles.periodPill}>
+            <Text style={styles.periodPillText}>{periodLabel}</Text>
+            <AppIcon color={theme.colors.textPrimary} name="chevronRight" size={13} strokeWidth={2.4} />
+          </View>
+          <View style={styles.calendarButton}>
+            <AppIcon color={theme.colors.textPrimary} name="calendar" size={23} strokeWidth={2} />
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.titleBlock}>
+        <Text style={styles.pageTitle}>财务报表</Text>
+        <Text style={styles.pageSubtitle}>个人财务三大报表预览</Text>
+      </View>
+    </View>
+  );
+}
+
+function MetaStrip({ periodLabel }: { periodLabel: string }) {
+  const items: Array<{ icon: AppIconName; label: string; value: string }> = [
+    { icon: "calendar", label: "报告期间", value: periodLabel },
+    { icon: "data", label: "单位", value: "人民币（元）" },
+    { icon: "reconcile", label: "报表口径", value: "个人财务" },
+    { icon: "report", label: "报表状态", value: "已生成" },
+  ];
+
+  return (
+    <View style={styles.metaStrip}>
+      {items.map((item, index) => (
+        <View key={item.label} style={[styles.metaItem, index < items.length - 1 && styles.metaDivider]}>
+          <View style={styles.metaLabelRow}>
+            <AppIcon color={theme.colors.warning} name={item.icon} size={17} strokeWidth={2} />
+            <Text numberOfLines={1} style={styles.metaLabel}>
+              {item.label}
+            </Text>
+          </View>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={styles.metaValue}>
+            {item.value}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function ReportCard({
+  footer,
+  icon,
+  onOpen,
+  rows,
+  title,
+}: {
+  footer?: string;
+  icon: AppIconName;
+  onOpen: () => void;
+  rows: ReportRow[];
+  title: string;
+}) {
+  return (
+    <View style={styles.reportCard}>
+      <View style={styles.cardHeader}>
+        <View style={styles.cardTitleGroup}>
+          <View style={styles.cardIcon}>
+            <AppIcon color="#FFFFFF" name={icon} size={27} strokeWidth={2.3} />
+          </View>
+          <Text style={styles.cardTitle}>{title}</Text>
+        </View>
+        <Pressable accessibilityRole="button" onPress={onOpen} style={styles.fullReportLink}>
+          <Text style={styles.fullReportText}>查看完整报表</Text>
+          <AppIcon color={theme.colors.warning} name="chevronRight" size={16} strokeWidth={2.5} />
+        </Pressable>
+      </View>
+
+      <View style={styles.table}>
+        {rows.map((row, index) => (
+          <View
+            key={`${row.label}-${index}`}
+            style={[
+              styles.tableRow,
+              index < rows.length - 1 && styles.tableDivider,
+              row.emphasis && styles.totalRow,
+            ]}
+          >
+            <Text style={[styles.rowLabel, row.emphasis && styles.totalLabel]}>{row.label}</Text>
+            <Text style={[styles.rowValue, row.emphasis && styles.totalValue]}>{row.value}</Text>
+          </View>
+        ))}
+      </View>
+
+      {footer ? <Text style={styles.cardFooter}>{footer}</Text> : null}
+    </View>
+  );
+}
+
+function FullReportPanel({
+  balanceRows,
+  cashFlowRows,
+  incomeRows,
+  mode,
+  onModeChange,
+  onReportChange,
+  selectedReport,
+}: {
+  balanceRows: ReportRow[];
+  cashFlowRows: ReportRow[];
+  incomeRows: ReportRow[];
+  mode: ReportMode;
+  onModeChange: (mode: ReportMode) => void;
+  onReportChange: (report: ReportKey) => void;
+  selectedReport: ReportKey;
+}) {
+  const isSimple = mode === "simple";
+  const rowsByReport: Record<ReportKey, ReportRow[]> = {
+    balanceSheet: isSimple ? balanceRows.slice(0, 3) : balanceRows,
+    cashFlow: isSimple ? [cashFlowRows[cashFlowRows.length - 1]] : cashFlowRows,
+    incomeStatement: incomeRows,
+  };
+  const titleByReport: Record<ReportKey, string> = {
+    balanceSheet: "资产负债表详情",
+    cashFlow: "现金流量表详情",
+    incomeStatement: "利润表详情",
+  };
+  const footerByReport: Record<ReportKey, string> = {
+    balanceSheet: "资产 = 负债 + 个人净资产",
+    cashFlow: "现金净变化 = 经营活动现金流 + 投资活动现金流 + 筹资活动现金流",
+    incomeStatement: "利润 = 收入 - 费用",
+  };
+
+  return (
+    <View style={styles.fullPanel}>
+      <View style={styles.fullPanelHeader}>
+        <Text style={styles.fullPanelTitle}>完整报表</Text>
+        <Text style={styles.fullPanelSubtitle}>保留原有报表切换和简易 / 专业视图</Text>
+      </View>
+
+      <View style={styles.reportSwitcher}>
+        {reportTabs.map((tab) => {
+          const isActive = selectedReport === tab.key;
+          return (
+            <Pressable
+              key={tab.key}
+              onPress={() => onReportChange(tab.key)}
+              style={[styles.reportTab, isActive && styles.reportTabActive]}
+            >
+              <Text style={[styles.reportTabText, isActive && styles.reportTabTextActive]}>{tab.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <View style={styles.modeSwitcher}>
+        <Pressable
+          onPress={() => onModeChange("simple")}
+          style={[styles.modeButton, isSimple && styles.modeButtonActive]}
+        >
+          <Text style={[styles.modeButtonText, isSimple && styles.modeButtonTextActive]}>简易版</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => onModeChange("professional")}
+          style={[styles.modeButton, !isSimple && styles.modeButtonActive]}
+        >
+          <Text style={[styles.modeButtonText, !isSimple && styles.modeButtonTextActive]}>专业版</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.fullReportBlock}>
+        <Text style={styles.fullReportTitle}>{titleByReport[selectedReport]}</Text>
+        <View style={styles.fullReportRows}>
+          {rowsByReport[selectedReport].map((row, index) => (
+            <View
+              key={`${selectedReport}-${row.label}-${index}`}
+              style={[
+                styles.fullReportRow,
+                index < rowsByReport[selectedReport].length - 1 && styles.tableDivider,
+                row.emphasis && styles.totalRow,
+              ]}
+            >
+              <Text style={[styles.rowLabel, row.emphasis && styles.totalLabel]}>{row.label}</Text>
+              <Text style={[styles.rowValue, row.emphasis && styles.totalValue]}>{row.value}</Text>
+            </View>
+          ))}
+        </View>
+        <Text style={styles.fullReportFooter}>{footerByReport[selectedReport]}</Text>
+      </View>
+    </View>
+  );
+}
 
 export default function ReportsScreen({
   assets,
@@ -56,10 +255,8 @@ export default function ReportsScreen({
   period,
   transactions,
 }: ReportsScreenProps) {
-  const [selectedReport, setSelectedReport] = useState<ReportKey>("balanceSheet");
+  const [selectedReport, setSelectedReport] = useState<ReportKey | null>(null);
   const [mode, setMode] = useState<ReportMode>("simple");
-  const isSimple = mode === "simple";
-
   const balanceSheet = useMemo(() => buildBalanceSheetSummary(assets, liabilities), [assets, liabilities]);
   const incomeStatement = useMemo(() => buildIncomeStatementSummary(transactions), [transactions]);
   const cashFlowStatement = useMemo(
@@ -67,232 +264,434 @@ export default function ReportsScreen({
     [transactions],
   );
 
-  const renderCurrentReport = () => {
-    if (selectedReport === "balanceSheet") {
-      return (
-        <ReportBlock
-          title="资产负债表"
-          subtitle={
-            isSimple
-              ? "先看清你现在一共拥有多少、欠了多少，以及真正属于自己的净资产。"
-              : "按专业口径展示资产、负债和所有者权益之间的平衡关系。"
-          }
-          rows={
-            isSimple
-              ? [
-                  { label: "总资产", value: formatCurrency(balanceSheet.totalAssets) },
-                  { label: "总负债", value: formatCurrency(balanceSheet.totalLiabilities) },
-                  {
-                    label: "所有者权益（个人净资产）",
-                    value: formatCurrency(balanceSheet.ownerEquity),
-                  },
-                ]
-              : [
-                  { label: "资产", value: formatCurrency(balanceSheet.totalAssets) },
-                  { label: "负债", value: formatCurrency(balanceSheet.totalLiabilities) },
-                  { label: "所有者权益", value: formatCurrency(balanceSheet.ownerEquity) },
-                ]
-          }
-          footer={
-            isSimple
-              ? "这张表回答：我现在真正属于自己的钱还有多少。"
-              : getBalanceHint(
-                  balanceSheet.totalAssets,
-                  balanceSheet.totalLiabilities,
-                  balanceSheet.ownerEquity,
-                )
-          }
-        />
-      );
-    }
-
-    if (selectedReport === "incomeStatement") {
-      return (
-        <ReportBlock
-          title="利润表"
-          subtitle={
-            isSimple
-              ? "先看本期赚了多少、花了多少，最后剩下多少利润。"
-              : "按专业口径直接展示收入、费用和利润的关系。"
-          }
-          rows={
-            isSimple
-              ? [
-                  { label: "本期收入", value: formatCurrency(incomeStatement.totalIncome) },
-                  { label: "本期费用", value: formatCurrency(incomeStatement.totalExpenses) },
-                  { label: "本期利润", value: formatCurrency(incomeStatement.profit) },
-                ]
-              : [
-                  { label: "收入", value: formatCurrency(incomeStatement.totalIncome) },
-                  { label: "费用", value: formatCurrency(incomeStatement.totalExpenses) },
-                  { label: "利润", value: formatCurrency(incomeStatement.profit) },
-                ]
-          }
-          footer={isSimple ? "这张表回答：本期到底是盈利还是亏损。" : "利润 = 收入 - 费用"}
-        />
-      );
-    }
-
-    return (
-      <ReportBlock
-        title="现金流量表"
-        subtitle={
-          isSimple
-            ? "先看现金最终是增加还是减少，再判断本期现金压力。"
-            : "按专业口径区分经营、投资、筹资三类现金流。"
-        }
-        rows={
-          isSimple
-            ? [
-                { label: "现金净变化", value: formatCurrency(cashFlowStatement.cashNetChange) },
-                { label: "主要现金流方向", value: getCashFlowDirection(cashFlowStatement.cashNetChange) },
-              ]
-            : [
-                { label: "经营活动现金流", value: formatCurrency(cashFlowStatement.operatingCashFlow) },
-                { label: "投资活动现金流", value: formatCurrency(cashFlowStatement.investingCashFlow) },
-                { label: "筹资活动现金流", value: formatCurrency(cashFlowStatement.financingCashFlow) },
-                { label: "现金净变化", value: formatCurrency(cashFlowStatement.cashNetChange) },
-              ]
-        }
-        footer={
-          isSimple
-            ? "这张表回答：现金主要是流进来了，还是流出去了。"
-            : "现金净变化 = 经营活动现金流 + 投资活动现金流 + 筹资活动现金流"
-        }
-      />
-    );
-  };
+  const periodLabel = formatPeriodLabel(period);
+  const balanceRows: ReportRow[] = [
+    { label: "资产总计", value: formatMoney(balanceSheet.totalAssets), emphasis: true },
+    { label: "负债合计", value: formatMoney(balanceSheet.totalLiabilities), emphasis: true },
+    { label: "个人净资产", value: formatMoney(balanceSheet.ownerEquity), emphasis: true },
+  ];
+  const cashFlowRows: ReportRow[] = [
+    { label: "经营活动净现金流", value: formatMoney(cashFlowStatement.operatingCashFlow), emphasis: true },
+    { label: "投资活动净现金流", value: formatMoney(cashFlowStatement.investingCashFlow) },
+    { label: "筹资活动净现金流", value: formatMoney(cashFlowStatement.financingCashFlow) },
+    { label: "现金及现金等价物净增加额", value: formatMoney(cashFlowStatement.cashNetChange), emphasis: true },
+  ];
+  const incomeRows: ReportRow[] = [
+    { label: "收入合计", value: formatMoney(incomeStatement.totalIncome) },
+    { label: "费用合计", value: formatMoney(incomeStatement.totalExpenses) },
+    { label: "本月结余", value: formatMoney(incomeStatement.profit), emphasis: true },
+    { label: "结余率", value: formatPercent(incomeStatement.savingsRate) },
+  ];
 
   return (
     <View style={styles.stack}>
-      <View style={sharedStyles.pageHeaderCentered}>
-        <Text style={styles.title}>财务报表详情</Text>
-        <Text style={sharedStyles.pageCopy}>{period.label}</Text>
-      </View>
+      <Header periodLabel={periodLabel} />
+      <MetaStrip periodLabel={periodLabel} />
 
-      <View style={[sharedStyles.card, styles.controlCard]}>
-        <View style={styles.reportSwitcher}>
-          {reportTabs.map((tab) => {
-            const isActive = selectedReport === tab.key;
-            return (
-              <Pressable
-                key={tab.key}
-                onPress={() => setSelectedReport(tab.key)}
-                style={[sharedStyles.chip, styles.reportButton, isActive && sharedStyles.chipActiveLight]}
-              >
-                <AppIcon
-                  color={isActive ? theme.colors.primaryDeep : theme.colors.textMuted}
-                  name={getReportIcon(tab.key)}
-                  size={16}
-                  strokeWidth={2}
-                />
-                <Text style={sharedStyles.chipText}>{tab.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+      <ReportCard
+        footer="资产 = 负债 + 个人净资产"
+        icon="netWorth"
+        onOpen={() => setSelectedReport("balanceSheet")}
+        rows={balanceRows}
+        title="资产负债表（预览）"
+      />
 
-        <View style={styles.modeRow}>
-          <Text style={styles.modeLabel}>简易版</Text>
-          <View style={styles.modeSwitchTrack}>
-            <Pressable
-              onPress={() => setMode("simple")}
-              style={[styles.modeSwitchThumb, isSimple ? styles.modeSwitchThumbLeft : styles.modeSwitchThumbRight]}
-            />
-            <Pressable onPress={() => setMode("simple")} style={styles.modeSwitchHitArea} />
-            <Pressable
-              onPress={() => setMode("professional")}
-              style={[styles.modeSwitchHitArea, styles.modeSwitchRightHitArea]}
-            />
-          </View>
-          <Text style={styles.modeLabel}>专业版</Text>
-        </View>
+      <ReportCard
+        footer="单位：人民币（元）"
+        icon="cashFlow"
+        onOpen={() => setSelectedReport("cashFlow")}
+        rows={cashFlowRows}
+        title="现金流量表（预览）"
+      />
 
-        <Text style={styles.modeHint}>
-          {isSimple
-            ? "简易版用更直白的语言，先帮你看懂当前个人财务状态。"
-            : "专业版保留财务报表表达，便于核对底层会计含义。"}
-        </Text>
-      </View>
+      <ReportCard
+        icon="chart"
+        onOpen={() => setSelectedReport("incomeStatement")}
+        rows={incomeRows}
+        title="利润表（预览）"
+      />
 
-      {renderCurrentReport()}
+      {selectedReport ? (
+        <FullReportPanel
+          balanceRows={balanceRows}
+          cashFlowRows={cashFlowRows}
+          incomeRows={incomeRows}
+          mode={mode}
+          onModeChange={setMode}
+          onReportChange={setSelectedReport}
+          selectedReport={selectedReport}
+        />
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  controlCard: {
-    gap: 14,
+  brandCopy: {
+    flex: 1,
+    gap: 6,
+    minWidth: 0,
   },
-  modeHint: {
+  brandRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+  },
+  brandSubtitle: {
     color: theme.colors.textMuted,
-    fontSize: 13,
+    fontSize: 15,
+    fontWeight: "700",
+    lineHeight: 21,
+  },
+  calendarButton: {
+    alignItems: "center",
+    height: 48,
+    justifyContent: "center",
+    width: 36,
+  },
+  cardFooter: {
+    backgroundColor: theme.colors.surfaceElevated,
+    borderRadius: theme.radius.md,
+    color: theme.colors.textMuted,
+    fontSize: 14,
+    fontWeight: "800",
     lineHeight: 20,
+    marginTop: 2,
+    overflow: "hidden",
+    paddingVertical: 11,
     textAlign: "center",
   },
-  modeLabel: {
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  modeRow: {
+  cardHeader: {
     alignItems: "center",
+    borderBottomColor: theme.colors.divider,
+    borderBottomWidth: 1,
     flexDirection: "row",
-    gap: theme.spacing.sm,
+    justifyContent: "space-between",
+    paddingBottom: 13,
+  },
+  cardIcon: {
+    alignItems: "center",
+    backgroundColor: "#E5A64E",
+    borderRadius: theme.radius.pill,
+    height: 48,
     justifyContent: "center",
+    width: 48,
   },
-  modeSwitchHitArea: {
-    bottom: 0,
-    left: 0,
-    position: "absolute",
-    top: 0,
-    width: "50%",
+  cardTitle: {
+    color: theme.colors.textPrimary,
+    flexShrink: 1,
+    fontSize: 21,
+    fontWeight: "900",
+    lineHeight: 28,
   },
-  modeSwitchRightHitArea: {
-    left: "50%",
-  },
-  modeSwitchThumb: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.pill,
-    height: 28,
-    position: "absolute",
-    top: 2,
-    width: 28,
-  },
-  modeSwitchThumbLeft: {
-    left: 2,
-  },
-  modeSwitchThumbRight: {
-    left: 34,
-  },
-  modeSwitchTrack: {
-    backgroundColor: theme.colors.surfaceSoft,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    height: 32,
-    position: "relative",
-    width: 64,
-  },
-  reportButton: {
+  cardTitleGroup: {
+    alignItems: "center",
     flex: 1,
     flexDirection: "row",
-    gap: 5,
-    minHeight: 38,
-    paddingHorizontal: 8,
+    gap: 11,
+    minWidth: 0,
+  },
+  fullReportLink: {
+    alignItems: "center",
+    borderRadius: theme.radius.md,
+    flexDirection: "row",
+    gap: 4,
+    marginLeft: 8,
+    minHeight: 36,
+    paddingHorizontal: 2,
+  },
+  fullReportText: {
+    color: theme.colors.warning,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  fullPanel: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    gap: 12,
+    padding: theme.spacing.md,
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 20,
+    elevation: 3,
+  },
+  fullPanelHeader: {
+    gap: 4,
+  },
+  fullPanelSubtitle: {
+    color: theme.colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  fullPanelTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 20,
+    fontWeight: "900",
+  },
+  fullReportBlock: {
+    gap: 10,
+  },
+  fullReportFooter: {
+    color: theme.colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  fullReportRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 48,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  fullReportRows: {
+    borderColor: theme.colors.divider,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  fullReportTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  header: {
+    gap: 30,
+    paddingTop: 8,
+  },
+  logoAccent: {
+    color: theme.colors.primary,
+    fontSize: 31,
+    fontWeight: "900",
+    lineHeight: 39,
+  },
+  logoRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  logoText: {
+    color: theme.colors.textPrimary,
+    fontSize: 31,
+    fontWeight: "900",
+    lineHeight: 39,
+  },
+  metaDivider: {
+    borderRightColor: theme.colors.divider,
+    borderRightWidth: 1,
+  },
+  metaItem: {
+    flex: 1,
+    gap: 9,
+    minWidth: 0,
+    paddingHorizontal: 10,
+    paddingVertical: 16,
+  },
+  metaLabel: {
+    color: theme.colors.textMuted,
+    flexShrink: 1,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  metaLabelRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    minWidth: 0,
+  },
+  metaStrip: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    flexDirection: "row",
+    overflow: "hidden",
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 20,
+    elevation: 3,
+  },
+  metaValue: {
+    color: theme.colors.textPrimary,
+    fontSize: 17,
+    fontWeight: "900",
+    lineHeight: 23,
+    textAlign: "center",
+  },
+  pageSubtitle: {
+    color: theme.colors.textMuted,
+    fontSize: 20,
+    fontWeight: "700",
+    lineHeight: 28,
+  },
+  pageTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 41,
+    fontWeight: "900",
+    lineHeight: 50,
+  },
+  periodControls: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    paddingTop: 3,
+  },
+  periodPill: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 7,
+    minHeight: 48,
+    paddingHorizontal: 14,
+    shadowColor: theme.colors.shadowSoft,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    elevation: 2,
+  },
+  periodPillText: {
+    color: theme.colors.textPrimary,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  modeButton: {
+    alignItems: "center",
+    borderRadius: theme.radius.md,
+    flex: 1,
+    minHeight: 40,
+    justifyContent: "center",
+  },
+  modeButtonActive: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.primary,
+    borderWidth: 1,
+  },
+  modeButtonText: {
+    color: theme.colors.textMuted,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  modeButtonTextActive: {
+    color: theme.colors.primaryDeep,
+  },
+  modeSwitcher: {
+    backgroundColor: theme.colors.surfaceElevated,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 4,
+    padding: 3,
+  },
+  reportCard: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    gap: 0,
+    overflow: "hidden",
+    paddingHorizontal: 12,
+    paddingTop: 20,
+    paddingBottom: 10,
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 20,
+    elevation: 3,
+  },
+  rowLabel: {
+    color: theme.colors.textPrimary,
+    flex: 1,
+    fontSize: 17,
+    fontWeight: "700",
+    lineHeight: 24,
+  },
+  rowValue: {
+    color: theme.colors.textPrimary,
+    fontSize: 17,
+    fontWeight: "700",
+    lineHeight: 24,
+    minWidth: 122,
+    textAlign: "right",
   },
   reportSwitcher: {
     flexDirection: "row",
     gap: 6,
   },
+  reportTab: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surfaceElevated,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    flex: 1,
+    minHeight: 40,
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+  reportTabActive: {
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.primary,
+  },
+  reportTabText: {
+    color: theme.colors.textMuted,
+    fontSize: 13,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  reportTabTextActive: {
+    color: theme.colors.primaryDeep,
+  },
   stack: {
     gap: theme.spacing.md,
   },
-  title: {
-    color: theme.colors.textPrimary,
-    fontSize: 26,
+  table: {
+    paddingTop: 5,
+  },
+  tableDivider: {
+    borderBottomColor: theme.colors.divider,
+    borderBottomWidth: 1,
+  },
+  tableRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 52,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  titleBlock: {
+    gap: 8,
+  },
+  totalLabel: {
     fontWeight: "900",
-    letterSpacing: -0.6,
-    textAlign: "center",
+  },
+  totalRow: {
+    backgroundColor: theme.colors.surfaceElevated,
+  },
+  totalValue: {
+    color: theme.colors.warning,
+    fontWeight: "900",
+  },
+  versionBadge: {
+    borderColor: theme.colors.borderStrong,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    color: theme.colors.primary,
+    fontSize: 17,
+    fontWeight: "900",
+    lineHeight: 23,
+    marginLeft: 8,
+    overflow: "hidden",
+    paddingHorizontal: 7,
+    paddingVertical: 1,
   },
 });

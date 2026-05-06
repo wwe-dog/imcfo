@@ -12,13 +12,21 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   UIManager,
   View,
 } from "react-native";
-import AppIcon from "../components/AppIcon";
+import AppIcon, { type AppIconName } from "../components/AppIcon";
+import {
+  AmountText,
+  IconTile,
+  InfoLineRow,
+  SearchFilterBar,
+  SectionCard,
+  SummaryHeroCard,
+  TopBar as FinanceTopBar,
+} from "../components/financeUI";
 import ScreenTransition from "../components/ScreenTransition";
-import type { Account, AccountType, Asset, Liability, Transaction, TransactionType } from "../domain/models";
+import type { Asset, Liability, Transaction, TransactionType } from "../domain/models";
 import {
   groupTransactionDisplayRecords,
   hydrateAllTransactionRecords,
@@ -40,7 +48,9 @@ interface TransactionRecordsScreenProps {
 const UNKNOWN_VALUE = "无";
 const RULE_BASED_VALUE = "按当前规则计算";
 
-if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+const isFabricRendererEnabled = Boolean((globalThis as { nativeFabricUIManager?: unknown }).nativeFabricUIManager);
+
+if (Platform.OS === "android" && !isFabricRendererEnabled && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
@@ -83,6 +93,8 @@ interface CalendarCell {
 
 interface TransactionSection {
   data: TransactionDisplayRecord[];
+  expenseTotalText: string;
+  incomeTotalText: string;
   monthKey: string;
   monthLabel: string;
 }
@@ -137,36 +149,11 @@ const transactionTypeLabels: Record<TransactionType, string> = {
 
 const getTypeLabel = (type: Transaction["type"]): string => transactionTypeLabels[type] ?? "未知类型";
 
-const getAccountName = (accounts: Account[], accountId?: string): string | undefined =>
-  accountId ? accounts.find((account) => account.id === accountId)?.name ?? "未知账户" : undefined;
-
 const getAssetName = (assets: Asset[], assetId?: string): string | undefined =>
   assetId ? assets.find((asset) => asset.id === assetId)?.name ?? "未知资产" : undefined;
 
 const getLiabilityName = (liabilities: Liability[], liabilityId?: string): string | undefined =>
   liabilityId ? liabilities.find((liability) => liability.id === liabilityId)?.name ?? "未知负债" : undefined;
-
-const getTransactionTitle = (transaction: Transaction): string =>
-  transaction.note?.trim() || transaction.category || getTypeLabel(transaction.type);
-
-const getTransactionDateTime = (transaction: Transaction): string => {
-  const createdAt = new Date(transaction.createdAt);
-  if (!Number.isNaN(createdAt.getTime())) {
-    const hours = String(createdAt.getHours()).padStart(2, "0");
-    const minutes = String(createdAt.getMinutes()).padStart(2, "0");
-    if (hours !== "00" || minutes !== "00") {
-      return `${transaction.date} ${hours}:${minutes}`;
-    }
-  }
-
-  return transaction.date;
-};
-
-const getMonthLabel = (date: string): string => {
-  const [year, month] = date.split("-");
-  if (!year || !month) return "未分组";
-  return `${year}年${Number(month)}月`;
-};
 
 const isCashInflow = (transaction: Transaction): boolean => {
   switch (transaction.type) {
@@ -187,11 +174,43 @@ const getAmountTone = (transaction: Transaction): "positive" | "negative" | "neu
   return isCashInflow(transaction) ? "positive" : "negative";
 };
 
-const formatSignedAmount = (transaction: Transaction): string => {
-  const tone = getAmountTone(transaction);
-  if (tone === "positive") return `+${formatCurrency(transaction.amount)}`;
-  if (tone === "negative") return `-${formatCurrency(transaction.amount)}`;
-  return formatCurrency(transaction.amount);
+const getTransactionAccent = (tone: TransactionDisplayRecord["amountTone"]): "green" | "orange" | "red" => {
+  if (tone === "positive") return "green";
+  if (tone === "negative") return "red";
+  return "orange";
+};
+
+const getTransactionIconName = (transaction: Transaction): AppIconName => {
+  if (transaction.cashFlowType === "nonCash") return "reconcile";
+  if (transaction.type === "transfer") return "cashFlow";
+  if (transaction.type.includes("investment")) return "securities";
+  if (transaction.type.includes("liability") || transaction.type.includes("repayment")) return "liability";
+  if (transaction.type.includes("creditCard")) return "card";
+  return isCashInflow(transaction) ? "wallet" : "transaction";
+};
+
+const getTransactionSubtitle = (record: TransactionDisplayRecord): string =>
+  [record.dateTime, record.typeLabel, record.categoryText, record.cashStatus].filter(Boolean).join(" · ");
+
+const summarizeMonthTransactions = (
+  records: TransactionDisplayRecord[],
+  rawTransactions?: Transaction[],
+): { expenseTotalText: string; incomeTotalText: string } => {
+  const source = records.length > 0 ? records.map((record) => record.transaction) : rawTransactions ?? [];
+  const totals = source.reduce(
+    (sum, transaction) => {
+      const tone = getAmountTone(transaction);
+      if (tone === "positive") return { ...sum, income: sum.income + transaction.amount };
+      if (tone === "negative") return { ...sum, expense: sum.expense + transaction.amount };
+      return sum;
+    },
+    { expense: 0, income: 0 },
+  );
+
+  return {
+    expenseTotalText: formatCurrency(totals.expense),
+    incomeTotalText: formatCurrency(totals.income),
+  };
 };
 
 const formatImpact = (value: number): string => {
@@ -278,67 +297,6 @@ const getNetWorthImpact = (transaction: Transaction): string => {
   }
 };
 
-const resolveAccountDisplay = (accounts: Account[], transaction: Transaction): string => {
-  const accountName = getAccountName(accounts, transaction.accountId);
-  const counterAccountName = getAccountName(accounts, transaction.counterAccountId);
-  if (accountName && counterAccountName) return `${accountName} → ${counterAccountName}`;
-  return accountName ?? counterAccountName ?? UNKNOWN_VALUE;
-};
-
-const resolveAccountDisplayFromMap = (
-  accountNameById: Map<string, string>,
-  transaction: Transaction,
-): string => {
-  const accountName = transaction.accountId ? accountNameById.get(transaction.accountId) : undefined;
-  const counterAccountName = transaction.counterAccountId ? accountNameById.get(transaction.counterAccountId) : undefined;
-  if (accountName && counterAccountName) return `${accountName} → ${counterAccountName}`;
-  return accountName ?? counterAccountName ?? UNKNOWN_VALUE;
-};
-
-const getTransactionSearchText = (transaction: Transaction, accounts: Account[]): string => {
-  const amountText = [
-    String(transaction.amount),
-    formatCurrency(transaction.amount),
-    formatSignedAmount(transaction),
-  ].join(" ");
-
-  return [
-    getTransactionTitle(transaction),
-    amountText,
-    transaction.category,
-    transaction.note ?? "",
-    getTypeLabel(transaction.type),
-    resolveAccountDisplay(accounts, transaction),
-  ]
-    .join(" ")
-    .toLowerCase();
-};
-
-const getTransactionSearchTextFromMap = (
-  transaction: Transaction,
-  accountNameById: Map<string, string>,
-): string => {
-  const accountName = accountNameById.get(transaction.accountId);
-  const counterAccountName = transaction.counterAccountId ? accountNameById.get(transaction.counterAccountId) : undefined;
-  const accountDisplay = accountName && counterAccountName ? `${accountName} → ${counterAccountName}` : accountName ?? counterAccountName ?? "";
-  const amountText = [
-    String(transaction.amount),
-    formatCurrency(transaction.amount),
-    formatSignedAmount(transaction),
-  ].join(" ");
-
-  return [
-    getTransactionTitle(transaction),
-    amountText,
-    transaction.category,
-    transaction.note ?? "",
-    getTypeLabel(transaction.type),
-    accountDisplay,
-  ]
-    .join(" ")
-    .toLowerCase();
-};
-
 const parseTransactionDate = (date: string): Date | null => {
   const [yearText, monthText, dayText] = date.split("-");
   const year = Number(yearText);
@@ -364,15 +322,6 @@ const formatCalendarMonthTitle = (monthKey: string): string => {
 const formatSelectedDate = (dateKey: string): string => {
   const [, month, day] = dateKey.split("-");
   return `${month}.${day}`;
-};
-
-const getLatestTransactionDate = (transactions: Transaction[]): Date => {
-  const latestDate = transactions
-    .map((transaction) => parseTransactionDate(transaction.date))
-    .filter((date): date is Date => Boolean(date))
-    .sort((first, second) => second.getTime() - first.getTime())[0];
-
-  return latestDate ?? new Date();
 };
 
 const getCalendarMonthKey = (date: Date): string => toDateKey(date).slice(0, 7);
@@ -430,41 +379,6 @@ const getDateRangeForFilters = (
   return null;
 };
 
-const mapAccountTypeToFilter = (type: AccountType): AccountFilter => {
-  if (type === "cash") return "other";
-  return type;
-};
-
-const transactionMatchesAccountFilter = (
-  transaction: Transaction,
-  accounts: Account[],
-  accountFilter: AccountFilter,
-): boolean => {
-  if (accountFilter === "all") return true;
-  const relatedAccountIds = [transaction.accountId, transaction.counterAccountId].filter(
-    (accountId): accountId is string => Boolean(accountId),
-  );
-  return relatedAccountIds.some((accountId) => {
-    const account = accounts.find((item) => item.id === accountId);
-    return account ? mapAccountTypeToFilter(account.type) === accountFilter : false;
-  });
-};
-
-const transactionMatchesAccountFilterFromMap = (
-  transaction: Transaction,
-  accountTypeById: Map<string, AccountType>,
-  accountFilter: AccountFilter,
-): boolean => {
-  if (accountFilter === "all") return true;
-  const relatedAccountIds = [transaction.accountId, transaction.counterAccountId].filter(
-    (accountId): accountId is string => Boolean(accountId),
-  );
-  return relatedAccountIds.some((accountId) => {
-    const type = accountTypeById.get(accountId);
-    return type ? mapAccountTypeToFilter(type) === accountFilter : false;
-  });
-};
-
 const transactionMatchesCashDirection = (
   transaction: Transaction,
   cashDirection: CashDirectionFilter,
@@ -474,122 +388,6 @@ const transactionMatchesCashDirection = (
   if (transaction.cashFlowType === "nonCash" || transaction.type === "transfer") return false;
   return cashDirection === "inflow" ? isCashInflow(transaction) : !isCashInflow(transaction);
 };
-
-const transactionMatchesFilters = (
-  transaction: Transaction,
-  accounts: Account[],
-  filters: FilterState,
-  transactions: Transaction[],
-): boolean => {
-  const dateRange = getDateRangeForFilters(filters, toDateKey(getLatestTransactionDate(transactions)));
-  if (dateRange && (transaction.date < dateRange.startDate || transaction.date > dateRange.endDate)) {
-    return false;
-  }
-
-  if (!transactionMatchesAccountFilter(transaction, accounts, filters.account)) return false;
-  return transactionMatchesCashDirection(transaction, filters.cashDirection);
-};
-
-const transactionMatchesFiltersFromMaps = (
-  transaction: Transaction,
-  accountTypeById: Map<string, AccountType>,
-  filters: FilterState,
-  transactions: Transaction[],
-): boolean => {
-  const dateRange = getDateRangeForFilters(filters, toDateKey(getLatestTransactionDate(transactions)));
-  if (dateRange && (transaction.date < dateRange.startDate || transaction.date > dateRange.endDate)) {
-    return false;
-  }
-
-  if (!transactionMatchesAccountFilterFromMap(transaction, accountTypeById, filters.account)) return false;
-  return transactionMatchesCashDirection(transaction, filters.cashDirection);
-};
-
-const groupTransactionsByMonth = (items: Transaction[]): Array<{ month: string; items: Transaction[] }> =>
-  items.reduce<Array<{ month: string; items: Transaction[] }>>((groups, transaction) => {
-    const month = getMonthLabel(transaction.date);
-    const existingGroup = groups.find((group) => group.month === month);
-    if (existingGroup) {
-      existingGroup.items.push(transaction);
-    } else {
-      groups.push({ month, items: [transaction] });
-    }
-    return groups;
-  }, []);
-
-const getTransactionTimestamp = (transaction: Transaction): number => {
-  const createdAtTime = Date.parse(transaction.createdAt);
-  if (!Number.isNaN(createdAtTime)) return createdAtTime;
-
-  const dateTime = Date.parse(`${transaction.date}T00:00:00`);
-  return Number.isNaN(dateTime) ? 0 : dateTime;
-};
-
-const getTransactionMonthKey = (transaction: Transaction): string => {
-  const monthKey = transaction.date.slice(0, 7);
-  return monthKey.length === 7 ? monthKey : "unknown";
-};
-
-const getAccountTypeBuckets = (
-  transaction: Transaction,
-  accountTypeById: Map<string, AccountType>,
-): AccountFilter[] => {
-  const buckets = new Set<AccountFilter>();
-  const relatedAccountIds = [transaction.accountId, transaction.counterAccountId].filter(Boolean) as string[];
-
-  relatedAccountIds.forEach((accountId) => {
-    const type = accountTypeById.get(accountId);
-    if (type) buckets.add(mapAccountTypeToFilter(type));
-  });
-
-  return Array.from(buckets);
-};
-
-const buildTransactionDisplayRecords = (
-  transactions: Transaction[],
-  accountNameById: Map<string, string>,
-  accountTypeById: Map<string, AccountType>,
-) =>
-  transactions
-    .map((transaction) => {
-      const monthKey = getTransactionMonthKey(transaction);
-      const title = getTransactionTitle(transaction);
-      const amountText = formatSignedAmount(transaction);
-      const cashStatus = getCashStatusLabel(transaction);
-      const typeLabel = getTypeLabel(transaction.type);
-      const accountDisplay = resolveAccountDisplayFromMap(accountNameById, transaction);
-      const searchableText = [
-        title,
-        transaction.note,
-        transaction.category,
-        typeLabel,
-        accountDisplay,
-        String(transaction.amount),
-        amountText,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      return {
-        accountTypeBuckets: getAccountTypeBuckets(transaction, accountTypeById),
-        amountText,
-        amountTone: getAmountTone(transaction),
-        cashStatus,
-        dateTime: getTransactionDateTime(transaction),
-        id: transaction.id,
-        monthKey,
-        monthLabel: getMonthLabel(transaction.date),
-        searchableText,
-        timestamp: getTransactionTimestamp(transaction),
-        title,
-        transaction,
-      };
-    })
-    .sort((first, second) => {
-      if (first.timestamp !== second.timestamp) return second.timestamp - first.timestamp;
-      return second.id.localeCompare(first.id);
-    });
 
 const displayRecordMatchesFilters = (
   record: TransactionDisplayRecord,
@@ -602,23 +400,6 @@ const displayRecordMatchesFilters = (
 
   if (filters.account !== "all" && !record.accountTypeBuckets.includes(filters.account)) return false;
   return transactionMatchesCashDirection(record.transaction, filters.cashDirection);
-};
-
-const groupDisplayRecordsByMonth = (
-  records: TransactionDisplayRecord[],
-): Array<{ items: TransactionDisplayRecord[]; monthKey: string; monthLabel: string }> => {
-  const groups: Array<{ items: TransactionDisplayRecord[]; monthKey: string; monthLabel: string }> = [];
-  let currentGroup: { items: TransactionDisplayRecord[]; monthKey: string; monthLabel: string } | undefined;
-
-  records.forEach((record) => {
-    if (!currentGroup || currentGroup.monthKey !== record.monthKey) {
-      currentGroup = { items: [], monthKey: record.monthKey, monthLabel: record.monthLabel };
-      groups.push(currentGroup);
-    }
-    currentGroup.items.push(record);
-  });
-
-  return groups;
 };
 
 const buildCalendarCells = (monthKey: string): Array<CalendarCell | null> => {
@@ -698,6 +479,13 @@ export default function TransactionRecordsScreen({
     setHydratedRecordsByMonth(new Map(recordsIndex?.recordsByMonth));
   }, [recordsIndex]);
 
+  useEffect(() => {
+    if (!selectedRecord) return;
+    if (!recordsIndex?.transactionById.has(selectedRecord.id)) {
+      setSelectedRecord(null);
+    }
+  }, [recordsIndex, selectedRecord]);
+
   const normalizedQuery = debouncedQuery.trim().toLowerCase();
   const isFilterActive = hasActiveFilters(appliedFilters);
   const isDefaultLazyMode = !normalizedQuery && !isFilterActive;
@@ -736,12 +524,22 @@ export default function TransactionRecordsScreen({
 
   const sections = useMemo<TransactionSection[]>(
     () =>
-      filteredGroups.map((group) => ({
-        data: (collapsedMonths[group.monthKey] ?? group.monthKey !== recordsIndex?.latestMonthKey) ? [] : group.items,
-        monthKey: group.monthKey,
-        monthLabel: group.monthLabel,
-      })),
-    [collapsedMonths, filteredGroups, recordsIndex?.latestMonthKey],
+      filteredGroups.map((group) => {
+        const isCollapsed = collapsedMonths[group.monthKey] ?? group.monthKey !== recordsIndex?.latestMonthKey;
+        const monthTotals = summarizeMonthTransactions(
+          group.items,
+          recordsIndex?.rawTransactionsByMonth.get(group.monthKey),
+        );
+
+        return {
+          data: isCollapsed ? [] : group.items,
+          expenseTotalText: monthTotals.expenseTotalText,
+          incomeTotalText: monthTotals.incomeTotalText,
+          monthKey: group.monthKey,
+          monthLabel: group.monthLabel,
+        };
+      }),
+    [collapsedMonths, filteredGroups, recordsIndex?.latestMonthKey, recordsIndex?.rawTransactionsByMonth],
   );
 
   const isPreparingRecords = isPreparingRecordsIndex || !recordsIndex;
@@ -770,8 +568,9 @@ export default function TransactionRecordsScreen({
   }, [recordsIndex]);
 
   const renderTransactionRow = useCallback(
-    ({ item }: { item: TransactionDisplayRecord }) => (
+    ({ index, item, section }: { index: number; item: TransactionDisplayRecord; section: TransactionSection }) => (
       <TransactionRow
+        isLast={index === section.data.length - 1}
         onSelect={setSelectedRecord}
         record={item}
       />
@@ -782,12 +581,14 @@ export default function TransactionRecordsScreen({
   const renderMonthHeader = useCallback(
     ({ section }: { section: TransactionSection }) => (
       <MonthHeader
-        isCollapsed={Boolean(collapsedMonths[section.monthKey])}
+        expenseTotal={section.expenseTotalText}
+        incomeTotal={section.incomeTotalText}
+        isCollapsed={collapsedMonths[section.monthKey] ?? section.monthKey !== recordsIndex?.latestMonthKey}
         month={section.monthLabel}
         onPress={() => toggleMonthCollapse(section.monthKey)}
       />
     ),
-    [collapsedMonths, toggleMonthCollapse],
+    [collapsedMonths, recordsIndex?.latestMonthKey, toggleMonthCollapse],
   );
 
   const keyExtractor = useCallback((record: TransactionDisplayRecord) => record.id, []);
@@ -807,28 +608,15 @@ export default function TransactionRecordsScreen({
 
   return (
     <View style={styles.screen}>
-      <TopBar onBack={onBack} title="交易记录" />
+      <FinanceTopBar onBack={onBack} title="交易记录" />
 
-      <View style={styles.toolbar}>
-        <View style={styles.searchBox}>
-          <AppIcon color={theme.colors.textMuted} name="search" size={18} />
-          <TextInput
-            onChangeText={setQuery}
-            placeholder="搜索交易、金额、备注"
-            placeholderTextColor={theme.colors.textMuted}
-            style={styles.searchInput}
-            value={query}
-          />
-        </View>
-        <Pressable
-          accessibilityLabel="筛选交易"
-          onPress={openFilterPanel}
-          style={[styles.filterButton, isFilterActive ? styles.filterButtonActive : null]}
-        >
-          <AppIcon color={isFilterActive ? "#FFFFFF" : theme.colors.primaryDeep} name="filter" size={19} />
-          {isFilterActive ? <View style={styles.filterActiveDot} /> : null}
-        </Pressable>
-      </View>
+      <SearchFilterBar
+        filterActive={isFilterActive}
+        onChangeText={setQuery}
+        onFilterPress={openFilterPanel}
+        placeholder="搜索交易、金额、备注"
+        value={query}
+      />
 
       {!hasTransactions ? (
         <EmptyState
@@ -906,83 +694,97 @@ function TransactionDetail({
   const accountDisplay = record.accountDisplay;
   const assetName = getAssetName(assets, transaction.relatedAssetId) ?? UNKNOWN_VALUE;
   const liabilityName = getLiabilityName(liabilities, transaction.relatedLiabilityId) ?? UNKNOWN_VALUE;
+  const amountTone = record.amountTone === "neutral" ? "default" : record.amountTone;
 
   return (
     <ScrollView contentContainerStyle={styles.stack} showsVerticalScrollIndicator={false}>
-      <TopBar onBack={onBack} title="交易详情" />
+      <FinanceTopBar onBack={onBack} title="交易详情" />
 
-      <View style={styles.detailHero}>
-        <Text style={styles.detailTitle}>{record.title}</Text>
-        <Text style={[styles.detailAmount, styles[`amount_${record.amountTone}`]]}>{record.amountText}</Text>
+      <SummaryHeroCard style={styles.detailHero}>
+        <IconTile accent={getTransactionAccent(record.amountTone)} icon={getTransactionIconName(transaction)} size={54} />
+        <Text numberOfLines={2} style={styles.detailTitle}>
+          {record.title}
+        </Text>
+        <AmountText size="hero" tone={amountTone}>
+          {record.amountText}
+        </AmountText>
         <Text style={styles.detailDate}>{record.dateTime}</Text>
-      </View>
+      </SummaryHeroCard>
 
-      <DetailSection title="基础信息">
-        <DetailRow label="类型" value={getTypeLabel(transaction.type)} />
-        <DetailRow label="分类" value={transaction.category || UNKNOWN_VALUE} />
-        <DetailRow label="账户" value={accountDisplay} />
-        <DetailRow label="现金状态" value={getCashStatusLabel(transaction)} />
-        <DetailRow label="备注" value={transaction.note?.trim() || UNKNOWN_VALUE} />
-      </DetailSection>
+      <SectionCard title="基础信息">
+        <InfoLineRow label="类型" value={getTypeLabel(transaction.type)} />
+        <InfoLineRow label="分类" value={transaction.category || UNKNOWN_VALUE} />
+        <InfoLineRow label="账户" value={accountDisplay} />
+        <InfoLineRow label="现金状态" value={getCashStatusLabel(transaction)} />
+        <InfoLineRow label="备注" value={transaction.note?.trim() || UNKNOWN_VALUE} />
+      </SectionCard>
 
-      <DetailSection title="会计影响">
-        <DetailRow label="收入/费用" value={getIncomeExpenseImpact(transaction)} />
-        <DetailRow label="净资产" value={getNetWorthImpact(transaction)} />
-      </DetailSection>
+      <SectionCard title="会计影响">
+        <InfoLineRow label="收入/费用" value={getIncomeExpenseImpact(transaction)} />
+        <InfoLineRow label="净资产" value={getNetWorthImpact(transaction)} />
+      </SectionCard>
 
-      <DetailSection title="现金流">
-        <DetailRow label="现金流" value={getCashFlowLabel(transaction)} />
-      </DetailSection>
+      <SectionCard title="现金流">
+        <InfoLineRow label="现金流" value={getCashFlowLabel(transaction)} />
+      </SectionCard>
 
-      <DetailSection title="关联对象">
-        <DetailRow label="关联账户" value={accountDisplay} />
-        <DetailRow label="关联资产" value={assetName} />
-        <DetailRow label="关联负债" value={liabilityName} />
-      </DetailSection>
+      <SectionCard title="关联对象">
+        <InfoLineRow label="关联账户" value={accountDisplay} />
+        <InfoLineRow label="关联资产" value={assetName} />
+        <InfoLineRow label="关联负债" value={liabilityName} />
+      </SectionCard>
     </ScrollView>
   );
 }
 
-function TopBar({ onBack, title }: { onBack: () => void; title: string }) {
-  return (
-    <View style={styles.headerRow}>
-      <Pressable onPress={onBack} style={styles.backButton}>
-        <AppIcon color={theme.colors.backButtonText} name="back" size={15} strokeWidth={2.2} />
-        <Text style={styles.backButtonText}>返回</Text>
-      </Pressable>
-      <Text style={styles.pageTitle}>{title}</Text>
-      <View style={styles.headerSpacer} />
-    </View>
-  );
-}
-
 const TransactionRow = memo(function TransactionRow({
+  isLast,
   record,
   onSelect,
 }: {
+  isLast: boolean;
   record: TransactionDisplayRecord;
   onSelect: (record: TransactionDisplayRecord) => void;
 }) {
+  const amountTone = record.amountTone === "neutral" ? "default" : record.amountTone;
+
   return (
-    <Pressable onPress={() => onSelect(record)} style={styles.transactionCard}>
+    <Pressable
+      accessibilityLabel={`查看${record.title}详情`}
+      onPress={() => onSelect(record)}
+      style={[styles.transactionCard, isLast ? styles.transactionCardLast : null]}
+    >
+      <IconTile
+        accent={getTransactionAccent(record.amountTone)}
+        icon={getTransactionIconName(record.transaction)}
+        size={42}
+      />
       <View style={styles.transactionMain}>
         <Text numberOfLines={1} style={styles.transactionTitle}>
           {record.title}
         </Text>
         <Text numberOfLines={1} style={styles.transactionMeta}>
-          {record.dateTime} · {record.cashStatus}
+          {getTransactionSubtitle(record)}
         </Text>
       </View>
-      <Text style={[styles.transactionAmount, styles[`amount_${record.amountTone}`]]}>{record.amountText}</Text>
+      <View style={styles.transactionAmountBox}>
+        <AmountText size="normal" tone={amountTone}>
+          {record.amountText}
+        </AmountText>
+      </View>
     </Pressable>
   );
 });
 
 const MonthHeader = memo(function MonthHeader({
+  expenseTotal,
+  incomeTotal,
   isCollapsed,
   month,
   onPress,
 }: {
+  expenseTotal: string;
+  incomeTotal: string;
   isCollapsed: boolean;
   month: string;
   onPress: () => void;
@@ -991,10 +793,18 @@ const MonthHeader = memo(function MonthHeader({
     <Pressable
       accessibilityLabel={`${month}${isCollapsed ? "已折叠" : "已展开"}`}
       onPress={onPress}
-      style={styles.monthHeaderRow}
+      style={[styles.monthHeaderRow, isCollapsed ? styles.monthHeaderCollapsed : null]}
     >
-      <Text style={styles.monthTitle}>{month}</Text>
-      <Text style={styles.monthChevron}>{isCollapsed ? "›" : "˅"}</Text>
+      <View style={styles.monthHeaderMain}>
+        <Text style={styles.monthTitle}>{month}</Text>
+        <View style={styles.monthTotals}>
+          <Text style={styles.monthIncomeText}>收入 {incomeTotal}</Text>
+          <Text style={styles.monthExpenseText}>支出 {expenseTotal}</Text>
+        </View>
+      </View>
+      <View style={[styles.monthChevronIcon, !isCollapsed ? styles.monthChevronExpanded : null]}>
+        <AppIcon color={theme.colors.textMuted} name="chevronRight" size={18} strokeWidth={2.1} />
+      </View>
     </Pressable>
   );
 });
@@ -1244,24 +1054,6 @@ function FilterChip({
   );
 }
 
-function DetailSection({ children, title }: { children: ReactNode; title: string }) {
-  return (
-    <View style={styles.detailSection}>
-      <Text style={styles.detailSectionTitle}>{title}</Text>
-      <View style={styles.detailRows}>{children}</View>
-    </View>
-  );
-}
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.detailRow}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>{value}</Text>
-    </View>
-  );
-}
-
 function EmptyState({ description, title }: { description: string; title: string }) {
   return (
     <View style={[sharedStyles.card, styles.emptyCard]}>
@@ -1312,9 +1104,10 @@ const styles = StyleSheet.create({
   },
   detailHero: {
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceElevated,
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.lg,
   },
   detailLabel: {
     color: theme.colors.textMuted,
@@ -1578,29 +1371,83 @@ const styles = StyleSheet.create({
     width: 58,
   },
   monthGroup: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
     gap: 0,
+    marginBottom: theme.spacing.md,
+    overflow: "hidden",
+    shadowColor: theme.colors.shadowSoft,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    elevation: 2,
   },
   monthList: {
     gap: 0,
     paddingBottom: theme.spacing.xl,
   },
+  monthChevronExpanded: {
+    transform: [{ rotate: "90deg" }],
+  },
+  monthChevronIcon: {
+    alignItems: "center",
+    height: 28,
+    justifyContent: "center",
+    width: 28,
+  },
+  monthExpenseText: {
+    color: theme.colors.danger,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  monthHeaderCollapsed: {
+    borderBottomLeftRadius: theme.radius.xl,
+    borderBottomRightRadius: theme.radius.xl,
+    borderBottomWidth: 1,
+    marginBottom: theme.spacing.md,
+  },
+  monthHeaderMain: {
+    flex: 1,
+    gap: 6,
+    minWidth: 0,
+  },
   monthHeaderRow: {
     alignItems: "center",
-    backgroundColor: "#F3F4F6",
-    borderBottomColor: theme.colors.divider,
-    borderBottomWidth: 1,
-    borderTopColor: theme.colors.divider,
-    borderTopWidth: 1,
+    backgroundColor: theme.colors.surfaceElevated,
+    borderColor: theme.colors.border,
+    borderTopLeftRadius: theme.radius.xl,
+    borderTopRightRadius: theme.radius.xl,
+    borderWidth: 1,
+    borderBottomWidth: 0,
     flexDirection: "row",
+    gap: theme.spacing.sm,
     justifyContent: "space-between",
-    minHeight: 38,
+    minHeight: 66,
+    marginTop: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: 8,
+    paddingVertical: 12,
+    shadowColor: theme.colors.shadowSoft,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    elevation: 2,
+  },
+  monthIncomeText: {
+    color: theme.colors.success,
+    fontSize: 12,
+    fontWeight: "800",
   },
   monthTitle: {
-    color: theme.colors.textSecondary,
-    fontSize: 14,
+    color: theme.colors.textPrimary,
+    fontSize: 17,
     fontWeight: "900",
+  },
+  monthTotals: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
   },
   monthChevron: {
     color: theme.colors.textMuted,
@@ -1620,7 +1467,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.colors.surfaceElevated,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.pill,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
     flex: 1,
     flexDirection: "row",
@@ -1665,20 +1512,35 @@ const styles = StyleSheet.create({
     minWidth: 92,
     textAlign: "right",
   },
+  transactionAmountBox: {
+    alignItems: "flex-end",
+    minWidth: 104,
+  },
   transactionCard: {
     alignItems: "center",
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
     borderBottomColor: theme.colors.divider,
     borderBottomWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
     flexDirection: "row",
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
     justifyContent: "space-between",
-    minHeight: 58,
+    minHeight: 72,
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: 9,
+    paddingVertical: 10,
+  },
+  transactionCardLast: {
+    borderBottomColor: theme.colors.border,
+    borderBottomLeftRadius: theme.radius.xl,
+    borderBottomRightRadius: theme.radius.xl,
+    marginBottom: theme.spacing.md,
   },
   transactionMain: {
     flex: 1,
     gap: 4,
+    minWidth: 0,
   },
   transactionMeta: {
     color: theme.colors.textMuted,

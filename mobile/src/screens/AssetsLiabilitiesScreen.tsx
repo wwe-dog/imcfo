@@ -11,6 +11,21 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import AppIcon from "../components/AppIcon";
+import type { AppIconName } from "../components/AppIcon";
+import {
+  AmountText,
+  DangerActionButton,
+  IconTile,
+  InfoLineRow,
+  LineListCard,
+  LineListRow,
+  SectionCard,
+  SegmentedControl,
+  StatBlock,
+  StatusTag,
+  SummaryHeroCard,
+  TopBar,
+} from "../components/financeUI";
 import ScreenTransition from "../components/ScreenTransition";
 import {
   assetAccountingSubjects,
@@ -273,6 +288,20 @@ const getSubjectHelpText = (subject: AccountingSubject): string => {
   }
 };
 
+const getSubjectIconName = (kind: LedgerKind, subjectId: string): AppIconName => {
+  if (kind === "liability") return subjectId.includes("borrow") ? "liability" : "card";
+  if (subjectId.includes("bank")) return "bank";
+  if (subjectId.includes("cash") || subjectId.includes("monetary")) return "wallet";
+  if (subjectId.includes("financial") || subjectId.includes("investment")) return "securities";
+  if (subjectId.includes("fixed")) return "asset";
+  return "fund";
+};
+
+const getKindCopy = (kind: LedgerKind): { accent: "green" | "orange" | "red"; label: string; tone: "default" | "negative" } =>
+  kind === "asset"
+    ? { accent: "green", label: "资产", tone: "default" }
+    : { accent: "red", label: "负债", tone: "negative" };
+
 export default function AssetsLiabilitiesScreen({
   accounts,
   assets,
@@ -510,6 +539,9 @@ export default function AssetsLiabilitiesScreen({
   const renderOverview = () => {
     const groups = activeKind === "asset" ? assetGroups : liabilityGroups;
     const visibleGroups = groups.filter((group) => doesSubjectGroupMatchSearch(group, subjectSearchQuery));
+    const totalAmount = groups.reduce((sum, group) => sum + group.amount, 0);
+    const totalItems = groups.reduce((sum, group) => sum + group.items.length, 0);
+    const kindCopy = getKindCopy(activeKind);
     const handleKindChange = (kind: LedgerKind) => {
       setOpenHelpSubjectId(null);
       setActiveKind(kind);
@@ -526,14 +558,27 @@ export default function AssetsLiabilitiesScreen({
       <ScreenTransition animateOnMount transitionKey={`ledger-overview-${activeKind}`} variant="drilldown">
         <View style={styles.stack}>
           <LedgerTopBar onAdd={() => openCreateForm(activeKind)} onBack={onBack} title="资产负债管理" />
-          <View style={styles.toggleRow}>
-            <ToggleButton active={activeKind === "asset"} label="资产类" onPress={() => handleKindChange("asset")} />
-            <ToggleButton
-              active={activeKind === "liability"}
-              label="负债类"
-              onPress={() => handleKindChange("liability")}
+          <SegmentedControl
+            onChange={handleKindChange}
+            options={[
+              { label: "资产类", value: "asset" },
+              { label: "负债类", value: "liability" },
+            ]}
+            value={activeKind}
+          />
+
+          <SummaryHeroCard style={styles.overviewSummaryCard}>
+            <StatBlock
+              accent={kindCopy.accent}
+              helper={`${totalItems} 条明细，${groups.length} 个会计科目`}
+              icon={activeKind}
+              label={`${kindCopy.label}合计`}
+              value={formatCurrency(totalAmount)}
             />
-          </View>
+            <Text style={styles.overviewSummaryText}>
+              按中国会计科目管理个人{kindCopy.label}，先看科目，再进入明细。
+            </Text>
+          </SummaryHeroCard>
 
           <View style={styles.subjectSearchRow}>
             <View style={styles.subjectSearchBox}>
@@ -552,6 +597,7 @@ export default function AssetsLiabilitiesScreen({
             {visibleGroups.map((group) => (
               <SubjectRow
                 amount={group.amount}
+                kind={activeKind}
                 isHelpVisible={openHelpSubjectId === group.subject.id}
                 key={group.subject.id}
                 onExplain={handleSubjectHelpPress}
@@ -578,12 +624,22 @@ export default function AssetsLiabilitiesScreen({
       <ScreenTransition animateOnMount transitionKey={`ledger-subject-${subjectId}`} variant="drilldown">
         <View style={styles.stack}>
           <LedgerTopBar onAdd={() => openCreateForm(kind, subjectId)} onBack={handleBack} title={subject.displayName} />
-          <View style={styles.subjectTotalRow}>
-            <Text style={styles.subjectTotalLabel}>本科目合计</Text>
-            <Text style={styles.subjectTotalValue}>{formatCurrency(amount)}</Text>
-          </View>
+          <SummaryHeroCard style={styles.subjectSummaryCard}>
+            <StatBlock
+              accent={getKindCopy(kind).accent}
+              helper={subject.description}
+              icon={getSubjectIconName(kind, subject.id)}
+              label="科目合计"
+              value={formatCurrency(amount)}
+            />
+            <View style={styles.summaryDivider} />
+            <View style={styles.subjectCountBlock}>
+              <Text style={styles.subjectCountLabel}>明细数量</Text>
+              <Text style={styles.subjectCountValue}>{items.length}</Text>
+            </View>
+          </SummaryHeroCard>
 
-          <View style={styles.ledgerList}>
+          <LineListCard>
             <Text style={styles.sectionHeading}>明细项目</Text>
             {items.length === 0 ? (
               <View style={styles.emptyBox}>
@@ -595,6 +651,7 @@ export default function AssetsLiabilitiesScreen({
               ? (items as Asset[]).map((asset) => (
                   <DetailItemRow
                     amount={getAssetValue(asset)}
+                    icon={getSubjectIconName(kind, subject.id)}
                     key={asset.id}
                     note={asset.note}
                     onPress={() => setRoute({ id: asset.id, kind, name: "detail", subjectId })}
@@ -604,13 +661,14 @@ export default function AssetsLiabilitiesScreen({
               : (items as Liability[]).map((liability) => (
                   <DetailItemRow
                     amount={liability.amount}
+                    icon={getSubjectIconName(kind, subject.id)}
                     key={liability.id}
                     note={liability.note ?? liability.dueDate}
                     onPress={() => setRoute({ id: liability.id, kind, name: "detail", subjectId })}
                     title={liability.name}
                   />
                 ))}
-          </View>
+          </LineListCard>
         </View>
       </ScreenTransition>
     );
@@ -639,45 +697,81 @@ export default function AssetsLiabilitiesScreen({
           {asset ? (
             <SpecificDetail
               amount={getAssetValue(asset)}
-              fields={[
-                ["会计科目", subject.displayName],
-                ["资产类型", getAssetTypeLabel(asset.category)],
-                ["关联账户", getLinkedAccountName(accounts, asset.accountId)],
-                ["用途 / 备注", asset.note || "无"],
-                ["状态", "有效"],
+              icon={getSubjectIconName(kind, subject.id)}
+              sections={[
+                {
+                  fields: [
+                    ["会计科目", subject.displayName],
+                    ["资产类型", getAssetTypeLabel(asset.category)],
+                    ["状态", "有效"],
+                  ],
+                  title: "基础信息",
+                },
+                {
+                  fields: [
+                    ["当前价值", formatCurrency(getAssetValue(asset))],
+                    ["关联账户", getLinkedAccountName(accounts, asset.accountId)],
+                    ["用途 / 备注", asset.note || "无"],
+                  ],
+                  title: "价值信息",
+                },
               ]}
               name={asset.name}
+              statusText="有效资产"
             >
-              <Pressable onPress={() => openAssetReconciliation(asset)} style={styles.operationButton}>
-                <Text style={styles.operationButtonText}>更新当前价值</Text>
-              </Pressable>
-              <Pressable onPress={() => openEditAsset(asset)} style={styles.operationButton}>
-                <Text style={styles.operationButtonText}>编辑资产</Text>
-              </Pressable>
-              <Pressable onPress={() => confirmDeleteAsset(asset)} style={styles.operationDangerButton}>
-                <Text style={styles.operationDangerText}>删除资产</Text>
-              </Pressable>
+              <SectionCard title="可用操作">
+                <View style={styles.operationGrid}>
+                  <Pressable onPress={() => openEditAsset(asset)} style={styles.operationButton}>
+                    <AppIcon color={theme.colors.primaryDeep} name="edit" size={18} />
+                    <Text style={styles.operationButtonText}>编辑</Text>
+                  </Pressable>
+                  <Pressable onPress={() => openAssetReconciliation(asset)} style={styles.operationButton}>
+                    <AppIcon color={theme.colors.primaryDeep} name="reconcile" size={18} />
+                    <Text style={styles.operationButtonText}>更新当前价值</Text>
+                  </Pressable>
+                </View>
+                <DangerActionButton label="删除" onPress={() => confirmDeleteAsset(asset)} />
+              </SectionCard>
             </SpecificDetail>
           ) : null}
           {liability ? (
             <SpecificDetail
               amount={liability.amount}
-              fields={[
-                ["会计科目", subject.displayName],
-                ["负债类型", getLiabilityTypeLabel(liability.category)],
-                ["关联账户", getLinkedAccountName(accounts, liability.accountId)],
-                ["到期日", liability.dueDate || "无"],
-                ["用途 / 备注", liability.note || "无"],
-                ["状态", "有效"],
+              icon={getSubjectIconName(kind, subject.id)}
+              sections={[
+                {
+                  fields: [
+                    ["会计科目", subject.displayName],
+                    ["负债类型", getLiabilityTypeLabel(liability.category)],
+                    ["状态", "有效"],
+                  ],
+                  title: "基础信息",
+                },
+                {
+                  fields: [
+                    ["负债金额", formatCurrency(liability.amount)],
+                    ["到期日", liability.dueDate || "无"],
+                    ["用途 / 备注", liability.note || "无"],
+                  ],
+                  title: "负债信息",
+                },
+                {
+                  fields: [["关联账户", getLinkedAccountName(accounts, liability.accountId)]],
+                  title: "关联信息",
+                },
               ]}
               name={liability.name}
+              statusText="有效负债"
             >
-              <Pressable onPress={() => openEditLiability(liability)} style={styles.operationButton}>
-                <Text style={styles.operationButtonText}>编辑负债</Text>
-              </Pressable>
-              <Pressable onPress={() => confirmDeleteLiability(liability)} style={styles.operationDangerButton}>
-                <Text style={styles.operationDangerText}>删除负债</Text>
-              </Pressable>
+              <SectionCard title="可用操作">
+                <View style={styles.operationGrid}>
+                  <Pressable onPress={() => openEditLiability(liability)} style={styles.operationButton}>
+                    <AppIcon color={theme.colors.primaryDeep} name="edit" size={18} />
+                    <Text style={styles.operationButtonText}>编辑</Text>
+                  </Pressable>
+                </View>
+                <DangerActionButton label="删除" onPress={() => confirmDeleteLiability(liability)} />
+              </SectionCard>
             </SpecificDetail>
           ) : null}
         </View>
@@ -719,41 +813,20 @@ export default function AssetsLiabilitiesScreen({
   );
 }
 
-function ToggleButton({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} style={[styles.toggleButton, active ? styles.toggleButtonActive : null]}>
-      <Text style={[styles.toggleText, active ? styles.toggleTextActive : null]}>{label}</Text>
-    </Pressable>
-  );
-}
-
 function LedgerTopBar({ onAdd, onBack, title }: { onAdd?: () => void; onBack: () => void; title: string }) {
-  return (
-    <View style={styles.topBar}>
-      <Pressable onPress={onBack} style={styles.backButton}>
-        <AppIcon color={theme.colors.backButtonText} name="back" size={15} strokeWidth={2.2} />
-        <Text style={styles.backButtonText}>返回</Text>
-      </Pressable>
-      <Text style={styles.pageTitle}>{title}</Text>
-      {onAdd ? (
-        <Pressable accessibilityLabel="新增明细" onPress={onAdd} style={styles.addButton}>
-          <AppIcon color={theme.colors.primaryDeep} name="add" size={20} />
-        </Pressable>
-      ) : (
-        <View style={styles.headerSpacer} />
-      )}
-    </View>
-  );
+  return <TopBar onBack={onBack} onRightPress={onAdd} rightIcon="add" title={title} />;
 }
 
 function SubjectRow({
   amount,
+  kind,
   isHelpVisible,
   onExplain,
   onPress,
   subject,
 }: {
   amount: number;
+  kind: LedgerKind;
   isHelpVisible: boolean;
   onExplain: (subject: AccountingSubject) => void;
   onPress: () => void;
@@ -785,30 +858,36 @@ function SubjectRow({
     <View onLayout={handleRowLayout} style={[styles.subjectRow, isHelpVisible && styles.subjectRowFloating]}>
       <Pressable onPress={onPress} style={styles.subjectRowPressable}>
         <View style={styles.subjectRowTop}>
+          <IconTile accent={getKindCopy(kind).accent} icon={getSubjectIconName(kind, subject.id)} size={42} />
           <View style={styles.subjectNameWrap}>
-            <Text style={styles.subjectName}>{subject.displayName}</Text>
-            <Pressable
-              accessibilityLabel={`解释${subject.displayName}`}
-              hitSlop={8}
-              onLayout={handleQuestionLayout}
-              onPress={(event) => {
-                event.stopPropagation();
-                onExplain(subject);
-              }}
-            >
-              <View style={styles.questionButton}>
+            <View style={styles.subjectTitleLine}>
+              <Text numberOfLines={1} style={styles.subjectName}>
+                {subject.displayName}
+              </Text>
+              <Pressable
+                accessibilityLabel={`解释${subject.displayName}`}
+                hitSlop={8}
+                onLayout={handleQuestionLayout}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  onExplain(subject);
+                }}
+                style={styles.questionButton}
+              >
                 <Text style={styles.questionText}>?</Text>
-              </View>
-            </Pressable>
+              </Pressable>
+            </View>
+            <Text numberOfLines={1} style={styles.subjectExamples}>
+              {subject.description || subject.rowExamples.join(" / ")}
+            </Text>
           </View>
           <View style={styles.subjectAmountWrap}>
-            <Text style={styles.subjectAmount}>{formatCurrency(amount)}</Text>
+            <AmountText size="normal" tone={kind === "liability" ? "negative" : "default"}>
+              {formatCurrency(amount)}
+            </AmountText>
             <AppIcon color={theme.colors.textMuted} name="chevronRight" size={16} />
           </View>
         </View>
-        <Text numberOfLines={1} style={styles.subjectExamples}>
-          {subject.rowExamples.join(" / ")}
-        </Text>
       </Pressable>
       {isHelpVisible ? (
         <SubjectHelpBubble
@@ -848,60 +927,66 @@ function SubjectHelpBubble({
 
 function DetailItemRow({
   amount,
+  icon,
   note,
   onPress,
   title,
 }: {
   amount: number;
+  icon: AppIconName;
   note?: string;
   onPress: () => void;
   title: string;
 }) {
   return (
-    <Pressable onPress={onPress} style={styles.detailItemRow}>
-      <View style={styles.detailItemMain}>
-        <Text numberOfLines={1} style={styles.detailItemTitle}>
-          {title}
-        </Text>
-        <Text numberOfLines={1} style={styles.detailItemNote}>
-          {note || "无备注"}
-        </Text>
-      </View>
-      <Text style={styles.detailItemAmount}>{formatCurrency(amount)}</Text>
-      <AppIcon color={theme.colors.textMuted} name="chevronRight" size={16} />
-    </Pressable>
+    <LineListRow
+      accent="orange"
+      amount={formatCurrency(amount)}
+      icon={icon}
+      onPress={onPress}
+      subtitle={note || "无备注"}
+      title={title}
+    />
   );
 }
 
 function SpecificDetail({
   amount,
   children,
-  fields,
+  icon,
+  sections,
   name,
+  statusText,
 }: {
   amount: number;
   children: ReactNode;
-  fields: Array<[string, string]>;
+  icon: AppIconName;
+  sections: Array<{ fields: Array<[string, string]>; title: string }>;
   name: string;
+  statusText: string;
 }) {
   return (
     <>
-      <View style={styles.detailHero}>
-        <Text style={styles.detailHeroName}>{name}</Text>
-        <Text style={styles.detailHeroAmount}>{formatCurrency(amount)}</Text>
-      </View>
-      <View style={styles.detailPanel}>
-        {fields.map(([label, value]) => (
-          <View key={label} style={styles.infoRow}>
-            <Text style={styles.infoLabel}>{label}</Text>
-            <Text style={styles.infoValue}>{value}</Text>
+      <SummaryHeroCard style={styles.detailHero}>
+        <View style={styles.detailHeroTop}>
+          <IconTile accent="orange" icon={icon} size={48} />
+          <View style={styles.detailHeroMain}>
+            <Text numberOfLines={1} style={styles.detailHeroName}>
+              {name}
+            </Text>
+            <StatusTag text={statusText} tone="green" />
           </View>
-        ))}
-      </View>
-      <View style={styles.operations}>
-        <Text style={styles.sectionHeading}>操作</Text>
-        {children}
-      </View>
+        </View>
+        <AmountText size="hero">{formatCurrency(amount)}</AmountText>
+      </SummaryHeroCard>
+      {sections.map((section) => (
+        <SectionCard key={section.title} title={section.title}>
+          {section.fields.map(([label, value]) => (
+            <InfoLineRow key={label} label={label} value={value} />
+          ))}
+        </SectionCard>
+      ))}
+      {children}
     </>
   );
 }
@@ -944,6 +1029,7 @@ function AssetLiabilityFormModal({
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={formMode !== null}>
       <Pressable onPress={onClose} style={styles.modalBackdrop}>
         <Pressable onPress={(event) => event.stopPropagation()} style={styles.modalPanel}>
+          <View style={styles.sheetHandle} />
           <ScrollView
             contentContainerStyle={styles.modalContent}
             keyboardShouldPersistTaps="handled"
@@ -1136,8 +1222,9 @@ function DeleteConfirmationModal({
 
   return (
     <Modal animationType="fade" onRequestClose={onCancel} transparent visible={confirmation !== null}>
-      <Pressable onPress={onCancel} style={styles.confirmBackdrop}>
+      <Pressable onPress={onCancel} style={styles.modalBackdrop}>
         <Pressable onPress={(event) => event.stopPropagation()} style={styles.confirmPanel}>
+          <View style={styles.sheetHandle} />
           <Text style={styles.confirmTitle}>{isAsset ? "确认删除资产？" : "确认删除负债？"}</Text>
           <Text style={styles.confirmDescription}>删除后不可恢复，请确认是否继续。</Text>
           <View style={styles.confirmActions}>
@@ -1176,6 +1263,7 @@ function AssetReconciliationModal({
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={asset !== undefined}>
       <Pressable onPress={onClose} style={styles.modalBackdrop}>
         <Pressable onPress={(event) => event.stopPropagation()} style={styles.modalPanel}>
+          <View style={styles.sheetHandle} />
           <ScrollView
             contentContainerStyle={styles.modalContent}
             keyboardShouldPersistTaps="handled"
@@ -1322,11 +1410,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   detailHero: {
-    borderBottomColor: theme.colors.divider,
-    borderBottomWidth: 1,
-    borderTopColor: theme.colors.divider,
-    borderTopWidth: 1,
-    paddingVertical: 14,
+    gap: theme.spacing.md,
   },
   detailHeroAmount: {
     color: theme.colors.textPrimary,
@@ -1335,9 +1419,19 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   detailHeroName: {
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    fontWeight: "800",
+    color: theme.colors.textPrimary,
+    fontSize: 20,
+    fontWeight: "900",
+  },
+  detailHeroMain: {
+    flex: 1,
+    gap: 6,
+    minWidth: 0,
+  },
+  detailHeroTop: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
   },
   detailItemAmount: {
     color: theme.colors.textPrimary,
@@ -1368,8 +1462,11 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   detailPanel: {
-    borderTopColor: theme.colors.divider,
-    borderTopWidth: 1,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    padding: theme.spacing.md,
   },
   diffBookValue: {
     color: theme.colors.textPrimary,
@@ -1488,8 +1585,17 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   ledgerList: {
-    borderTopColor: theme.colors.divider,
-    borderTopWidth: 1,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    overflow: "hidden",
+    paddingHorizontal: theme.spacing.md,
+    shadowColor: theme.colors.shadowSoft,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    elevation: 2,
   },
   confirmActions: {
     flexDirection: "row",
@@ -1541,7 +1647,8 @@ const styles = StyleSheet.create({
   confirmPanel: {
     backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.xl,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     borderWidth: 1,
     padding: theme.spacing.lg,
     width: "100%",
@@ -1558,10 +1665,10 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.sm,
   },
   modalBackdrop: {
-    backgroundColor: "rgba(13, 25, 18, 0.42)",
+    backgroundColor: "rgba(31, 27, 21, 0.34)",
     flex: 1,
     justifyContent: "flex-end",
-    padding: theme.spacing.container,
+    paddingTop: theme.spacing.xl,
   },
   modalContent: {
     gap: theme.spacing.md,
@@ -1575,10 +1682,13 @@ const styles = StyleSheet.create({
   modalPanel: {
     backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.xl,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     borderWidth: 1,
     maxHeight: "86%",
-    padding: theme.spacing.lg,
+    overflow: "hidden",
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: 10,
   },
   modalPrimaryButton: {
     flex: 1,
@@ -1594,6 +1704,12 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     borderRadius: theme.radius.lg,
     borderWidth: 1,
+    flex: 1,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    minHeight: 50,
+    paddingHorizontal: theme.spacing.sm,
     paddingVertical: 12,
   },
   operationButtonText: {
@@ -1615,6 +1731,19 @@ const styles = StyleSheet.create({
   operations: {
     gap: theme.spacing.sm,
   },
+  operationGrid: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+  },
+  overviewSummaryCard: {
+    gap: theme.spacing.sm,
+  },
+  overviewSummaryText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+  },
   pageTitle: {
     color: theme.colors.textPrimary,
     flex: 1,
@@ -1624,8 +1753,8 @@ const styles = StyleSheet.create({
   },
   questionButton: {
     alignItems: "center",
-    backgroundColor: "#F3F4F6",
-    borderColor: "#D1D5DB",
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.borderStrong,
     borderRadius: 9,
     borderWidth: 1,
     height: 18,
@@ -1633,7 +1762,7 @@ const styles = StyleSheet.create({
     width: 18,
   },
   questionText: {
-    color: theme.colors.textMuted,
+    color: theme.colors.primaryDeep,
     fontSize: 12,
     fontWeight: "900",
     lineHeight: 14,
@@ -1662,26 +1791,31 @@ const styles = StyleSheet.create({
   subjectExamples: {
     color: theme.colors.textMuted,
     fontSize: 12,
-    marginTop: 4,
   },
   subjectName: {
     color: theme.colors.textPrimary,
+    flex: 1,
     fontSize: 15,
     fontWeight: "900",
   },
   subjectNameWrap: {
-    alignItems: "center",
     flex: 1,
-    flexDirection: "row",
-    gap: 6,
+    gap: 4,
+    minWidth: 0,
   },
   subjectList: {
-    borderTopColor: theme.colors.divider,
-    borderTopWidth: 1,
+    gap: theme.spacing.sm,
   },
   subjectRow: {
-    borderBottomColor: theme.colors.border,
-    borderBottomWidth: 1,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    shadowColor: theme.colors.shadowSoft,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    elevation: 2,
     position: "relative",
     zIndex: 1,
   },
@@ -1689,7 +1823,7 @@ const styles = StyleSheet.create({
     zIndex: 30,
   },
   subjectRowPressable: {
-    paddingHorizontal: 2,
+    paddingHorizontal: theme.spacing.md,
     paddingVertical: 13,
   },
   subjectRowTop: {
@@ -1718,11 +1852,48 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "900",
   },
+  subjectSummaryCard: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.md,
+  },
+  subjectCountBlock: {
+    alignItems: "flex-end",
+    minWidth: 74,
+  },
+  subjectCountLabel: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  subjectCountValue: {
+    color: theme.colors.textPrimary,
+    fontSize: 30,
+    fontWeight: "900",
+  },
+  subjectTitleLine: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+  },
+  summaryDivider: {
+    backgroundColor: theme.colors.divider,
+    height: 48,
+    width: 1,
+  },
+  sheetHandle: {
+    alignSelf: "center",
+    backgroundColor: theme.colors.borderStrong,
+    borderRadius: theme.radius.pill,
+    height: 5,
+    marginBottom: 12,
+    width: 46,
+  },
   subjectSearchBox: {
     alignItems: "center",
     backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
+    borderRadius: theme.radius.xl,
     borderWidth: 1,
     flex: 1,
     flexDirection: "row",

@@ -1,4 +1,4 @@
-import Svg, { Circle, Line, Path, Polyline, Rect } from "react-native-svg";
+import Svg, { Circle, Path, Polyline, Rect } from "react-native-svg";
 import { theme } from "../styles/theme";
 
 export type AppIconName =
@@ -10,6 +10,7 @@ export type AppIconName =
   | "filter"
   | "calendar"
   | "back"
+  | "mic"
   | "more"
   | "account"
   | "asset"
@@ -34,7 +35,8 @@ export type AppIconName =
   | "securities"
   | "report"
   | "reconcile"
-  | "chevronRight";
+  | "chevronRight"
+  | "eye";
 
 interface AppIconProps {
   color?: string;
@@ -118,6 +120,13 @@ export default function AppIcon({
             );
           case "back":
             return <Path d="M15 5 8 12l7 7" {...filled} />;
+          case "mic":
+            return (
+              <>
+                <Rect height="10" rx="3" width="6" x="9" y="4" {...filled} />
+                <Path d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v3M9 20h6" {...filled} />
+              </>
+            );
           case "more":
             return (
               <>
@@ -270,6 +279,13 @@ export default function AppIcon({
             );
           case "chevronRight":
             return <Polyline points="9 5 16 12 9 19" {...filled} />;
+          case "eye":
+            return (
+              <>
+                <Path d="M3.5 12s3.1-5 8.5-5 8.5 5 8.5 5-3.1 5-8.5 5-8.5-5-8.5-5Z" {...filled} />
+                <Circle cx="12" cy="12" r="2.4" {...filled} />
+              </>
+            );
           default:
             return <Circle cx="12" cy="12" r="8" {...filled} />;
         }
