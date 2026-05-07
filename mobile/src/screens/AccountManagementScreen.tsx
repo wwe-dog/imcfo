@@ -458,7 +458,10 @@ export default function AccountManagementScreen({
       {
         text: "确认停用",
         style: "destructive",
-        onPress: () => void onDisableAccount(account.id),
+        onPress: () => {
+          setFormSheet(null);
+          void onDisableAccount(account.id);
+        },
       },
     ]);
   };
@@ -472,7 +475,10 @@ export default function AccountManagementScreen({
         {
           text: "停用账户",
           style: "destructive",
-          onPress: () => void onDisableAccount(account.id),
+          onPress: () => {
+            setFormSheet(null);
+            void onDisableAccount(account.id);
+          },
         },
       ]);
       return;
@@ -483,7 +489,10 @@ export default function AccountManagementScreen({
       {
         text: "确认删除",
         style: "destructive",
-        onPress: () => void onDeleteAccount(account.id),
+        onPress: () => {
+          setFormSheet(null);
+          void onDeleteAccount(account.id);
+        },
       },
     ]);
   };
@@ -922,7 +931,7 @@ function AccountReconciliationModal({
       visible={account !== undefined}
     >
       <Pressable onPress={onClose} style={styles.modalBackdrop}>
-        <Pressable style={styles.modalPanel}>
+        <Pressable onPress={(event) => event.stopPropagation()} style={styles.modalPanel}>
           {reconciliation.isConfirming ? (
             <>
               <Text style={styles.modalTitle}>确认对账调整</Text>

@@ -26,11 +26,17 @@ import {
   TopBar as FinanceTopBar,
 } from "../components/financeUI";
 import ScreenTransition from "../components/ScreenTransition";
-import type { Asset, Liability, Transaction, TransactionType } from "../domain/models";
+import type { Asset, Liability, Transaction } from "../domain/models";
 import {
+  buildTransactionDisplayRecord,
+  getTransactionAmountDirection,
+  getTransactionCashFlowLabel,
+  getTransactionCashStatusLabel,
+  getTransactionTypeLabel,
   groupTransactionDisplayRecords,
   hydrateAllTransactionRecords,
   hydrateTransactionMonth,
+  isTransactionCashInflow,
   type TransactionDisplayRecord,
   type TransactionRecordsIndex,
 } from "../domain/transactions/transactionDisplayIndex";
@@ -128,50 +134,17 @@ const cashDirectionOptions: Array<{ label: string; value: CashDirectionFilter }>
 
 const weekLabels = ["日", "一", "二", "三", "四", "五", "六"];
 
-const transactionTypeLabels: Record<TransactionType, string> = {
-  assetDecrease: "资产减少",
-  assetIncrease: "资产增加",
-  creditCardExpense: "信用卡消费",
-  creditCardRepayment: "信用卡还款",
-  expense: "支出",
-  income: "收入",
-  investmentBuy: "投资买入",
-  investmentSell: "投资卖出",
-  liabilityDecrease: "负债减少",
-  liabilityIncrease: "负债增加",
-  payablePay: "应付支付",
-  payableRecognize: "应付确认",
-  receivableCollect: "应收收回",
-  receivableRecognize: "应收确认",
-  repayment: "还款",
-  transfer: "转账 / 内部转换",
-};
-
-const getTypeLabel = (type: Transaction["type"]): string => transactionTypeLabels[type] ?? "未知类型";
-
 const getAssetName = (assets: Asset[], assetId?: string): string | undefined =>
   assetId ? assets.find((asset) => asset.id === assetId)?.name ?? "未知资产" : undefined;
 
 const getLiabilityName = (liabilities: Liability[], liabilityId?: string): string | undefined =>
   liabilityId ? liabilities.find((liability) => liability.id === liabilityId)?.name ?? "未知负债" : undefined;
 
-const isCashInflow = (transaction: Transaction): boolean => {
-  switch (transaction.type) {
-    case "assetIncrease":
-    case "income":
-    case "investmentSell":
-    case "liabilityIncrease":
-    case "receivableCollect":
-      return true;
-    default:
-      return false;
-  }
-};
-
 const getAmountTone = (transaction: Transaction): "positive" | "negative" | "neutral" => {
-  if (transaction.cashFlowType === "nonCash") return "neutral";
-  if (transaction.type === "transfer") return "neutral";
-  return isCashInflow(transaction) ? "positive" : "negative";
+  const direction = getTransactionAmountDirection(transaction);
+  if (direction === "inflow") return "positive";
+  if (direction === "outflow") return "negative";
+  return "neutral";
 };
 
 const getTransactionAccent = (tone: TransactionDisplayRecord["amountTone"]): "green" | "orange" | "red" => {
@@ -186,7 +159,7 @@ const getTransactionIconName = (transaction: Transaction): AppIconName => {
   if (transaction.type.includes("investment")) return "securities";
   if (transaction.type.includes("liability") || transaction.type.includes("repayment")) return "liability";
   if (transaction.type.includes("creditCard")) return "card";
-  return isCashInflow(transaction) ? "wallet" : "transaction";
+  return isTransactionCashInflow(transaction) ? "wallet" : "transaction";
 };
 
 const getTransactionSubtitle = (record: TransactionDisplayRecord): string =>
@@ -216,30 +189,6 @@ const summarizeMonthTransactions = (
 const formatImpact = (value: number): string => {
   if (Math.abs(value) < 0.01) return formatCurrency(0);
   return `${value > 0 ? "+" : "-"}${formatCurrency(Math.abs(value))}`;
-};
-
-const getCashStatusLabel = (transaction: Transaction): string => {
-  if (transaction.cashFlowType === "nonCash") return "非现金";
-  if (transaction.type === "transfer") return "无";
-  return isCashInflow(transaction) ? "现金流入" : "现金流出";
-};
-
-const getCashFlowLabel = (transaction: Transaction): string => {
-  if (transaction.cashFlowType === "nonCash") return "非现金";
-  if (transaction.type === "transfer") return "无";
-
-  const direction = isCashInflow(transaction) ? "流入" : "流出";
-
-  switch (transaction.cashFlowType) {
-    case "operating":
-      return `经营活动现金${direction}`;
-    case "investing":
-      return `投资活动现金${direction}`;
-    case "financing":
-      return `筹资活动现金${direction}`;
-    default:
-      return "无";
-  }
 };
 
 const getIncomeExpenseImpact = (transaction: Transaction): string => {
@@ -386,7 +335,7 @@ const transactionMatchesCashDirection = (
   if (cashDirection === "all") return true;
   if (cashDirection === "nonCash") return transaction.cashFlowType === "nonCash";
   if (transaction.cashFlowType === "nonCash" || transaction.type === "transfer") return false;
-  return cashDirection === "inflow" ? isCashInflow(transaction) : !isCashInflow(transaction);
+  return cashDirection === "inflow" ? isTransactionCashInflow(transaction) : !isTransactionCashInflow(transaction);
 };
 
 const displayRecordMatchesFilters = (
@@ -480,11 +429,14 @@ export default function TransactionRecordsScreen({
   }, [recordsIndex]);
 
   useEffect(() => {
-    if (!selectedRecord) return;
-    if (!recordsIndex?.transactionById.has(selectedRecord.id)) {
-      setSelectedRecord(null);
-    }
-  }, [recordsIndex, selectedRecord]);
+    setSelectedRecord((current) => {
+      if (!current) return null;
+      const transaction = recordsIndex?.transactionById.get(current.id);
+      if (!transaction || !recordsIndex) return null;
+      if (transaction === current.transaction) return current;
+      return buildTransactionDisplayRecord(transaction, recordsIndex.accountById, recordsIndex.accountTypeById);
+    });
+  }, [recordsIndex]);
 
   const normalizedQuery = debouncedQuery.trim().toLowerCase();
   const isFilterActive = hasActiveFilters(appliedFilters);
@@ -712,10 +664,10 @@ function TransactionDetail({
       </SummaryHeroCard>
 
       <SectionCard title="基础信息">
-        <InfoLineRow label="类型" value={getTypeLabel(transaction.type)} />
+        <InfoLineRow label="类型" value={getTransactionTypeLabel(transaction.type)} />
         <InfoLineRow label="分类" value={transaction.category || UNKNOWN_VALUE} />
         <InfoLineRow label="账户" value={accountDisplay} />
-        <InfoLineRow label="现金状态" value={getCashStatusLabel(transaction)} />
+        <InfoLineRow label="现金状态" value={getTransactionCashStatusLabel(transaction)} />
         <InfoLineRow label="备注" value={transaction.note?.trim() || UNKNOWN_VALUE} />
       </SectionCard>
 
@@ -725,7 +677,7 @@ function TransactionDetail({
       </SectionCard>
 
       <SectionCard title="现金流">
-        <InfoLineRow label="现金流" value={getCashFlowLabel(transaction)} />
+        <InfoLineRow label="现金流" value={getTransactionCashFlowLabel(transaction)} />
       </SectionCard>
 
       <SectionCard title="关联对象">

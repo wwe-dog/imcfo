@@ -119,7 +119,7 @@ const formatSignedAmount = (transaction: Transaction): string => {
   return formatCurrency(transaction.amount);
 };
 
-const getCashStatusLabel = (transaction: Transaction): string => {
+export const getTransactionCashStatusLabel = (transaction: Transaction): string => {
   const direction = getTransactionAmountDirection(transaction);
   if (direction === "inflow") return "现金流入";
   if (direction === "outflow") return "现金流出";
@@ -127,7 +127,7 @@ const getCashStatusLabel = (transaction: Transaction): string => {
   return "无";
 };
 
-const getCashFlowLabel = (transaction: Transaction): string => {
+export const getTransactionCashFlowLabel = (transaction: Transaction): string => {
   if (transaction.cashFlowType === "nonCash") return "非现金";
   if (transaction.type === "transfer") return "无";
 
@@ -219,8 +219,8 @@ export const buildTransactionDisplayRecord = (
   const accountIds = [transaction.accountId, transaction.counterAccountId].filter(Boolean) as string[];
   const categoryText = transaction.category || UNKNOWN_VALUE;
   const noteText = transaction.note?.trim() || UNKNOWN_VALUE;
-  const cashStatus = getCashStatusLabel(transaction);
-  const cashFlowLabel = getCashFlowLabel(transaction);
+  const cashStatus = getTransactionCashStatusLabel(transaction);
+  const cashFlowLabel = getTransactionCashFlowLabel(transaction);
   const monthKey = getTransactionMonthKey(transaction);
   const searchableText = [
     title,
