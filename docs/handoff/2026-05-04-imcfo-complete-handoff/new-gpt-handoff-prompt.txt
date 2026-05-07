@@ -1,45 +1,68 @@
-Use AGENTS.md and the current repository state as source of truth.
+Use AGENTS.md, docs/10-current-project-context.md, and the current Git state as the source of truth.
 
 Project root:
 D:\imcfo
 
-Mobile app path:
+Mobile root:
 D:\imcfo\mobile
 
-Before doing project work:
-1. Read AGENTS.md.
-2. Read docs/10-current-project-context.md.
-3. Read docs/handoff/2026-05-04-imcfo-complete-handoff/imcfo-complete-handoff.md or the exported PDF.
-4. Read appendices A-D in the same handoff directory.
-5. Verify current Git state with git status --short --branch.
+Current handoff package:
+D:\imcfo\docs\handoff\2026-05-04-imcfo-complete-handoff
 
-Important product boundaries:
-- This is 我为 CFO, a personal finance app that treats an ordinary natural person as a personal company.
-- Do not turn it into a normal bookkeeping app.
-- Do not add backend, login, database, cloud sync, real API integrations, AI analysis, payment, membership, VAT, invoice logic, individual-business-owner logic, or formal tax filing.
-- Keep user-facing text Chinese.
-- Keep bottom navigation as 首页 / 管理 / 报表 / 我的.
+Current expected branch as of 2026-05-07:
+wip/mobile-baseline-before-worktree
 
-Important architecture boundaries:
-- UI screens must not call AsyncStorage directly.
-- Storage adapters must stay separate from accounting/report calculations.
-- Report calculation functions must remain pure and testable.
-- UI must not invent accounting formulas.
-- Do not change accounting formulas, storage schema, transaction mapping, natural language parser behavior, route keys, storage keys, or domain model fields unless explicitly required.
+Current HEAD as of 2026-05-07:
+4148dcb wip: snapshot current mobile state before worktree
 
-Current completion warning:
-- The basic Dashboard and three report summaries are calculated from local data.
-- Operating analysis and profitability analysis screens currently use static mock report data. They are UI/prototype work, not a completed real report engine.
-- Some mobile UI/report files are dirty or untracked. Do not assume they have been committed.
-- 2026-05-05 context snapshot records an overnight-quality audit and cleanup pass: TransactionRecordsScreen relies on transactionDisplayIndex, stale selected transaction details are cleaned when the records index changes, closed debug logging was removed, and unused imports/state/components were cleaned in several screens/components. Verify against current Git state before editing because these mobile changes may still be uncommitted.
+Important branch note:
+main currently points to 759fb80 docs: sync handoff package with current progress.
+The latest mobile WIP baseline is on wip/mobile-baseline-before-worktree, not main.
+If you start from main, you will miss the 2026-05-07 mobile baseline unless the user asks you to merge or check out the WIP branch.
 
-Minimum verification:
+Product:
+我为 CFO is a personal finance mobile MVP that treats an ordinary natural person as a company.
+It is not a normal bookkeeping app.
+The product should help the user understand personal finance through balance sheet, income statement, cash flow statement, operating conclusions, and net worth.
+
+MVP rules:
+- Use Expo + React Native + TypeScript + AsyncStorage.
+- Do not add backend, login, cloud sync, database, payment, membership, AI/API integration, tax filing, VAT, invoice, or individual-business logic.
+- Keep bottom navigation as 首页 / 管理 / 报表 / 我的 unless the user explicitly changes product scope.
+- Keep all user-facing copy in Chinese.
+- Keep accounting logic out of UI.
+- Keep report calculation functions pure and testable.
+- Do not let frontend code invent accounting formulas.
+- Do not change storage schema, route keys, storage keys, parser behavior, transaction mapping, domain model fields, or accounting formulas unless explicitly requested.
+
+Current 2026-05-07 WIP baseline:
+- Branch wip/mobile-baseline-before-worktree contains two WIP commits after main:
+  - 4ea401d wip: snapshot current mobile state before worktree
+  - 4148dcb wip: snapshot current mobile state before worktree
+- These commits add or modify the warm financial UI baseline, shared financeUI primitives, OperatingAnalysisReportScreen, ProfitabilityAnalysisScreen, DrilldownIncomeSankeySection, incomeStructureFlow, operatingAnalysisReport, profitabilityAnalysis, NotoSansSC font, babel.config.js, and Skia/Blur/Reanimated/Worklets dependencies.
+- They also clean transaction display index, transaction records, account management, and remove the old Expo error log.
+
+Important completion warning:
+Operating analysis and profitability analysis screens are still static mock/prototype reports.
+Do not describe them as a completed real report engine until they are connected to real AppData and validated against accounting rules.
+
+Before work:
+cd D:\imcfo
+git status --short --branch
+git log --oneline --decorate -10
+git diff --name-status main..HEAD
+
+Before finishing implementation tasks:
 cd D:\imcfo\mobile
 npm.cmd run typecheck
 
-If npm.cmd is unavailable in the automation environment, run the same TypeScript compiler through the bundled/local Node path:
-C:\Users\liyuxiang\AppData\Local\OpenAI\Codex\bin\node.exe .\node_modules\typescript\bin\tsc --noEmit
-C:\Users\liyuxiang\AppData\Local\OpenAI\Codex\bin\node.exe .\node_modules\typescript\bin\tsc --noEmit --noUnusedLocals --noUnusedParameters
+Recommended reading order:
+1. AGENTS.md
+2. docs/10-current-project-context.md
+3. docs/handoff/2026-05-04-imcfo-complete-handoff/imcfo-complete-handoff.md
+4. appendix-a-architecture-map.md
+5. appendix-b-product-and-accounting-rules.md
+6. appendix-c-ui-screenshot-index.md
+7. appendix-d-current-git-and-risks.md
 
-Final reporting:
-Report results in Chinese.
+Report final results in Chinese.

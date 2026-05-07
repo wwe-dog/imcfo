@@ -1,12 +1,13 @@
 # 我为 CFO 当前项目完整交接包
 
 生成日期：2026-05-04  
-最近同步：2026-05-05  
+最近同步：2026-05-07  
 项目根目录：`D:\imcfo`  
 移动端目录：`D:\imcfo\mobile`  
-当前分支：`main`，相对 `origin/main` ahead 18  
-当前 HEAD：`30a3411 docs: add complete project handoff package`  
-最低验证：`cd D:\imcfo\mobile; npm.cmd run typecheck` 已通过；2026-05-05 自动化审计环境还通过本地 TypeScript 编译器入口的 `tsc --noEmit` 与 `tsc --noEmit --noUnusedLocals --noUnusedParameters`
+当前分支：`wip/mobile-baseline-before-worktree`  
+当前 HEAD：`4148dcb wip: snapshot current mobile state before worktree`  
+`main` 当前指向：`759fb80 docs: sync handoff package with current progress`  
+最低验证：`cd D:\imcfo\mobile; npm.cmd run typecheck` 已通过，2026-05-07。
 
 ## 1. 项目定位
 
@@ -38,10 +39,20 @@ V0.1 的用户是普通自然人，包括学生、刚毕业年轻人、普通职
 - `mobile/src/storage/asyncStorageAdapter.ts`：AsyncStorage 持久化边界。
 - `mobile/src/domain/models/*`：账户、资产、负债、交易、分录、报表期间和报表输出类型。
 - `mobile/src/domain/accounting/*`：会计计算、交易规则、现金流规则、对账规则、期间过滤。
-- `mobile/src/domain/reports/*`：三大报表和新增分析报告 view model。
+- `mobile/src/domain/reports/*`：三大报表和分析报告 view model。
+- `mobile/src/domain/transactions/transactionDisplayIndex.ts`：交易记录展示索引。
 - `mobile/src/screens/*`：页面展示和交互。
-- `mobile/src/components/financeUI.tsx`：当前未提交的金融 UI primitives。
+- `mobile/src/components/financeUI.tsx`：WIP 共享金融 UI primitives。
 - `mobile/src/styles/theme.ts`：暖色金融视觉 token。
+
+当前 WIP 分支还引入：
+
+- `@shopify/react-native-skia`
+- `expo-blur`
+- `react-native-reanimated`
+- `react-native-worklets`
+- `mobile/assets/fonts/NotoSansSC-Regular.otf`
+- `mobile/babel.config.js`
 
 核心数据流：
 
@@ -108,61 +119,59 @@ V0.1 使用个人经营语境下的六大会计要素：
 - 账户管理：账户总览、账户分类详情、账户详情、新增/编辑、对账。
 - 资产负债管理：资产/负债分段、会计科目列表、科目详情、明细详情、新增/编辑、对账、删除。
 - 报表：资产负债表、利润表、现金流量表，支持简易版/专业版和完整报表面板。
-- 经营分析报告：报告式分析页面，目前为静态 mock 报告。
-- 盈利能力分析：指标表、趋势、收入结构下钻、说明弹层，目前为静态 mock 报告。
+- 经营分析报告：报告式分析页面，目前按静态 mock/prototype 看待。
+- 盈利能力分析：指标表、趋势、收入结构下钻、说明弹层，目前按静态 mock/prototype 看待。
 - 我的/设置：个人摘要、工具、设置、数据管理。
 
 重要完成度说明：
 
 - 三大基础报表和 Dashboard summary 基于当前本地数据计算。
-- 经营分析报告和盈利能力分析页面目前不是完整报表引擎，`operatingAnalysisReport.ts` 和 `profitabilityAnalysis.ts` 仍是静态 mock 数据。
-- `incomeStructureFlow.ts` 是收入结构树到下钻 view model 的纯展示转换。
+- 经营分析报告和盈利能力分析页面目前不是完整真实报表引擎，`operatingAnalysisReport.ts` 和 `profitabilityAnalysis.ts` 仍不能宣传为真实业务分析完成。
+- `incomeStructureFlow.ts` 是收入结构树到下钻 view model 的展示转换。
 - Dashboard 内仍有部分趋势、结构和聚合逻辑留在 UI 层，后续应迁到 domain/report engine。
 
-## 5.1 2026-05-05 最新进度同步
+## 5.1 2026-05-05 进度同步
 
-2026-05-05 的当前上下文快照记录了一轮 overnight-quality 维护审计。该审计覆盖仓库结构、移动端入口、页面、组件、domain、hooks、storage、styles、TypeScript 编译稳定性、交易记录、筛选弹窗、月份折叠、交易详情、账户管理、资产负债管理、数据重置/导入后的状态安全。
+2026-05-05 的上下文快照记录了一轮 overnight-quality 维护审计，覆盖仓库结构、移动端入口、页面、组件、domain、hooks、storage、styles、TypeScript 编译稳定性、交易记录、筛选弹窗、月份折叠、交易详情、账户管理、资产负债管理、数据重置/导入后的状态安全。
 
-本轮审计记录的关键修复方向：
+关键修复方向：
 
 - `TransactionRecordsScreen` 删除旧版交易搜索、筛选、分组和 display record 构建 helper，统一依赖 `transactionDisplayIndex`。
 - `TransactionRecordsScreen` 在 records index 变化后清理已经不存在的交易详情选中项，避免重置、导入或清空数据后详情页引用 stale record。
 - `transactionDisplayIndex` 移除关闭状态的性能调试 `console.log` 路径。
-- `RecordScreen`、`SettingsScreen`、`AppIcon`、`ProfitabilityAnalysisScreen`、`AccountManagementScreen` 清理未使用导入、未使用状态和未使用组件。
-- 交易记录默认懒加载月份数据仍保留，搜索或筛选时才 hydration 全量 records。
+- 多个 screen/component 清理未使用导入、未使用状态和未使用组件。
+- 交易记录默认懒加载月份数据仍保留，搜索或筛选时会 hydration 全量 records。
 
-本轮审计保持不变：
+## 5.2 2026-05-07 WIP 基线同步
 
-- 未改会计公式、交易规则、现金流规则。
-- 未改 seed data totals、高复杂度演示预期值。
-- 未改 storage schema。
-- 未新增后端、登录、云同步、支付、AI/API、税务/VAT/发票模块。
-- 未新增底部 tab。
+2026-05-07 的当前项目进度已经不在 `main` 上，而在 `wip/mobile-baseline-before-worktree` 分支上。该分支相对 `main` 多出两个 WIP 提交：
 
-验证记录：
+- `4ea401d wip: snapshot current mobile state before worktree`  
+  记录大范围移动端基线：暖色个人金融 UI、共享 `financeUI`、经营分析报告页面、盈利能力分析页面、收入结构下钻 view model、NotoSansSC 字体、Expo Babel 配置，以及 Skia/Blur/Reanimated/Worklets 依赖。
+- `4148dcb wip: snapshot current mobile state before worktree`  
+  删除旧 Expo error log，并清理交易展示索引、交易记录页、账户管理页中的 stale detail/debug 风险。
+
+当前分支状态在本次文档同步前是干净的：
+
+```text
+## wip/mobile-baseline-before-worktree
+```
+
+接管注意：
+
+- 如果从 `main` 接管，会缺少 2026-05-07 WIP 移动端基线。
+- 如果继续当前移动端实现，应从 `wip/mobile-baseline-before-worktree` 开始。
+- 这两个提交是 WIP snapshot，不等于已经按最终功能边界拆分完成。
+- 新增依赖应继续接受必要性审查，特别是静态 mock 报告页是否确实需要 Skia/Blur/Reanimated/Worklets。
+
+2026-05-07 验证：
 
 ```powershell
 cd D:\imcfo\mobile
-C:\Users\liyuxiang\AppData\Local\OpenAI\Codex\bin\node.exe .\node_modules\typescript\bin\tsc --noEmit
-C:\Users\liyuxiang\AppData\Local\OpenAI\Codex\bin\node.exe .\node_modules\typescript\bin\tsc --noEmit --noUnusedLocals --noUnusedParameters
+npm.cmd run typecheck
 ```
 
-结果：均通过。
-
-2026-04 seed data 校验值：
-
-- assets: 5,000,000
-- liabilities: 1,186,000
-- net worth: 3,814,000
-- income: 93,500
-- expenses: 45,600
-- profit: 47,900
-- operating cash flow: 56,900
-- investing cash flow: -64,000
-- financing cash flow: -69,200
-- cash net change: -76,300
-
-注意：这些审计进展体现在当前工作区状态和 `docs/10-current-project-context.md` 中；截至本次同步开始时，移动端相关代码仍显示为工作区未提交改动，不应误判为已经形成独立功能提交。
+结果：通过。
 
 ## 6. UI 设计
 
@@ -175,7 +184,7 @@ C:\Users\liyuxiang\AppData\Local\OpenAI\Codex\bin\node.exe .\node_modules\typesc
 - 首页和报表摘要可以用卡片提升信息密度。
 - 二级、三级管理/详情页应使用线分隔列表风格，避免大外层圆角容器和嵌套卡片。
 
-本轮当前模拟器截图：
+当前模拟器截图：
 
 ![首页顶部](screenshots/01-home-top.png)
 
@@ -195,39 +204,24 @@ C:\Users\liyuxiang\AppData\Local\OpenAI\Codex\bin\node.exe .\node_modules\typesc
 
 ## 7. 当前 Git 状态
 
-2026-05-05 同步时的状态：
+2026-05-07 同步前状态：
 
 ```text
-## main...origin/main [ahead 18]
- M docs/10-current-project-context.md
- M mobile/App.tsx
- M mobile/src/components/AppIcon.tsx
- M mobile/src/screens/AccountManagementScreen.tsx
- M mobile/src/screens/AssetsLiabilitiesScreen.tsx
- M mobile/src/screens/DashboardScreen.tsx
- M mobile/src/screens/RecordScreen.tsx
- M mobile/src/screens/ReportsScreen.tsx
- M mobile/src/screens/SettingsScreen.tsx
- M mobile/src/screens/TransactionRecordsScreen.tsx
- M mobile/src/styles/theme.ts
-?? docs/handoff/2026-05-imcfo-pdf/
-?? docs/ui-reference/
-?? docs/ui-snapshots/
-?? mobile/src/components/DrilldownIncomeSankeySection.tsx
-?? mobile/src/components/financeUI.tsx
-?? mobile/src/domain/reports/incomeStructureFlow.ts
-?? mobile/src/domain/reports/operatingAnalysisReport.ts
-?? mobile/src/domain/reports/profitabilityAnalysis.ts
-?? mobile/src/screens/OperatingAnalysisReportScreen.tsx
-?? mobile/src/screens/ProfitabilityAnalysisScreen.tsx
+## wip/mobile-baseline-before-worktree
 ```
 
-本次同步提交只应包含：
+当前分支相对 `main` 的主要变化：
+
+- 新增经营分析/盈利能力分析相关 screen 和 domain view model。
+- 新增共享金融 UI primitives 与收入结构下钻组件。
+- 新增 NotoSansSC 字体、Babel 配置和图形/动画依赖。
+- 修改首页、管理页、报表页、账户管理、资产负债、交易记录、设置、主题和格式化工具。
+- 删除旧 Expo error log。
+
+本次文档同步提交只应包含：
 
 - `docs/handoff/2026-05-04-imcfo-complete-handoff/**`
 - `docs/10-current-project-context.md`
-
-不要提交当前移动端功能代码，除非后续另开功能提交。
 
 ## 8. 交接包内容
 
@@ -249,5 +243,5 @@ C:\Users\liyuxiang\AppData\Local\OpenAI\Codex\bin\node.exe .\node_modules\typesc
 3. 读本交接包主文档。
 4. 读附录 A 和 B，确认架构和会计边界。
 5. 读附录 C，理解当前 UI。
-6. 读附录 D，确认 dirty 状态和风险。
+6. 读附录 D，确认当前分支、WIP 基线和风险。
 7. 在 `D:\imcfo\mobile` 运行 `npm.cmd run typecheck`。

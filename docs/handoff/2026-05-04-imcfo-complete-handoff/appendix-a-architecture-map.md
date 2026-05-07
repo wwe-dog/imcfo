@@ -1,5 +1,9 @@
 # 附录 A：架构地图
 
+最近同步：2026-05-07  
+当前分支：`wip/mobile-baseline-before-worktree`  
+当前 HEAD：`4148dcb wip: snapshot current mobile state before worktree`
+
 ## 1. 当前技术栈
 
 - Expo 54
@@ -7,6 +11,11 @@
 - React 19
 - TypeScript strict
 - AsyncStorage
+- `@shopify/react-native-skia`
+- `expo-blur`
+- `react-native-reanimated`
+- `react-native-worklets`
+- `NotoSansSC-Regular.otf`
 - 无后端、无登录、无数据库、无云同步
 
 移动端命令入口在 `D:\imcfo\mobile\package.json`：
@@ -25,6 +34,10 @@ npm.cmd run android
 ```text
 mobile/
   App.tsx
+  assets/
+    fonts/
+      NotoSansSC-Regular.otf
+  babel.config.js
   src/
     app/
       useAppData.ts
@@ -70,36 +83,37 @@ Screen
 - `domain/accounting/transactionRules.ts`：交易输入到财务状态变更。
 - `domain/accounting/reconciliationRules.ts`：账户和资产对账调整。
 - `domain/accounting/periodFilters.ts`：报表期间过滤。
-- `domain/reports/*`：三大报表和分析报告 view model。
+- `domain/reports/*`：三大报表与分析报告 view model。
+- `domain/transactions/transactionDisplayIndex.ts`：交易记录展示索引，当前交易记录页统一依赖该入口。
 - `screens/*`：页面展示、交互状态、弹层和导航。
-- `components/financeUI.tsx`：当前未提交的共享金融 UI primitives。
-- `styles/theme.ts`：视觉 token。
+- `components/financeUI.tsx`：WIP 共享金融 UI primitives。
+- `styles/theme.ts`：暖色个人金融视觉 token。
 
-## 5. 已知架构风险
+## 5. 2026-05-07 WIP 基线
+
+当前分支相对 `main` 新增两个 WIP 提交：
+
+- `4ea401d`：记录大范围移动端基线，包含新视觉方向、共享 UI primitives、经营分析/盈利能力分析页面、收入结构下钻 view model、字体和新增图形/动画依赖。
+- `4148dcb`：删除旧 Expo error log，清理交易记录和账户管理相关的 stale record/debug 风险。
+
+这些提交已经在当前分支中存在，但还没有合入 `main`。接管者如果从 `main` 开始，需要先明确是否切换到 `wip/mobile-baseline-before-worktree` 或把该基线合入。
+
+## 6. 已知架构风险
 
 - `DashboardScreen.tsx` 内仍有部分趋势、现金流方向、资产/负债构成等聚合逻辑，后续应迁入 domain/report engine。
-- `operatingAnalysisReport.ts` 和 `profitabilityAnalysis.ts` 是静态 mock 数据，不应被当成真实计算引擎。
+- `operatingAnalysisReport.ts` 和 `profitabilityAnalysis.ts` 仍按静态 mock/prototype 看待，不应被当成真实计算引擎。
 - `calculateCashFlowByType` 与交易展示索引的现金流入判断存在口径漂移风险。
 - 应收/应付现金流分类在文档和实现之间需要再统一。
-- 当前没有自动化公式测试，只有 TypeScript typecheck。
+- 当前没有自动化公式测试，最低质量门槛是 `npm.cmd run typecheck`。
+- 新增 Skia、Blur、Reanimated、Worklets 应继续接受依赖必要性审查，避免为静态页面保留过重依赖。
 
-## 6. 2026-05-05 审计同步
+## 7. 验证记录
 
-最新上下文快照记录了一轮 overnight-quality 维护审计，重点检查移动端编译稳定性、交易记录状态安全、未使用代码和高复杂度演示数据不变量。
-
-记录到交接包的最新实现方向：
-
-- 交易记录页继续统一使用 `transactionDisplayIndex` 作为展示索引来源。
-- 交易记录详情选中项会在 records index 变化后清理，降低导入、清空、重置数据后的 stale record 风险。
-- 交易记录默认保留月份懒加载策略，搜索或筛选时才 hydration 全量 records。
-- 若继续维护交易记录页，应避免重新引入旧版本地搜索/分组 helper。
-- 若继续维护分析报告页，应优先把静态 mock 数据接入真实 AppData 和三大报表口径。
-
-验证记录：
+2026-05-07 已运行：
 
 ```powershell
-C:\Users\liyuxiang\AppData\Local\OpenAI\Codex\bin\node.exe .\node_modules\typescript\bin\tsc --noEmit
-C:\Users\liyuxiang\AppData\Local\OpenAI\Codex\bin\node.exe .\node_modules\typescript\bin\tsc --noEmit --noUnusedLocals --noUnusedParameters
+cd D:\imcfo\mobile
+npm.cmd run typecheck
 ```
 
-结果：均通过。
+结果：通过。

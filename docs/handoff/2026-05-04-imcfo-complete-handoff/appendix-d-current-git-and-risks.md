@@ -1,76 +1,102 @@
 # 附录 D：当前 Git 状态与风险
 
+最近同步：2026-05-07  
+项目根目录：`D:\imcfo`
+
 ## 1. 当前状态
 
-2026-05-05 同步时：
+2026-05-07 同步前：
 
 ```text
-## main...origin/main [ahead 18]
- M docs/10-current-project-context.md
- M mobile/App.tsx
- M mobile/src/components/AppIcon.tsx
- M mobile/src/screens/AccountManagementScreen.tsx
- M mobile/src/screens/AssetsLiabilitiesScreen.tsx
- M mobile/src/screens/DashboardScreen.tsx
- M mobile/src/screens/RecordScreen.tsx
- M mobile/src/screens/ReportsScreen.tsx
- M mobile/src/screens/SettingsScreen.tsx
- M mobile/src/screens/TransactionRecordsScreen.tsx
- M mobile/src/styles/theme.ts
-?? docs/handoff/2026-05-imcfo-pdf/
-?? docs/ui-reference/
-?? docs/ui-snapshots/
-?? mobile/src/components/DrilldownIncomeSankeySection.tsx
-?? mobile/src/components/financeUI.tsx
-?? mobile/src/domain/reports/incomeStructureFlow.ts
-?? mobile/src/domain/reports/operatingAnalysisReport.ts
-?? mobile/src/domain/reports/profitabilityAnalysis.ts
-?? mobile/src/screens/OperatingAnalysisReportScreen.tsx
-?? mobile/src/screens/ProfitabilityAnalysisScreen.tsx
+## wip/mobile-baseline-before-worktree
 ```
 
-## 2. 本次文档提交范围
+- 当前分支：`wip/mobile-baseline-before-worktree`
+- 当前 HEAD：`4148dcb wip: snapshot current mobile state before worktree`
+- `main` 当前指向：`759fb80 docs: sync handoff package with current progress`
+- 同步前工作区：干净
+- 本轮只应修改并提交交接包文档与 `docs/10-current-project-context.md`
+
+当前分支相对 `main` 包含两个 WIP 移动端基线提交：
+
+```text
+4148dcb wip: snapshot current mobile state before worktree
+4ea401d wip: snapshot current mobile state before worktree
+```
+
+## 2. `main..HEAD` 主要差异
+
+新增：
+
+- `mobile/assets/fonts/NotoSansSC-Regular.otf`
+- `mobile/babel.config.js`
+- `mobile/src/components/DrilldownIncomeSankeySection.tsx`
+- `mobile/src/components/financeUI.tsx`
+- `mobile/src/domain/reports/incomeStructureFlow.ts`
+- `mobile/src/domain/reports/operatingAnalysisReport.ts`
+- `mobile/src/domain/reports/profitabilityAnalysis.ts`
+- `mobile/src/screens/OperatingAnalysisReportScreen.tsx`
+- `mobile/src/screens/ProfitabilityAnalysisScreen.tsx`
+
+修改：
+
+- `mobile/App.tsx`
+- `mobile/package.json`
+- `mobile/package-lock.json`
+- `mobile/src/components/AppIcon.tsx`
+- `mobile/src/domain/transactions/transactionDisplayIndex.ts`
+- `mobile/src/screens/AccountManagementScreen.tsx`
+- `mobile/src/screens/AssetsLiabilitiesScreen.tsx`
+- `mobile/src/screens/DashboardScreen.tsx`
+- `mobile/src/screens/RecordScreen.tsx`
+- `mobile/src/screens/ReportsScreen.tsx`
+- `mobile/src/screens/SettingsScreen.tsx`
+- `mobile/src/screens/TransactionRecordsScreen.tsx`
+- `mobile/src/styles/theme.ts`
+- `mobile/src/utils/formatters.ts`
+
+删除：
+
+- `mobile/expo-start-8083.err.log`
+
+## 3. 本次文档提交范围
 
 只应 stage：
 
 - `docs/handoff/2026-05-04-imcfo-complete-handoff/**`
 - `docs/10-current-project-context.md`
 
-不要 stage：
+不要在本次交接包同步中额外修改或 stage 移动端功能代码。当前移动端功能代码已经作为 WIP 基线存在于 `4ea401d` 和 `4148dcb`。
 
-- 当前 mobile 功能代码。
-- `docs/ui-reference/`
-- `docs/ui-snapshots/`
-- 旧交接包目录中非本次新增的内容，除非后续明确要求。
+## 4. 当前风险
 
-## 3. 当前风险
-
-- 新报表分析文件是未跟踪功能代码，还没有形成单独 feature commit。
-- 经营分析和盈利能力分析使用静态 mock 数据，与真实 AppData 口径尚未打通。
-- Dashboard 内存在 UI 层聚合逻辑，长期应迁到 domain/report engine。
+- 当前工作分支不是 `main`。如果协作者从 `main` 接管，会缺少 2026-05-07 的 WIP 移动端基线。
+- `4ea401d` 是大范围 WIP snapshot，后续合入前应按功能边界复查，而不是直接视作精细拆分后的 feature commit。
+- 经营分析和盈利能力分析仍按静态 mock/prototype 看待，尚不能宣传为真实报表引擎完成。
+- Dashboard 内仍有 UI 层聚合逻辑，后续应迁移到 domain/report engine。
 - 应收/应付现金流分类在文档和实现之间需要统一。
-- 当前没有自动化测试脚本，最低质量门槛是 `npm.cmd run typecheck`。
-- 2026-05-05 快照记录的 overnight-quality 审计结果已同步进本交接包；截至同步开始时，这些移动端代码仍在工作区中显示为未提交改动。
-- 本地分支同步时为 ahead 18，远端可能没有最新上下文。
+- 新增 Skia、Blur、Reanimated、Worklets、字体和 Babel 配置后，后续应确认它们对当前 MVP 的必要性与启动稳定性。
+- 当前缺少自动化公式测试脚本，最低质量门槛仍是 `npm.cmd run typecheck`。
 
-## 4. 最低验收
+## 5. 最低验收
+
+2026-05-07 已运行：
 
 ```powershell
 cd D:\imcfo\mobile
 npm.cmd run typecheck
 ```
 
-结果：本次交接包生成前已通过。
+结果：通过，实际执行 `tsc --noEmit`。
 
-2026-05-05 审计还记录了以下 TypeScript 验证通过：
+建议接管后继续运行：
 
 ```powershell
-C:\Users\liyuxiang\AppData\Local\OpenAI\Codex\bin\node.exe .\node_modules\typescript\bin\tsc --noEmit
-C:\Users\liyuxiang\AppData\Local\OpenAI\Codex\bin\node.exe .\node_modules\typescript\bin\tsc --noEmit --noUnusedLocals --noUnusedParameters
+cd D:\imcfo
+git status --short --branch
+git log --oneline --decorate -10
+git diff --name-status main..HEAD
+
+cd D:\imcfo\mobile
+npm.cmd run typecheck
 ```
-
-数据校验：
-
-- 2026-04 seed data：assets 5,000,000；liabilities 1,186,000；net worth 3,814,000；income 93,500；expenses 45,600；profit 47,900；operating cash flow 56,900；investing cash flow -64,000；financing cash flow -69,200；cash net change -76,300。
-- `historicalMonthlySnapshots` 中 2026-04 快照保持同样数值。
-- seed transactions 检查结果：交易 ID 无重复，账户/资产/负债引用无缺失。
