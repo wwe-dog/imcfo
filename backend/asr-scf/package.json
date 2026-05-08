@@ -1,0 +1,10 @@
+{
+  "name": "imcfo-asr-scf",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tencent Cloud ASR proxy for IMCFO speech transcription.",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test-local.js"
+  }
+}

@@ -1,0 +1,32 @@
+component: scf
+name: imcfo-asr-scf
+
+inputs:
+  name: imcfo-asr-transcribe
+  src: ./
+  handler: index.main_handler
+  runtime: Nodejs18.15
+  region: ap-guangzhou
+  memorySize: 256
+  timeout: 30
+  environment:
+    variables:
+      TENCENT_SECRET_ID: ${env:TENCENT_SECRET_ID}
+      TENCENT_SECRET_KEY: ${env:TENCENT_SECRET_KEY}
+      TENCENT_ASR_ENGINE: ${env:TENCENT_ASR_ENGINE}
+      TENCENT_ASR_REGION: ${env:TENCENT_ASR_REGION}
+      CORS_ALLOW_ORIGIN: ${env:CORS_ALLOW_ORIGIN}
+  events:
+    - apigw:
+        parameters:
+          serviceName: imcfo-asr-api
+          protocols:
+            - https
+          environment: release
+          endpoints:
+            - path: /asr/transcribe
+              method: POST
+              enableCORS: true
+            - path: /asr/transcribe
+              method: OPTIONS
+              enableCORS: true

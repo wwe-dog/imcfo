@@ -25,6 +25,15 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "IMCFO 需要使用麦克风，将你的语音转写为记账文本。",
+          "recordAudioAndroid": true
+        }
+      ]
+    ]
   }
 }
