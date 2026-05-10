@@ -39,12 +39,16 @@ export interface TransactionDisplayRecord {
 }
 
 export interface TransactionDisplayMonthGroup {
+  expenseTotal: number;
+  incomeTotal: number;
   items: TransactionDisplayRecord[];
   monthKey: string;
   monthLabel: string;
 }
 
 export interface TransactionMonthSummary {
+  expenseTotal: number;
+  incomeTotal: number;
   latestTimestamp: number;
   monthKey: string;
   monthLabel: string;
@@ -111,6 +115,17 @@ const getAmountTone = (transaction: Transaction): "positive" | "negative" | "neu
   if (direction === "outflow") return "negative";
   return "neutral";
 };
+
+const summarizeTransactions = (transactions: Transaction[]): { expenseTotal: number; incomeTotal: number } =>
+  transactions.reduce(
+    (totals, transaction) => {
+      const tone = getAmountTone(transaction);
+      if (tone === "positive") return { ...totals, incomeTotal: totals.incomeTotal + transaction.amount };
+      if (tone === "negative") return { ...totals, expenseTotal: totals.expenseTotal + transaction.amount };
+      return totals;
+    },
+    { expenseTotal: 0, incomeTotal: 0 },
+  );
 
 const formatSignedAmount = (transaction: Transaction): string => {
   const tone = getAmountTone(transaction);
@@ -287,9 +302,17 @@ export const groupTransactionDisplayRecords = (
 
   records.forEach((record) => {
     if (!currentGroup || currentGroup.monthKey !== record.monthKey) {
-      currentGroup = { items: [], monthKey: record.monthKey, monthLabel: record.monthLabel };
+      currentGroup = {
+        expenseTotal: 0,
+        incomeTotal: 0,
+        items: [],
+        monthKey: record.monthKey,
+        monthLabel: record.monthLabel,
+      };
       groups.push(currentGroup);
     }
+    if (record.amountTone === "positive") currentGroup.incomeTotal += record.transaction.amount;
+    if (record.amountTone === "negative") currentGroup.expenseTotal += record.transaction.amount;
     currentGroup.items.push(record);
   });
 
@@ -320,12 +343,16 @@ export const buildTransactionRecordsIndex = (
     }
   });
 
-  const monthSummaries = Array.from(rawTransactionsByMonth.entries()).map(([monthKey, monthTransactions]) => ({
-    latestTimestamp: getTransactionTimestamp(monthTransactions[0]),
-    monthKey,
-    monthLabel: getMonthLabel(monthTransactions[0]?.date ?? monthKey),
-    transactionCount: monthTransactions.length,
-  }));
+  const monthSummaries = Array.from(rawTransactionsByMonth.entries()).map(([monthKey, monthTransactions]) => {
+    const totals = summarizeTransactions(monthTransactions);
+    return {
+      ...totals,
+      latestTimestamp: getTransactionTimestamp(monthTransactions[0]),
+      monthKey,
+      monthLabel: getMonthLabel(monthTransactions[0]?.date ?? monthKey),
+      transactionCount: monthTransactions.length,
+    };
+  });
 
   const latestDateKey = sortedTransactions[0]?.date ?? "";
   const latestMonthKey = monthSummaries[0]?.monthKey ?? "";

@@ -29,7 +29,6 @@ import ScreenTransition from "../components/ScreenTransition";
 import type { Asset, Liability, Transaction } from "../domain/models";
 import {
   buildTransactionDisplayRecord,
-  getTransactionAmountDirection,
   getTransactionCashFlowLabel,
   getTransactionCashStatusLabel,
   getTransactionTypeLabel,
@@ -140,13 +139,6 @@ const getAssetName = (assets: Asset[], assetId?: string): string | undefined =>
 const getLiabilityName = (liabilities: Liability[], liabilityId?: string): string | undefined =>
   liabilityId ? liabilities.find((liability) => liability.id === liabilityId)?.name ?? "未知负债" : undefined;
 
-const getAmountTone = (transaction: Transaction): "positive" | "negative" | "neutral" => {
-  const direction = getTransactionAmountDirection(transaction);
-  if (direction === "inflow") return "positive";
-  if (direction === "outflow") return "negative";
-  return "neutral";
-};
-
 const getTransactionAccent = (tone: TransactionDisplayRecord["amountTone"]): "green" | "orange" | "red" => {
   if (tone === "positive") return "green";
   if (tone === "negative") return "red";
@@ -164,27 +156,6 @@ const getTransactionIconName = (transaction: Transaction): AppIconName => {
 
 const getTransactionSubtitle = (record: TransactionDisplayRecord): string =>
   [record.dateTime, record.typeLabel, record.categoryText, record.cashStatus].filter(Boolean).join(" · ");
-
-const summarizeMonthTransactions = (
-  records: TransactionDisplayRecord[],
-  rawTransactions?: Transaction[],
-): { expenseTotalText: string; incomeTotalText: string } => {
-  const source = records.length > 0 ? records.map((record) => record.transaction) : rawTransactions ?? [];
-  const totals = source.reduce(
-    (sum, transaction) => {
-      const tone = getAmountTone(transaction);
-      if (tone === "positive") return { ...sum, income: sum.income + transaction.amount };
-      if (tone === "negative") return { ...sum, expense: sum.expense + transaction.amount };
-      return sum;
-    },
-    { expense: 0, income: 0 },
-  );
-
-  return {
-    expenseTotalText: formatCurrency(totals.expense),
-    incomeTotalText: formatCurrency(totals.income),
-  };
-};
 
 const formatImpact = (value: number): string => {
   if (Math.abs(value) < 0.01) return formatCurrency(0);
@@ -418,8 +389,12 @@ export default function TransactionRecordsScreen({
   useEffect(() => {
     if (!recordsIndex?.latestDateKey) return;
     const nextDefaults = createDefaultFilters(recordsIndex.latestDateKey);
-    setAppliedFilters((current) => ({ ...current, calendarMonth: current.calendarMonth || nextDefaults.calendarMonth }));
-    setDraftFilters((current) => ({ ...current, calendarMonth: current.calendarMonth || nextDefaults.calendarMonth }));
+    const syncCalendarMonth = (current: FilterState): FilterState =>
+      current.time === "custom" || current.customStartDate || current.customEndDate
+        ? current
+        : { ...current, calendarMonth: nextDefaults.calendarMonth };
+    setAppliedFilters(syncCalendarMonth);
+    setDraftFilters(syncCalendarMonth);
   }, [recordsIndex?.latestDateKey]);
 
   useEffect(() => {
@@ -452,6 +427,8 @@ export default function TransactionRecordsScreen({
 
     if (isDefaultLazyMode) {
       return recordsIndex.monthSummaries.map((summary) => ({
+        expenseTotal: summary.expenseTotal,
+        incomeTotal: summary.incomeTotal,
         items: hydratedRecordsByMonth.get(summary.monthKey) ?? [],
         monthKey: summary.monthKey,
         monthLabel: summary.monthLabel,
@@ -478,20 +455,16 @@ export default function TransactionRecordsScreen({
     () =>
       filteredGroups.map((group) => {
         const isCollapsed = collapsedMonths[group.monthKey] ?? group.monthKey !== recordsIndex?.latestMonthKey;
-        const monthTotals = summarizeMonthTransactions(
-          group.items,
-          recordsIndex?.rawTransactionsByMonth.get(group.monthKey),
-        );
 
         return {
           data: isCollapsed ? [] : group.items,
-          expenseTotalText: monthTotals.expenseTotalText,
-          incomeTotalText: monthTotals.incomeTotalText,
+          expenseTotalText: formatCurrency(group.expenseTotal),
+          incomeTotalText: formatCurrency(group.incomeTotal),
           monthKey: group.monthKey,
           monthLabel: group.monthLabel,
         };
       }),
-    [collapsedMonths, filteredGroups, recordsIndex?.latestMonthKey, recordsIndex?.rawTransactionsByMonth],
+    [collapsedMonths, filteredGroups, recordsIndex?.latestMonthKey],
   );
 
   const isPreparingRecords = isPreparingRecordsIndex || !recordsIndex;
