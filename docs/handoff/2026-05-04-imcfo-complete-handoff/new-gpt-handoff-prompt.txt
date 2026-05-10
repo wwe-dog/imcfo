@@ -39,8 +39,17 @@ Current 2026-05-07 WIP baseline:
 - Branch wip/mobile-baseline-before-worktree contains two WIP commits after main:
   - 4ea401d wip: snapshot current mobile state before worktree
   - 4148dcb wip: snapshot current mobile state before worktree
-- These commits add or modify the warm financial UI baseline, shared financeUI primitives, OperatingAnalysisReportScreen, ProfitabilityAnalysisScreen, DrilldownIncomeSankeySection, incomeStructureFlow, operatingAnalysisReport, profitabilityAnalysis, NotoSansSC font, babel.config.js, and Skia/Blur/Reanimated/Worklets dependencies.
+- These commits add or modify the earlier financial UI baseline, shared financeUI primitives, OperatingAnalysisReportScreen, ProfitabilityAnalysisScreen, DrilldownIncomeSankeySection, incomeStructureFlow, operatingAnalysisReport, profitabilityAnalysis, NotoSansSC font, babel.config.js, and Skia/Blur/Reanimated/Worklets dependencies.
 - They also clean transaction display index, transaction records, account management, and remove the old Expo error log.
+
+Current visual system:
+- The official visual direction is now IMCFO 暗黑液态 CFO 风格 / Dark Liquid CFO Style.
+- One-line definition: 深色金融操作台 + 液态玻璃卡片球体 + 赛博 HUD 数据流 + 个人 CFO AI 入口.
+- Orange remains a brand anchor, key action color, and warning color; it is no longer the only primary visual color.
+- Financial semantic colors remain stable: positive/income/improvement/profit = green; negative/expense/risk/loss = red; warning/pending/focus = orange or amber; neutral amount/text = black, dark gray, or light gray; links/drilldowns/clickable = blue or brand accent.
+- Home, sphere, smart record input, AI entry, and HUD may use dark liquid visual language.
+- Management, accounts, assets/liabilities, transaction records, reports, and settings must preserve readability and accounting clarity.
+- Read docs/standards/imcfo-visual-system.md before designing or implementing UI.
 
 Important completion warning:
 Operating analysis and profitability analysis screens are still static mock/prototype reports.
@@ -64,5 +73,6 @@ Recommended reading order:
 5. appendix-b-product-and-accounting-rules.md
 6. appendix-c-ui-screenshot-index.md
 7. appendix-d-current-git-and-risks.md
+8. docs/standards/imcfo-visual-system.md
 
 Report final results in Chinese.

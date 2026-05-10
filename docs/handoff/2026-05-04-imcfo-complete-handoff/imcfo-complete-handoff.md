@@ -5,7 +5,7 @@
 项目根目录：`D:\imcfo`  
 移动端目录：`D:\imcfo\mobile`  
 当前分支：`wip/mobile-baseline-before-worktree`  
-当前 HEAD：`4148dcb wip: snapshot current mobile state before worktree`  
+当前 HEAD：`a73b2bb docs: sync handoff package with wip baseline`  
 `main` 当前指向：`759fb80 docs: sync handoff package with current progress`  
 最低验证：`cd D:\imcfo\mobile; npm.cmd run typecheck` 已通过，2026-05-07。
 
@@ -43,7 +43,7 @@ V0.1 的用户是普通自然人，包括学生、刚毕业年轻人、普通职
 - `mobile/src/domain/transactions/transactionDisplayIndex.ts`：交易记录展示索引。
 - `mobile/src/screens/*`：页面展示和交互。
 - `mobile/src/components/financeUI.tsx`：WIP 共享金融 UI primitives。
-- `mobile/src/styles/theme.ts`：暖色金融视觉 token。
+- `mobile/src/styles/theme.ts`：当前移动端视觉 token。后续视觉治理以 `docs/standards/imcfo-visual-system.md` 的“IMCFO 暗黑液态 CFO 风格”为准。
 
 当前 WIP 分支还引入：
 
@@ -147,7 +147,7 @@ V0.1 使用个人经营语境下的六大会计要素：
 2026-05-07 的当前项目进度已经不在 `main` 上，而在 `wip/mobile-baseline-before-worktree` 分支上。该分支相对 `main` 多出两个 WIP 提交：
 
 - `4ea401d wip: snapshot current mobile state before worktree`  
-  记录大范围移动端基线：暖色个人金融 UI、共享 `financeUI`、经营分析报告页面、盈利能力分析页面、收入结构下钻 view model、NotoSansSC 字体、Expo Babel 配置，以及 Skia/Blur/Reanimated/Worklets 依赖。
+  记录大范围移动端基线：当时的金融 UI 基线、共享 `financeUI`、经营分析报告页面、盈利能力分析页面、收入结构下钻 view model、NotoSansSC 字体、Expo Babel 配置，以及 Skia/Blur/Reanimated/Worklets 依赖。当前正式视觉方向已升级为“IMCFO 暗黑液态 CFO 风格”。
 - `4148dcb wip: snapshot current mobile state before worktree`  
   删除旧 Expo error log，并清理交易展示索引、交易记录页、账户管理页中的 stale detail/debug 风险。
 
@@ -175,14 +175,36 @@ npm.cmd run typecheck
 
 ## 6. UI 设计
 
-当前视觉方向是“暖色中国个人金融 + CFO 仪表盘”：
+当前正式视觉方向是“IMCFO 暗黑液态 CFO 风格”，英文可称为 Dark Liquid CFO Style。
 
-- 白底和暖米色背景。
-- 橙色主色用于行动、强调和品牌。
-- 深色卡片用于首页净资产 hero。
-- 金额使用黑色、橙色、绿色、红色表达状态。
-- 首页和报表摘要可以用卡片提升信息密度。
-- 二级、三级管理/详情页应使用线分隔列表风格，避免大外层圆角容器和嵌套卡片。
+一句话定义：
+
+> 深色金融操作台 + 液态玻璃卡片球体 + 赛博 HUD 数据流 + 个人 CFO AI 入口。
+
+视觉定义：
+
+> 以深色数字金融背景为底座，通过液态玻璃卡片、HUD 数据流、空间化财务球体和高对比财务语义色，构建一个 AI 时代的个人 CFO 操作系统。
+
+旧的“暖色中国个人金融 + CFO 仪表盘”“橙色主色”“暖色金融视觉”不再作为唯一限制。橙色保留为品牌锚点、关键行动色和警示色之一；品牌表现色可以适度使用青蓝、水绿色、薄荷绿、紫蓝、电光紫、灰白、银白等数字金融色。
+
+视觉结构：
+
+- 首页、球体、智能记一笔、AI 输入入口和 HUD 可以使用深色金融背景、液态玻璃、发光边框、半透明卡片、空间层级、轻微流光、数据扫描线和球体旋转。
+- 顶部 HUD 数据带用于展示收入、本月净收益、支出、经营状态等核心指标，必须服务财务状态感知，不能成为纯装饰。
+- 中心液态玻璃财务球体由多张半透明功能节点卡片组成，可代表账户、资产、负债、收入、支出、报表、记一笔等功能节点。
+- 管理页、账户、资产负债、交易记录必须克制，清晰优先、可读优先、线分隔列表优先，不要堆叠大量玻璃卡片或透明发光层。
+- 报表页可以高级，但必须强调数字可读性、财务语义色和指标层级，不得为了视觉效果改动报表口径。
+- 我的/设置保持低干扰，中性色为主，操作清晰，不做强视觉炫技。
+
+财务语义色必须稳定：
+
+- 正向 / 收入 / 改善 / 收益：绿色。
+- 负向 / 支出 / 风险 / 亏损：红色。
+- 警示 / 待处理 / 重点提醒：橙色或琥珀色。
+- 中性金额 / 普通资产 / 普通文本：黑色、深灰或浅灰。
+- 链接 / 下钻 / 可点击：蓝色或品牌强调色。
+
+详细视觉规则见 `docs/standards/imcfo-visual-system.md`。
 
 当前模拟器截图：
 
@@ -233,6 +255,7 @@ npm.cmd run typecheck
 - `appendix-b-product-and-accounting-rules.md/pdf`
 - `appendix-c-ui-screenshot-index.md/pdf`
 - `appendix-d-current-git-and-risks.md/pdf`
+- `appendix-e-visual-system.md/pdf`
 - `new-gpt-handoff-prompt.txt`
 - `screenshots/`
 
@@ -244,4 +267,5 @@ npm.cmd run typecheck
 4. 读附录 A 和 B，确认架构和会计边界。
 5. 读附录 C，理解当前 UI。
 6. 读附录 D，确认当前分支、WIP 基线和风险。
-7. 在 `D:\imcfo\mobile` 运行 `npm.cmd run typecheck`。
+7. 读附录 E，确认 IMCFO 暗黑液态 CFO 风格、颜色治理和模块适用范围。
+8. 在 `D:\imcfo\mobile` 运行 `npm.cmd run typecheck`。

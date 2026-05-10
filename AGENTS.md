@@ -38,6 +38,13 @@ It is not a normal bookkeeping app. It is a personal operating system based on c
 - Avoid large outer rounded list containers and nested cards on management/detail/list pages.
 - Home dashboard and chart/report summary areas may keep card containers when they improve readability.
 
+## Home Dashboard Sub-Agents
+
+Detailed homepage-specific sub-agent rules live in:
+`docs/agents/home-dashboard-subagents.md`
+
+Use these sub-agents for homepage HUD, sphere geometry, liquid glass material, interaction motion, finance data binding, and performance QA tasks.
+
 ## Context Snapshot Rules
 
 - Use the `imcfo-context-snapshot` skill whenever a session resumes from a summary, model switch, compacted context, or handoff.

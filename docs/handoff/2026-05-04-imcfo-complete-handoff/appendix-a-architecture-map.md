@@ -87,13 +87,13 @@ Screen
 - `domain/transactions/transactionDisplayIndex.ts`：交易记录展示索引，当前交易记录页统一依赖该入口。
 - `screens/*`：页面展示、交互状态、弹层和导航。
 - `components/financeUI.tsx`：WIP 共享金融 UI primitives。
-- `styles/theme.ts`：暖色个人金融视觉 token。
+- `styles/theme.ts`：当前移动端视觉 token。后续视觉治理以 `docs/standards/imcfo-visual-system.md` 的“IMCFO 暗黑液态 CFO 风格”为准。
 
 ## 5. 2026-05-07 WIP 基线
 
 当前分支相对 `main` 新增两个 WIP 提交：
 
-- `4ea401d`：记录大范围移动端基线，包含新视觉方向、共享 UI primitives、经营分析/盈利能力分析页面、收入结构下钻 view model、字体和新增图形/动画依赖。
+- `4ea401d`：记录大范围移动端基线，包含当时的金融 UI 基线、共享 UI primitives、经营分析/盈利能力分析页面、收入结构下钻 view model、字体和新增图形/动画依赖。当前正式视觉规则已升级为“IMCFO 暗黑液态 CFO 风格”。
 - `4148dcb`：删除旧 Expo error log，清理交易记录和账户管理相关的 stale record/debug 风险。
 
 这些提交已经在当前分支中存在，但还没有合入 `main`。接管者如果从 `main` 开始，需要先明确是否切换到 `wip/mobile-baseline-before-worktree` 或把该基线合入。

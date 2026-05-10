@@ -12,14 +12,15 @@
 ```
 
 - 当前分支：`wip/mobile-baseline-before-worktree`
-- 当前 HEAD：`4148dcb wip: snapshot current mobile state before worktree`
+- 当前 HEAD：`a73b2bb docs: sync handoff package with wip baseline`
 - `main` 当前指向：`759fb80 docs: sync handoff package with current progress`
 - 同步前工作区：干净
-- 本轮只应修改并提交交接包文档与 `docs/10-current-project-context.md`
+- 当前工作区存在未提交文档同步和既有移动端改动。本轮交接包同步只应修改交接包文档，不应修改或提交移动端业务代码。
 
 当前分支相对 `main` 包含两个 WIP 移动端基线提交：
 
 ```text
+ a73b2bb docs: sync handoff package with wip baseline
 4148dcb wip: snapshot current mobile state before worktree
 4ea401d wip: snapshot current mobile state before worktree
 ```
@@ -37,6 +38,7 @@
 - `mobile/src/domain/reports/profitabilityAnalysis.ts`
 - `mobile/src/screens/OperatingAnalysisReportScreen.tsx`
 - `mobile/src/screens/ProfitabilityAnalysisScreen.tsx`
+- `docs/handoff/2026-05-04-imcfo-complete-handoff/appendix-e-visual-system.md`
 
 修改：
 
@@ -77,6 +79,7 @@
 - 应收/应付现金流分类在文档和实现之间需要统一。
 - 新增 Skia、Blur、Reanimated、Worklets、字体和 Babel 配置后，后续应确认它们对当前 MVP 的必要性与启动稳定性。
 - 当前缺少自动化公式测试脚本，最低质量门槛仍是 `npm.cmd run typecheck`。
+- 新增视觉方向为“IMCFO 暗黑液态 CFO 风格”。视觉升级不得自动扩大产品边界，也不得因为写成 AI 风格就默认接入真实 AI/API。
 
 ## 5. 最低验收
 
