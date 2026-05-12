@@ -247,3 +247,54 @@ Known limitations:
 - No commit was created because typecheck could not run and the working tree contains substantial unrelated/unreviewed dirty files.
 - Two Expo log files remain untracked because they are currently locked by another process.
 - No accounting formulas, transaction rules, cash-flow rules, storage schema, bottom navigation, backend/login/cloud/payment/tax scope, or seed totals were changed.
+
+## 11. 2026-05-11 automation maintenance audit
+
+Run time: 2026-05-11T02:09:05+08:00
+
+Scope: conservative overnight-quality maintenance audit for `D:\imcfo\mobile`, using AGENTS.md, the current worktree, and current Git state as source of truth. The workspace was already dirty before this pass, including `mobile/App.tsx`, `mobile/src/screens/DashboardScreen.tsx`, `mobile/src/screens/RecordScreen.tsx`, and the untracked home dashboard hardcoded spec; existing product-direction changes were preserved.
+
+Changes made in this pass:
+- `mobile/src/screens/RecordScreen.tsx`: restored the compact “报表中心” management entry so the existing `onOpenReports` navigation callback remains reachable from the management hub.
+- `mobile/src/screens/RecordScreen.tsx`: tightened management action typing with a local `ManagementActionKey` union instead of a generic string key.
+- `mobile/src/screens/RecordScreen.tsx`: removed obsolete sample phrase helpers and stale styles from the previous microphone/status-pill UI.
+- `mobile/App.tsx`: removed unused legacy header/brand/subtitle styles.
+- Removed unused untracked prototype screen `mobile/src/screens/SmartRecordPreviewScreen.tsx`; it was not imported anywhere and duplicated the current smart-record UI direction.
+
+Validation:
+- `npm.cmd run typecheck`: blocked because `npm.cmd` is not available in this automation shell.
+- `node_modules\.bin\tsc.cmd --noEmit`: blocked with `Access is denied`.
+- `git diff --check`: passed, with only line-ending warnings from Git.
+- Static source scan found no `any`, `TODO`, `FIXME`, or `console.*` in `mobile/src`.
+- Static seed/reference audit passed: referenced account/asset/liability IDs resolve and direct April seed transaction IDs are unique.
+- 2026-04 high-complexity totals remained unchanged: assets 5,000,000; liabilities 1,186,000; net worth 3,814,000; income 93,500; expenses 45,600; profit 47,900; operating cash flow 56,900; investing cash flow -64,000; financing cash flow -69,200; cash net change -76,300.
+
+Known limitations:
+- No commit was created because typecheck could not run and the worktree already contains substantial unrelated/unreviewed dirty changes.
+- No accounting formulas, transaction rules, cash-flow rules, storage schema, bottom navigation, backend/login/cloud/payment/tax scope, or seed totals were changed.
+- Current HEAD during the audit was `80f4ded feat: add smart record input draft confirmation flow`.
+
+## 12. 2026-05-12 workspace closeout
+
+Run time: 2026-05-12T00:00:00+08:00
+
+Scope: close out the dirty workspace on branch `wip/mobile-baseline-before-worktree` without continuing new homepage development. Reviewed current mobile homepage and voice-entry changes, separated committable source code from docs, QA screenshots, temporary scripts, logs, and handoff-package changes.
+
+Committed mobile code:
+- `316da42 feat: refine home voice entry and mini sphere layout`
+- Files included: `mobile/App.tsx`, `mobile/src/screens/DashboardScreen.tsx`, `mobile/src/screens/RecordScreen.tsx`, `mobile/src/components/LiquidGlassVoiceInput.tsx`, and `mobile/src/screens/homeDashboardHardcodedSpec.ts`.
+
+Workspace cleanup:
+- Stashed handoff docs and screenshot changes with message `backup: handoff docs and screenshot changes before home layout work`.
+- Stashed home-dashboard QA screenshots with message `backup: home dashboard QA screenshots`.
+- Stashed temporary mobile QA scripts with message `backup: temporary mobile QA scripts`.
+- Stashed Expo startup screenshots and log with message `backup: Expo startup screenshots and logs`; `mobile/expo-start.out.log` remained in the worktree because Git could not unlink the locked file.
+
+Validation:
+- `npm.cmd run typecheck` passed in `D:\imcfo\mobile`.
+- Static review found no direct `AsyncStorage`, `fetch`, `axios`, OpenAI/API key, backend, package, storage schema, accounting formula, or report-formula changes in the committed mobile source files.
+- Bottom tab route keys remained `dashboard`, `record`, `reports`, and `settings`; no bottom navigation structure change was committed.
+
+Known limitations:
+- `mobile/expo-start.out.log` may still appear as an untracked file until the process holding it is closed or the file is otherwise handled manually.
+- No push or pull request was created.
