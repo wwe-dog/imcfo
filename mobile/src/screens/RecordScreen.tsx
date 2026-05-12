@@ -6,9 +6,11 @@ import {
   useAudioRecorder,
   type RecordingOptions,
 } from "expo-audio";
-import { Animated, Easing, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
+import { BlurView } from "expo-blur";
+import { Animated, Easing, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from "react-native";
 import AppIcon from "../components/AppIcon";
 import type { AppIconName } from "../components/AppIcon";
+import LiquidGlassVoiceInput from "../components/LiquidGlassVoiceInput";
 import type { TransactionInput } from "../domain/accounting/transactionRules";
 import type { Account, Liability } from "../domain/models";
 import {
@@ -50,7 +52,6 @@ interface RepaymentTargetOption {
 type VoiceInputState = "idle" | "recording" | "transcribing" | "result" | "recognizing" | "draftReady" | "recognitionError" | "error";
 
 const maxVoiceDurationMs = 30_000;
-const samplePhrases = ["今天午餐 32 元，用支付宝", "工资到账 5800", "信用卡还款 2000"];
 const voiceRecordingOptions: RecordingOptions = {
   ...RecordingPresets.HIGH_QUALITY,
   bitRate: 64_000,
@@ -261,16 +262,17 @@ const simplePostableTransactionTypes: ReadonlySet<CandidateTransactionType> = ne
   "income",
 ]);
 
+type ManagementActionKey = "accounts" | "assets" | "reports" | "transactions";
+
 const managementActions: Array<{
-  description: string;
   icon: AppIconName;
-  key: string;
+  key: ManagementActionKey;
   title: string;
 }> = [
-  { description: "查看现金、信用卡和投资账户", icon: "account", key: "accounts", title: "账户管理" },
-  { description: "维护资产负债底层台账", icon: "asset", key: "assets", title: "资产负债" },
-  { description: "查看流水、筛选和明细", icon: "transaction", key: "transactions", title: "交易记录" },
-  { description: "查看三大报表和分析", icon: "report", key: "reports", title: "报表中心" },
+  { icon: "account", key: "accounts", title: "账户管理" },
+  { icon: "transaction", key: "transactions", title: "记账记录" },
+  { icon: "asset", key: "assets", title: "资产负债" },
+  { icon: "reports", key: "reports", title: "报表中心" },
 ];
 
 export default function RecordScreen({
@@ -310,7 +312,7 @@ export default function RecordScreen({
 
   const isWorking = voiceState === "recording" || voiceState === "transcribing" || voiceState === "recognizing";
   const isPrimaryActionDisabled = voiceState === "transcribing" || voiceState === "recognizing";
-  const managementActionHandlers: Record<string, () => void> = {
+  const managementActionHandlers: Record<ManagementActionKey, () => void> = {
     accounts: onOpenAccounts,
     assets: onOpenAssets,
     reports: onOpenReports,
@@ -330,15 +332,18 @@ export default function RecordScreen({
       ? Math.min((recordingTick || Date.now()) - recordingStartedAtRef.current, maxVoiceDurationMs)
       : lastDurationMs;
   const statusText = getStatusText(voiceState);
-  const shouldShowManagementPanel = !transcriptionText && !errorMessage;
-  const pulseScale = pulseProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.9, 1.18],
-  });
-  const pulseOpacity = pulseProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.16, 0.62],
-  });
+  const shouldShowManagementPanel = !transcriptionText;
+  const inputPrimaryText = voiceState === "idle" ? "自然语言记一笔…" : statusText;
+  const inputSecondaryText =
+    errorMessage
+      ? errorMessage
+      : voiceState === "recording"
+      ? formatDuration(shownDurationMs)
+      : voiceState === "idle"
+        ? "点击开始说话"
+        : transcriptionText
+          ? "文本已生成，可继续识别"
+          : "保持页面打开";
   const micScale = pulseProgress.interpolate({
     inputRange: [0, 1],
     outputRange: [1, 1.045],
@@ -574,19 +579,6 @@ export default function RecordScreen({
     void startRecording();
   };
 
-  const fillSamplePhrase = (phrase: string) => {
-    clearRecordingTimeout();
-    setTranscriptionText(phrase);
-    setErrorMessage("");
-    setInfoMessage("");
-    setCandidateDraft(null);
-    setDraftEdit(null);
-    setIsDraftSheetVisible(false);
-    setDraftErrorMessage("");
-    setLastDurationMs(0);
-    setState("result");
-  };
-
   const handleUseText = async () => {
     const text = transcriptionText.trim();
     if (!text) {
@@ -742,127 +734,106 @@ export default function RecordScreen({
       <View style={styles.screenContent}>
       <View pointerEvents="none" style={styles.gridLayer}>
         {Array.from({ length: 8 }).map((_, index) => (
-          <View key={`grid-${index}`} style={[styles.gridLine, { top: 36 + index * 58 }]} />
+          <View key={`grid-${index}`} style={[styles.gridLine, { top: 28 + index * 72 }]} />
         ))}
-        {Array.from({ length: 5 }).map((_, index) => (
-          <View key={`rail-${index}`} style={[styles.gridRail, { left: `${index * 24}%` }]} />
+        {Array.from({ length: 8 }).map((_, index) => (
+          <View key={`grid-alt-${index}`} style={[styles.gridLineAlt, { top: 10 + index * 72 }]} />
+        ))}
+        {Array.from({ length: 7 }).map((_, index) => (
+          <View key={`hex-horizontal-${index}`} style={[styles.hexHorizontalLine, { top: 44 + index * 96 }]} />
         ))}
       </View>
 
-      <View style={styles.topBar}>
-        <View style={styles.brandBadge}>
-          <Text style={styles.brandText}>IMCFO</Text>
-        </View>
-        <View style={styles.phaseBadge}>
-          <Text style={styles.phaseText}>语音转文字</Text>
-        </View>
-      </View>
-
-      <View style={styles.titleBlock}>
-        <Text style={styles.pageTitle}>智能记一笔</Text>
-        <Text style={styles.pageSubtitle}>说一句生活话，先转成文字</Text>
+      <View style={styles.wordmarkBlock}>
+        <Text style={styles.wordmarkText}>IMCFO</Text>
       </View>
 
       <View style={styles.inputStage}>
-        <View style={[styles.statusPill, isWorking && styles.statusPillWorking]}>
-          <View style={[styles.statusDot, isWorking && styles.statusDotWorking]} />
-          <Text style={[styles.statusText, isWorking && styles.statusTextWorking]}>{statusText}</Text>
-        </View>
-
-        <View style={styles.micWrap}>
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.outerPulse,
-              isWorking && {
-                opacity: pulseOpacity,
-                transform: [{ scale: pulseScale }],
-              },
-            ]}
+        <Animated.View style={[styles.mainInputAnimated, isWorking ? { transform: [{ scale: micScale }] } : undefined]}>
+          <LiquidGlassVoiceInput
+            accessibilityLabel={statusText}
+            disabled={isPrimaryActionDisabled}
+            onPress={handleMicPress}
+            placeholder={inputPrimaryText}
+            style={styles.mainInputGlass}
+            subtext={inputSecondaryText}
+            tone={
+              errorMessage
+                ? "error"
+                : voiceState === "recording"
+                  ? "recording"
+                  : voiceState === "transcribing"
+                    ? "transcribing"
+                    : "default"
+            }
           />
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.innerPulse,
-              isWorking && {
-                opacity: pulseOpacity,
-                transform: [{ scale: micScale }],
-              },
-            ]}
-          />
-          <Animated.View style={isWorking ? { transform: [{ scale: micScale }] } : undefined}>
-            <Pressable
-              accessibilityLabel={statusText}
-              disabled={isPrimaryActionDisabled}
-              onPress={handleMicPress}
-              style={[
-                styles.micButton,
-                voiceState === "recording" && styles.micButtonRecording,
-                voiceState === "transcribing" && styles.micButtonTranscribing,
-              ]}
-            >
-              <AppIcon color={voiceState === "transcribing" ? "#75EFC8" : "#EEF8FF"} name="mic" size={42} />
-            </Pressable>
-          </Animated.View>
-        </View>
+        </Animated.View>
 
-        <View style={[styles.waveform, isWorking && styles.waveformActive]}>
-          {[0, 1, 2, 3, 4].map((item) => (
-            <Animated.View
-              key={item}
-              style={[
-                styles.waveBar,
-                {
-                  opacity: isWorking ? 1 : 0.25,
-                  transform: [{ scaleY: isWorking ? waveScale : 0.42 }],
-                },
-              ]}
-            />
-          ))}
-        </View>
-
-        <Text style={styles.timerText}>{formatDuration(shownDurationMs)}</Text>
-      </View>
-
-      <View style={styles.sampleWrap}>
-        {samplePhrases.map((phrase) => (
-          <Pressable key={phrase} onPress={() => fillSamplePhrase(phrase)} style={styles.sampleChip}>
-            <Text style={styles.sampleText}>{phrase}</Text>
-          </Pressable>
-        ))}
+        {isWorking ? (
+          <View style={styles.inputFeedbackRow}>
+            <View style={[styles.statusDot, isWorking && styles.statusDotWorking]} />
+            <View style={[styles.waveform, isWorking && styles.waveformActive]}>
+              {[0, 1, 2, 3, 4].map((item) => (
+                <Animated.View
+                  key={item}
+                  style={[
+                    styles.waveBar,
+                    {
+                      opacity: isWorking ? 1 : 0.25,
+                      transform: [{ scaleY: isWorking ? waveScale : 0.42 }],
+                    },
+                  ]}
+                />
+              ))}
+            </View>
+            <Text style={styles.timerText}>{formatDuration(shownDurationMs)}</Text>
+          </View>
+        ) : null}
       </View>
 
       {shouldShowManagementPanel ? (
       <View style={styles.managementPanel}>
-        <Text style={styles.managementTitle}>财务中心</Text>
+        {/* Liquid glass shortcut row */}
         <View style={styles.managementGrid}>
-          {managementActions.map((action) => (
-            <Pressable
-              key={action.key}
-              onPress={managementActionHandlers[action.key]}
-              style={styles.managementAction}
-            >
-              <View style={styles.managementIcon}>
-                <AppIcon color="#5EE7FF" name={action.icon} size={19} strokeWidth={1.9} />
-              </View>
-              <View style={styles.managementCopy}>
-                <Text style={styles.managementActionTitle}>{action.title}</Text>
-                <Text numberOfLines={1} style={styles.managementActionDescription}>
-                  {action.description}
-                </Text>
-              </View>
-              <AppIcon color="rgba(222, 243, 255, 0.44)" name="chevronRight" size={16} />
-            </Pressable>
-          ))}
+          {Array.from({ length: 6 }).map((_, index) => {
+            const action = managementActions[index];
+
+            if (!action) {
+              return <View key={`empty-management-slot-${index}`} style={styles.managementActionPlaceholder} />;
+            }
+
+            return (
+              <TouchableOpacity
+                activeOpacity={0.78}
+                key={action.key}
+                onPress={managementActionHandlers[action.key]}
+                style={styles.managementAction}
+              >
+                {/* Frosted glass button shell */}
+                <View style={styles.managementGlassShell}>
+                  <BlurView
+                    experimentalBlurMethod="dimezisBlurView"
+                    intensity={42}
+                    style={StyleSheet.absoluteFill}
+                    tint="dark"
+                  />
+                  <View pointerEvents="none" style={styles.managementGlassMist} />
+                  <View pointerEvents="none" style={styles.managementGlassHighlight} />
+                  <View pointerEvents="none" style={styles.managementGlassBottomGlow} />
+
+                  {/* Icon */}
+                  <View style={styles.managementIcon}>
+                    <AppIcon color="#5EE7FF" name={action.icon} size={20} strokeWidth={1.85} />
+                  </View>
+                </View>
+
+                {/* Label */}
+                <Text numberOfLines={1} style={styles.managementActionTitle}>{action.title}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
-      ) : null}
-
-      {errorMessage ? (
-        <View style={styles.messageCard}>
-          <Text style={styles.messageTitle}>提示</Text>
-          <Text style={styles.errorText}>{errorMessage}</Text>
-        </View>
       ) : null}
 
       {transcriptionText ? (
@@ -1228,11 +1199,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.38,
     shadowRadius: 30,
   },
-  errorText: {
-    color: "#FF8EA7",
-    fontSize: 14,
-    lineHeight: 22,
-  },
   footerMeta: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1261,22 +1227,38 @@ const styles = StyleSheet.create({
   },
   gridLayer: {
     ...StyleSheet.absoluteFillObject,
-    opacity: 0.46,
+    opacity: 0.32,
   },
   gridLine: {
-    backgroundColor: "rgba(94, 231, 255, 0.08)",
+    backgroundColor: "rgba(163, 213, 255, 0.055)",
     height: 1,
-    left: -24,
+    left: -120,
     position: "absolute",
-    right: -24,
-    transform: [{ rotate: "-18deg" }],
+    right: -120,
+    transform: [{ rotate: "-30deg" }],
+  },
+  gridLineAlt: {
+    backgroundColor: "rgba(163, 213, 255, 0.045)",
+    height: 1,
+    left: -120,
+    position: "absolute",
+    right: -120,
+    transform: [{ rotate: "30deg" }],
   },
   gridRail: {
-    backgroundColor: "rgba(138, 125, 255, 0.05)",
-    bottom: 0,
+    backgroundColor: "rgba(195, 231, 255, 0.045)",
+    bottom: -80,
     position: "absolute",
-    top: 0,
+    top: -80,
+    transform: [{ rotate: "30deg" }],
     width: 1,
+  },
+  hexHorizontalLine: {
+    backgroundColor: "rgba(163, 213, 255, 0.035)",
+    height: 1,
+    left: -30,
+    position: "absolute",
+    right: -30,
   },
   impactBox: {
     backgroundColor: "rgba(117, 239, 200, 0.08)",
@@ -1302,131 +1284,172 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
   },
-  innerPulse: {
-    backgroundColor: "rgba(138, 125, 255, 0.08)",
-    borderColor: "rgba(138, 125, 255, 0.18)",
-    borderRadius: 62,
-    borderWidth: 1,
-    height: 124,
-    position: "absolute",
-    width: 124,
-  },
   inputStage: {
     alignItems: "center",
-    gap: 8,
+    gap: 12,
     justifyContent: "center",
-    minHeight: 226,
-    paddingVertical: 8,
+    marginTop: 34,
+    minHeight: 108,
+    paddingVertical: 0,
   },
-  messageCard: {
-    backgroundColor: "rgba(255, 106, 138, 0.1)",
-    borderColor: "rgba(255, 106, 138, 0.2)",
+  inputFeedbackRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "center",
+    minHeight: 28,
+  },
+  mainInputBox: {
+    alignItems: "center",
+    backgroundColor: "rgba(248, 253, 255, 0.96)",
+    borderColor: "rgba(197, 226, 239, 0.72)",
+    borderRadius: 30,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 14,
+    minHeight: 74,
+    paddingHorizontal: 17,
+    shadowColor: "#D7F7FF",
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    width: "100%",
+  },
+  mainInputBoxRecording: {
+    backgroundColor: "rgba(238, 253, 255, 0.98)",
+    borderColor: "rgba(94, 231, 255, 0.46)",
+    shadowOpacity: 0.22,
+  },
+  mainInputBoxTranscribing: {
+    backgroundColor: "rgba(239, 255, 249, 0.98)",
+    borderColor: "rgba(117, 239, 200, 0.48)",
+  },
+  mainInputBoxError: {
+    backgroundColor: "rgba(255, 243, 247, 0.98)",
+    borderColor: "rgba(255, 142, 167, 0.5)",
+  },
+  mainInputAnimated: {
+    width: "100%",
+  },
+  mainInputCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  mainInputGlass: {
+    width: "100%",
+  },
+  mainInputIcon: {
+    alignItems: "center",
+    backgroundColor: "rgba(0, 143, 157, 0.1)",
+    borderColor: "rgba(0, 143, 157, 0.18)",
     borderRadius: 18,
     borderWidth: 1,
-    gap: 6,
-    marginTop: 16,
-    padding: 14,
+    height: 42,
+    justifyContent: "center",
+    width: 42,
   },
-  messageTitle: {
-    color: "#EEF8FF",
-    fontSize: 14,
+  mainInputSubtext: {
+    color: "rgba(50, 72, 88, 0.64)",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  mainInputSubtextError: {
+    color: "rgba(180, 52, 78, 0.9)",
+    lineHeight: 17,
+  },
+  mainInputText: {
+    color: "rgba(16, 31, 45, 0.96)",
+    fontSize: 18,
     fontWeight: "900",
+  },
+  manualInputIcon: {
+    alignItems: "center",
+    height: 36,
+    justifyContent: "center",
+    width: 36,
   },
   managementAction: {
     alignItems: "center",
-    backgroundColor: "rgba(3, 12, 20, 0.56)",
-    borderColor: "rgba(195, 231, 255, 0.1)",
-    borderRadius: 14,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    minHeight: 50,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    width: "48%",
+    flexBasis: "16.66%",
+    flexGrow: 0,
+    flexShrink: 1,
+    gap: 7,
+    justifyContent: "center",
+    minWidth: 0,
   },
-  managementActionDescription: {
-    color: "rgba(184, 207, 222, 0.62)",
-    display: "none",
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 17,
+  managementActionPlaceholder: {
+    flexBasis: "16.66%",
+    flexGrow: 0,
+    flexShrink: 1,
+    minWidth: 0,
   },
   managementActionTitle: {
-    color: "rgba(238, 248, 255, 0.94)",
-    fontSize: 14,
+    color: "rgba(247, 252, 255, 0.93)",
+    fontSize: 10,
     fontWeight: "900",
-  },
-  managementCopy: {
-    flex: 1,
-    gap: 2,
+    textAlign: "center",
+    textShadowColor: "rgba(255, 255, 255, 0.16)",
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 5,
   },
   managementGrid: {
+    alignItems: "flex-start",
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 8,
+    justifyContent: "space-between",
+    width: "100%",
+  },
+  managementGlassBottomGlow: {
+    backgroundColor: "rgba(61, 206, 255, 0.64)",
+    bottom: -1,
+    height: 2,
+    left: 8,
+    opacity: 1,
+    position: "absolute",
+    right: 8,
+  },
+  managementGlassHighlight: {
+    backgroundColor: "rgba(255, 255, 255, 0.72)",
+    height: 1.2,
+    left: 7,
+    opacity: 0.65,
+    position: "absolute",
+    right: 7,
+    top: 1,
+  },
+  managementGlassMist: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(178, 205, 238, 0.18)",
+  },
+  managementGlassShell: {
+    alignItems: "center",
+    alignSelf: "center",
+    aspectRatio: 1.05,
+    backgroundColor: "rgba(34, 49, 68, 0.56)",
+    borderColor: "rgba(222, 242, 255, 0.56)",
+    borderRadius: 18,
+    borderWidth: 1,
+    justifyContent: "center",
+    maxWidth: 48,
+    minHeight: 45,
+    overflow: "hidden",
+    shadowColor: "#8EC8FF",
+    shadowOffset: { width: 0, height: 9 },
+    shadowOpacity: 0.24,
+    shadowRadius: 16,
+    width: "100%",
+    elevation: 6,
   },
   managementIcon: {
     alignItems: "center",
-    backgroundColor: "rgba(94, 231, 255, 0.08)",
-    borderColor: "rgba(94, 231, 255, 0.16)",
-    borderRadius: 10,
-    borderWidth: 1,
+    backgroundColor: "transparent",
+    borderRadius: 0,
     height: 30,
     justifyContent: "center",
     width: 30,
   },
   managementPanel: {
-    backgroundColor: "rgba(5, 14, 23, 0.72)",
-    borderColor: "rgba(195, 231, 255, 0.13)",
-    borderRadius: 18,
-    borderWidth: 1,
-    marginTop: 12,
-    padding: 12,
-  },
-  managementTitle: {
-    color: "rgba(117, 239, 200, 0.86)",
-    fontSize: 13,
-    fontWeight: "900",
-  },
-  micButton: {
-    alignItems: "center",
-    backgroundColor: "rgba(13, 27, 40, 0.96)",
-    borderColor: "rgba(207, 241, 255, 0.18)",
-    borderRadius: 48,
-    borderWidth: 1,
-    height: 96,
-    justifyContent: "center",
-    shadowColor: "#5EE7FF",
-    shadowOffset: { width: 0, height: 18 },
-    shadowOpacity: 0.16,
-    shadowRadius: 34,
-    width: 96,
-  },
-  micButtonRecording: {
-    backgroundColor: "rgba(15, 45, 61, 0.98)",
-    borderColor: "rgba(94, 231, 255, 0.5)",
-    shadowOpacity: 0.28,
-  },
-  micButtonTranscribing: {
-    backgroundColor: "rgba(20, 48, 42, 0.98)",
-    borderColor: "rgba(117, 239, 200, 0.46)",
-  },
-  micWrap: {
-    alignItems: "center",
-    height: 166,
-    justifyContent: "center",
-    width: 166,
-  },
-  outerPulse: {
-    backgroundColor: "rgba(94, 231, 255, 0.055)",
-    borderColor: "rgba(94, 231, 255, 0.16)",
-    borderRadius: 83,
-    borderWidth: 1,
-    height: 166,
-    position: "absolute",
-    width: 166,
+    marginTop: 24,
+    paddingHorizontal: 2,
   },
   okBadge: {
     backgroundColor: "rgba(117, 239, 200, 0.14)",
@@ -1560,38 +1583,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 5,
   },
-  sampleChip: {
-    backgroundColor: "rgba(3, 12, 20, 0.72)",
-    borderColor: "rgba(197, 232, 255, 0.12)",
-    borderRadius: 999,
-    borderWidth: 1,
-    minHeight: 34,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  sampleText: {
-    color: "rgba(222, 243, 255, 0.9)",
-    fontSize: 13,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  sampleWrap: {
-    alignItems: "center",
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    justifyContent: "center",
-  },
   screen: {
-    backgroundColor: "#02060C",
-    borderColor: "rgba(200, 230, 255, 0.08)",
-    borderRadius: 28,
-    borderWidth: 1,
+    backgroundColor: "#01050B",
     flex: 1,
     marginHorizontal: -18,
     marginTop: 0,
     overflow: "hidden",
-    padding: 16,
+    paddingHorizontal: 24,
+    paddingTop: 18,
     paddingBottom: 104,
   },
   screenContent: {
@@ -1701,29 +1700,6 @@ const styles = StyleSheet.create({
   statusDotWorking: {
     backgroundColor: "#75EFC8",
   },
-  statusPill: {
-    alignItems: "center",
-    backgroundColor: "rgba(5, 14, 23, 0.72)",
-    borderColor: "rgba(94, 231, 255, 0.12)",
-    borderRadius: 999,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    minHeight: 35,
-    paddingHorizontal: 14,
-  },
-  statusPillWorking: {
-    backgroundColor: "rgba(117, 239, 200, 0.07)",
-    borderColor: "rgba(117, 239, 200, 0.24)",
-  },
-  statusText: {
-    color: "rgba(214, 235, 247, 0.9)",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  statusTextWorking: {
-    color: "#75EFC8",
-  },
   timerText: {
     color: "rgba(184, 207, 222, 0.72)",
     fontSize: 13,
@@ -1745,7 +1721,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: 5,
-    height: 26,
+    height: 22,
     justifyContent: "center",
     opacity: 0.3,
   },
@@ -1755,7 +1731,20 @@ const styles = StyleSheet.create({
   waveBar: {
     backgroundColor: "#5EE7FF",
     borderRadius: 999,
-    height: 23,
-    width: 4,
+    height: 18,
+    width: 3,
+  },
+  wordmarkBlock: {
+    alignItems: "center",
+    marginTop: 58,
+  },
+  wordmarkText: {
+    color: "rgba(245, 250, 255, 0.96)",
+    fontSize: 42,
+    fontWeight: "800",
+    letterSpacing: 9,
+    textShadowColor: "rgba(238, 248, 255, 0.34)",
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 9,
   },
 });

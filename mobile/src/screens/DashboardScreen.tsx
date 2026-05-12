@@ -1,8 +1,7 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BlurView } from "expo-blur";
 import { PanResponder, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
-import Animated, {
-  useAnimatedStyle,
+import {
   useDerivedValue,
   useFrameCallback,
   useSharedValue,
@@ -10,20 +9,17 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 import {
-  BackdropBlur,
+  BlurMask,
   Canvas,
   Circle,
   Group,
   Line as SkiaLine,
-  LinearGradient,
-  RadialGradient,
   RoundedRect,
   Text as SkiaText,
   matchFont,
   rect,
   rrect,
   useFont,
-  vec,
   type SkFont,
   type Transforms3d,
 } from "@shopify/react-native-skia";
@@ -31,6 +27,13 @@ import Svg, { Path as SvgPath } from "react-native-svg";
 import AppIcon, { type AppIconName } from "../components/AppIcon";
 import ScreenTransition from "../components/ScreenTransition";
 import type { Asset, Liability, ReportSummary, Transaction } from "../domain/models";
+import {
+  HOME_DASHBOARD_HARDCODED_SPEC,
+  resolveHybridSphereGlassMaterial,
+  type HomeHubAction,
+  type HomeSphereCardRole,
+  type HybridSphereGlassMaterial,
+} from "./homeDashboardHardcodedSpec";
 import OperatingAnalysisReportScreen from "./OperatingAnalysisReportScreen";
 import ProfitabilityAnalysisScreen from "./ProfitabilityAnalysisScreen";
 
@@ -49,31 +52,29 @@ interface DashboardScreenProps {
 }
 
 type DashboardRoute = "home" | "operationAnalysisReport" | "profitabilityAnalysis";
-type HubAction = "accounts" | "assets" | "operation" | "profitability" | "record" | "reports" | "settings" | "transactions";
+type HubAction = HomeHubAction;
 
-const REFERENCE_VIEWPORT_WIDTH = 520;
-const REFERENCE_VIEWPORT_HEIGHT = 1157;
-const TAP_MOVEMENT_THRESHOLD = 7;
-const PROTOTYPE_DRAG_FACTOR = 0.0062;
-const PROTOTYPE_CARD_COUNT = 76;
-const PROTOTYPE_CARD_SIZE = 56;
-const PROTOTYPE_CENTER_CARD_HEIGHT = 98;
-const PROTOTYPE_CENTER_CARD_WIDTH = 112;
-const PROTOTYPE_EXPANDED_ZOOM = 1.18;
-const PROTOTYPE_GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
-const PROTOTYPE_RADIUS_FACTOR = 0.425;
-const PROTOTYPE_PERSPECTIVE = 2.75;
-const PROTOTYPE_DEPTH_PROJECTION = 0.74;
-const PROTOTYPE_INITIAL_ROT_X = -0.18;
-const PROTOTYPE_INITIAL_ROT_Y = 0.36;
-const PROTOTYPE_INERTIA_DAMPING = 0.942;
-const PROTOTYPE_MAX_ROT_X = 0.68;
-const PROTOTYPE_MIN_ROT_X = -0.68;
-const PROTOTYPE_STOP_SPEED = 0.00006;
-const PROTOTYPE_COLLAPSED_IDLE_STEP = 0.0017;
-const PROTOTYPE_EXPANDED_IDLE_STEP = 0.0012;
-const EXPAND_TRANSITION_DURATION_MS = 560;
-const TAP_MAX_DURATION_MS = 180;
+const REFERENCE_VIEWPORT_WIDTH = HOME_DASHBOARD_HARDCODED_SPEC.referenceViewport.width;
+const REFERENCE_VIEWPORT_HEIGHT = HOME_DASHBOARD_HARDCODED_SPEC.referenceViewport.height;
+const TAP_MOVEMENT_THRESHOLD = HOME_DASHBOARD_HARDCODED_SPEC.interaction.tapMovementThreshold;
+const PROTOTYPE_DRAG_FACTOR = HOME_DASHBOARD_HARDCODED_SPEC.interaction.dragFactor;
+const PROTOTYPE_CARD_SIZE = HOME_DASHBOARD_HARDCODED_SPEC.sphere.cardSize;
+const PROTOTYPE_CENTER_CARD_HEIGHT = HOME_DASHBOARD_HARDCODED_SPEC.sphere.centerCardHeight;
+const PROTOTYPE_CENTER_CARD_WIDTH = HOME_DASHBOARD_HARDCODED_SPEC.sphere.centerCardWidth;
+const PROTOTYPE_EXPANDED_ZOOM = HOME_DASHBOARD_HARDCODED_SPEC.sphere.expandedZoom;
+const PROTOTYPE_RADIUS_FACTOR = HOME_DASHBOARD_HARDCODED_SPEC.sphere.radiusFactor;
+const PROTOTYPE_PERSPECTIVE = HOME_DASHBOARD_HARDCODED_SPEC.sphere.perspective;
+const PROTOTYPE_DEPTH_PROJECTION = HOME_DASHBOARD_HARDCODED_SPEC.sphere.depthProjection;
+const PROTOTYPE_INITIAL_ROT_X: number = HOME_DASHBOARD_HARDCODED_SPEC.sphere.initialRotX;
+const PROTOTYPE_INITIAL_ROT_Y: number = HOME_DASHBOARD_HARDCODED_SPEC.sphere.initialRotY;
+const PROTOTYPE_INERTIA_DAMPING = HOME_DASHBOARD_HARDCODED_SPEC.interaction.dragDamping;
+const PROTOTYPE_MAX_ROT_X = HOME_DASHBOARD_HARDCODED_SPEC.interaction.maxRotX;
+const PROTOTYPE_MIN_ROT_X = HOME_DASHBOARD_HARDCODED_SPEC.interaction.minRotX;
+const PROTOTYPE_STOP_SPEED = HOME_DASHBOARD_HARDCODED_SPEC.interaction.stopSpeed;
+const PROTOTYPE_COLLAPSED_IDLE_STEP = HOME_DASHBOARD_HARDCODED_SPEC.interaction.collapsedIdleStep;
+const PROTOTYPE_EXPANDED_IDLE_STEP = HOME_DASHBOARD_HARDCODED_SPEC.interaction.expandedIdleStep;
+const EXPAND_TRANSITION_DURATION_MS = HOME_DASHBOARD_HARDCODED_SPEC.interaction.expandDurationMs;
+const TAP_MAX_DURATION_MS = HOME_DASHBOARD_HARDCODED_SPEC.interaction.tapMaxDurationMs;
 const NOTO_SANS_SC_FONT = require("../../assets/fonts/NotoSansSC-Regular.otf");
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -100,16 +101,7 @@ interface VisualNode {
   label: string;
 }
 
-const functionNodes: FunctionNode[] = [
-  { action: "record", accent: "#05AEBD", glow: "rgba(141,247,255,0.34)", icon: "mic", id: "record-entry", label: "自然语言记一笔" },
-  { action: "accounts", accent: "#7DD3FC", glow: "rgba(125,211,252,0.3)", icon: "wallet", id: "accounts", label: "账户" },
-  { action: "assets", accent: "#8DF7FF", glow: "rgba(141,247,255,0.3)", icon: "asset", id: "assets-liabilities", label: "资产负债" },
-  { action: "transactions", accent: "#93C5FD", glow: "rgba(147,197,253,0.3)", icon: "transaction", id: "transactions", label: "交易记录" },
-  { action: "reports", accent: "#FFD36F", glow: "rgba(255,211,111,0.28)", icon: "reports", id: "reports", label: "报表" },
-  { action: "operation", accent: "#9EF2C5", glow: "rgba(158,242,197,0.28)", icon: "chart", id: "operation", label: "经营分析" },
-  { action: "profitability", accent: "#F9A8D4", glow: "rgba(249,168,212,0.28)", icon: "chart", id: "profitability", label: "盈利能力" },
-  { action: "settings", accent: "#E5E7EB", glow: "rgba(229,231,235,0.24)", icon: "profile", id: "profile", label: "我的" },
-];
+const functionNodes = HOME_DASHBOARD_HARDCODED_SPEC.sphere.functionNodes as readonly FunctionNode[];
 
 const actionableModuleByPrototypeLabel: Record<string, FunctionNode> = {
   Account: functionNodes[1],
@@ -146,6 +138,34 @@ const createDecorativeVisualNode = (node: FunctionNode | VisualNode, id: string)
   label: "",
 });
 
+const supportBodyCardIds = HOME_DASHBOARD_HARDCODED_SPEC.sphere.supportBodyCardIds as readonly string[];
+
+const getSphereCardRole = (card: OrbitCard): HomeSphereCardRole => {
+  if (card.isPrimary) {
+    return "centerHero";
+  }
+
+  if (card.visualNode.action) {
+    return "mainFront";
+  }
+
+  return supportBodyCardIds.includes(card.id) ? "supportBody" : "ghost";
+};
+
+const getSphereCardScaleMultiplier = (role: HomeSphereCardRole) => {
+  "worklet";
+
+  if (role === "ghost") {
+    return 0.94;
+  }
+
+  if (role === "supportBody") {
+    return 0.98;
+  }
+
+  return 1;
+};
+
 const decorativeModuleByPrototypeLabel: Record<string, VisualNode> = {
   "Cash Flow": { accent: "#B8FF7C", glow: "rgba(184,255,124,0.24)", icon: "cashFlow", id: "decor-cash-flow", label: "" },
   Forecast: { accent: "#F9A8D4", glow: "rgba(249,168,212,0.2)", icon: "chart", id: "decor-forecast", label: "" },
@@ -155,24 +175,6 @@ const decorativeModuleByPrototypeLabel: Record<string, VisualNode> = {
   Reconciliation: { accent: "#C4F7FF", glow: "rgba(196,247,255,0.2)", icon: "reconcile", id: "decor-reconciliation", label: "" },
   Safeguards: { accent: "#A7F3D0", glow: "rgba(167,243,208,0.2)", icon: "success", id: "decor-safeguards", label: "" },
 };
-
-const prototypeModuleOrder = [
-  "Account",
-  "Assets",
-  "Liabilities",
-  "Reports",
-  "Cash Flow",
-  "Analysis",
-  "Projects",
-  "Investments",
-  "Settings",
-  "Profile",
-  "Transactions",
-  "Reconciliation",
-  "Forecast",
-  "Safeguards",
-  "Insights",
-] as const;
 
 type CapturedCardTuple = readonly [
   index: number,
@@ -197,6 +199,7 @@ interface CapturedRect {
 }
 
 interface OrbitCard {
+  id: string;
   isPrimary: boolean;
   index: number;
   moduleName: string;
@@ -221,6 +224,7 @@ interface ProjectedSphereCard {
 
 interface SkiaSphereProjection {
   labelOpacity: number;
+  material: HybridSphereGlassMaterial;
   opacity: number;
   transform: Transforms3d;
 }
@@ -531,13 +535,13 @@ function FuturisticDashboardHome({
     <View style={[styles.root, { minHeight: Math.max(690, height - 128, contentHeight * 0.76) }]}>
       <TechSpaceBackground height={Math.max(720, height, contentHeight)} width={width} />
       {isHubExpanded ? <Pressable onPress={handleCollapseHub} style={styles.collapseLayer} /> : null}
-        <CapturedGeometryLayer
-          isExpanded={isHubExpanded}
-          onCollapse={handleCollapseHub}
-          onExpand={handleExpandHub}
-          onPressNode={handleHubAction}
-          scale={geometryScale}
-        />
+      <CapturedGeometryLayer
+        isExpanded={isHubExpanded}
+        onCollapse={handleCollapseHub}
+        onExpand={handleExpandHub}
+        onPressNode={handleHubAction}
+        scale={geometryScale}
+      />
     </View>
   );
 }
@@ -569,7 +573,7 @@ function TechSpaceBackground({ height, width }: { height: number; width: number 
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <Svg height={height} pointerEvents="none" style={StyleSheet.absoluteFill} width={width}>
         {hexPaths.map((path, index) => (
-          <SvgPath key={`hex-${index}`} d={path} fill="none" opacity={0.18} stroke="#626872" strokeWidth={1.1} />
+          <SvgPath key={`hex-${index}`} d={path} fill="none" opacity={0.1} stroke="#626872" strokeWidth={0.9} />
         ))}
         <SvgPath d={`M 0 0 H ${width} V ${height} H 0 Z`} fill="rgba(0,0,0,0.18)" />
       </Svg>
@@ -614,13 +618,9 @@ function MetallicLogo({ geometry, scale }: { geometry: CapturedRect; scale: numb
 function createPrototypeOrbitCards(): OrbitCard[] {
   const usedActions = new Set<HubAction>();
 
-  return Array.from({ length: PROTOTYPE_CARD_COUNT }, (_, index): OrbitCard => {
-    const isPrimary = index === 0;
-    const moduleName = isPrimary ? "Voice AI Input" : prototypeModuleOrder[(index - 1) % prototypeModuleOrder.length];
-    const t = (index + 0.5) / PROTOTYPE_CARD_COUNT;
-    const phi = Math.acos(1 - 2 * t);
-    const theta = index * PROTOTYPE_GOLDEN_ANGLE;
-    const radialOffset = 0.982 + (index % 7) * 0.006;
+  return HOME_DASHBOARD_HARDCODED_SPEC.sphere.cards.map((cardSpec, index): OrbitCard => {
+    const isPrimary = cardSpec.sourceLabel === "Voice AI Input";
+    const moduleName = cardSpec.sourceLabel;
     const actionableNode = actionableModuleByPrototypeLabel[moduleName];
     const decorativeNode = decorativeModuleByPrototypeLabel[moduleName] ?? decorativeModuleByPrototypeLabel.Insights;
     let visualNode: VisualNode;
@@ -635,14 +635,11 @@ function createPrototypeOrbitCards(): OrbitCard[] {
     }
 
     return {
+      id: cardSpec.id,
       index,
       isPrimary,
       moduleName,
-      point: {
-        x: Math.sin(phi) * Math.cos(theta) * radialOffset,
-        y: Math.cos(phi) * radialOffset,
-        z: Math.sin(phi) * Math.sin(theta) * radialOffset,
-      },
+      point: cardSpec.point,
       visualNode,
     };
   });
@@ -717,6 +714,17 @@ function projectOrbitCard(
   };
 }
 
+function getOrbitCardProjectedDepth(card: OrbitCard, rotX: number, rotY: number) {
+  const cosX = Math.cos(rotX);
+  const sinX = Math.sin(rotX);
+  const cosY = Math.cos(rotY);
+  const sinY = Math.sin(rotY);
+  const point = card.point;
+  const z1 = point.y * sinX + point.z * cosX;
+
+  return -point.x * sinY + z1 * cosY;
+}
+
 function CapturedGeometryLayer({
   isExpanded,
   onCollapse,
@@ -744,9 +752,22 @@ function CapturedGeometryLayer({
     width: stageWidth,
   };
   const orbitCards = useMemo(createPrototypeOrbitCards, []);
+  const [drawOrderAngles, setDrawOrderAngles] = useState({
+    rotX: PROTOTYPE_INITIAL_ROT_X,
+    rotY: PROTOTYPE_INITIAL_ROT_Y,
+  });
+  const drawOrderUpdateAtRef = useRef(0);
   const renderedOrbitCards = useMemo(
-    () => (isExpanded ? [...orbitCards.filter((card) => !card.isPrimary), ...orbitCards.filter((card) => card.isPrimary)] : orbitCards),
-    [isExpanded, orbitCards],
+    () => {
+      const sortedCards = [...orbitCards].sort(
+        (a, b) =>
+          getOrbitCardProjectedDepth(a, drawOrderAngles.rotX, drawOrderAngles.rotY) -
+          getOrbitCardProjectedDepth(b, drawOrderAngles.rotX, drawOrderAngles.rotY),
+      );
+
+      return isExpanded ? sortedCards.filter((card) => !card.isPrimary) : sortedCards;
+    },
+    [drawOrderAngles.rotX, drawOrderAngles.rotY, isExpanded, orbitCards],
   );
   const fallbackLabelFont = useMemo(() => matchFont({ fontSize: 7 * scale, fontWeight: "700" }), [scale]);
   const fallbackCenterLabelFont = useMemo(() => matchFont({ fontSize: 11 * scale, fontWeight: "700" }), [scale]);
@@ -852,6 +873,11 @@ function CapturedGeometryLayer({
             rotX.value = clamp(rotX.value - dy * PROTOTYPE_DRAG_FACTOR, PROTOTYPE_MIN_ROT_X, PROTOTYPE_MAX_ROT_X);
             velocityY.value = (dx / dt) * PROTOTYPE_DRAG_FACTOR;
             velocityX.value = (-dy / dt) * PROTOTYPE_DRAG_FACTOR;
+
+            if (now - drawOrderUpdateAtRef.current > 90) {
+              drawOrderUpdateAtRef.current = now;
+              setDrawOrderAngles({ rotX: rotX.value, rotY: rotY.value });
+            }
           }
 
           gestureState.lastX = nextX;
@@ -866,6 +892,7 @@ function CapturedGeometryLayer({
           const wasTap = !wasDrag && touchDuration <= TAP_MAX_DURATION_MS;
           dragging.value = 0;
           gestureState.moved = false;
+          setDrawOrderAngles({ rotX: rotX.value, rotY: rotY.value });
           idleHoldUntil.value = now + (wasDrag ? 450 : 180);
 
           if (wasTap) {
@@ -907,6 +934,7 @@ function CapturedGeometryLayer({
           const now = performance.now();
           dragging.value = 0;
           gestureRef.current.moved = false;
+          setDrawOrderAngles({ rotX: rotX.value, rotY: rotY.value });
           idleHoldUntil.value = now + 240;
         },
         onPanResponderTerminationRequest: () => false,
@@ -914,6 +942,7 @@ function CapturedGeometryLayer({
       }),
     [
       dragging,
+      drawOrderUpdateAtRef,
       expandProgress,
       idleHoldUntil,
       isExpanded,
@@ -939,15 +968,6 @@ function CapturedGeometryLayer({
       <View {...panResponder.panHandlers} style={[styles.capturedSphereStage, stageFrame]}>
         <Canvas style={[styles.capturedSphereCanvas, canvasFrame]}>
           <Group transform={[{ translateX: canvasOverscan }, { translateY: canvasOverscan }]}>
-            <Circle cx={stageWidth / 2} cy={stageHeight / 2} r={stageWidth * 0.38} color="rgba(141,247,255,0.035)" />
-            <Circle
-              cx={stageWidth / 2}
-              cy={stageHeight / 2}
-              r={stageWidth * 0.36}
-              color="rgba(141,247,255,0.09)"
-              style="stroke"
-              strokeWidth={1 * scale}
-            />
             {renderedOrbitCards.map((orbitCard) => (
               <SkiaSphereCard
                 centerLabelFont={centerLabelFont}
@@ -965,15 +985,17 @@ function CapturedGeometryLayer({
             ))}
           </Group>
         </Canvas>
-        {isExpanded ? (
-          <RealBlurVoiceHero
-            expandProgress={expandProgress}
-            scale={scale}
-            stageHeight={stageHeight}
-            stageWidth={stageWidth}
-          />
-        ) : null}
       </View>
+      {isExpanded ? (
+        <CenterVoiceGlassHero
+          height={PROTOTYPE_CENTER_CARD_HEIGHT * PROTOTYPE_EXPANDED_ZOOM * 1.02 * scale}
+          interactionEnabled={isExpanded}
+          onPress={() => onPressNode(functionNodeByAction.record)}
+          width={PROTOTYPE_CENTER_CARD_WIDTH * PROTOTYPE_EXPANDED_ZOOM * 1.02 * scale}
+          x={stageFrame.left + stageWidth / 2}
+          y={stageFrame.top + stageHeight / 2}
+        />
+      ) : null}
       <View
         pointerEvents="none"
         style={[
@@ -995,67 +1017,63 @@ function CapturedGeometryLayer({
   );
 }
 
-function RealBlurVoiceHero({
-  expandProgress,
-  scale,
-  stageHeight,
-  stageWidth,
+function CenterVoiceGlassHero({
+  height,
+  interactionEnabled,
+  onPress,
+  width,
+  x,
+  y,
 }: {
-  expandProgress: SharedValue<number>;
-  scale: number;
-  stageHeight: number;
-  stageWidth: number;
+  height: number;
+  interactionEnabled: boolean;
+  onPress: () => void;
+  width: number;
+  x: number;
+  y: number;
 }) {
-  const heroWidth = PROTOTYPE_CENTER_CARD_WIDTH * PROTOTYPE_EXPANDED_ZOOM * scale;
-  const heroHeight = PROTOTYPE_CENTER_CARD_HEIGHT * PROTOTYPE_EXPANDED_ZOOM * scale;
-  const heroRadius = 22 * scale;
-  const iconSize = 34 * scale;
-  const animatedStyle = useAnimatedStyle(() => {
-    const rawProgress = Math.max(0, Math.min(1, (expandProgress.value - 0.58) / 0.42));
-    const easedProgress = rawProgress * rawProgress * (3 - 2 * rawProgress);
-
-    return {
-      opacity: easedProgress,
-      transform: [{ scale: 0.92 + easedProgress * 0.08 }],
-    };
-  });
+  const borderRadius = 24;
 
   return (
-    <Animated.View
-      pointerEvents="none"
+    <Pressable
+      onPress={onPress}
+      pointerEvents={interactionEnabled ? "auto" : "none"}
       style={[
-        styles.realBlurHeroWrap,
+        styles.centerVoiceHero,
         {
-          borderRadius: heroRadius,
-          height: heroHeight,
-          left: (stageWidth - heroWidth) / 2,
-          top: (stageHeight - heroHeight) / 2,
-          width: heroWidth,
+          borderRadius,
+          height,
+          left: x - width / 2,
+          top: y - height / 2,
+          width,
         },
-        animatedStyle,
       ]}
     >
       <BlurView
         blurReductionFactor={1.2}
         experimentalBlurMethod="dimezisBlurView"
         intensity={96}
-        style={[StyleSheet.absoluteFillObject, { borderRadius: heroRadius }]}
-        tint="systemMaterialLight"
+        style={StyleSheet.absoluteFillObject}
+        tint="light"
       />
-      <View style={styles.realBlurHeroMilky} />
-      <View style={styles.realBlurHeroCoolBleed} />
-      <View style={styles.realBlurHeroWarmBleed} />
-      <View style={styles.realBlurHeroTopHaze} />
-      <View style={styles.realBlurHeroInnerBloom} />
-      <View style={styles.realBlurHeroBottomShade} />
-      <View style={styles.realBlurHeroContent}>
-        <View style={styles.realBlurHeroIconHalo} />
-        <AppIcon color="#079AA7" name="mic" size={iconSize} strokeWidth={2.4 * scale} />
-        <Text maxFontSizeMultiplier={1} numberOfLines={1} style={[styles.realBlurHeroLabel, { fontSize: 11 * scale }]}>
+      <View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFillObject,
+          {
+            backgroundColor: "rgba(244, 255, 252, 0.48)",
+            borderRadius,
+          },
+        ]}
+      />
+      <View pointerEvents="none" style={[styles.centerVoiceHeroHighlight, { borderRadius }]} />
+      <View style={styles.centerVoiceHeroContent}>
+        <AppIcon color="#00AFC0" name="mic" size={32} />
+        <Text maxFontSizeMultiplier={1} numberOfLines={1} style={styles.centerVoiceHeroText}>
           自然语言记一笔
         </Text>
       </View>
-    </Animated.View>
+    </Pressable>
   );
 }
 
@@ -1096,48 +1114,12 @@ function SkiaSphereCard({
   const labelWidth = label ? activeLabelFont.measureText(label).width : 0;
   const labelBaseline = isCenterCard ? frameHeight / 2 - 18 * scale : frameHeight / 2 - 6 * scale;
   const iconOffsetY = isCenterCard ? -15 * scale : isExpanded && actionableNode ? -7 * scale : 0;
-  const hasBackdropBlur = isCenterCard || Boolean(actionableNode);
-  const blurAmount = isCenterCard ? 18 * scale : 8 * scale;
   const cardClip = rrect(rect(cardX, cardY, frameWidth, frameHeight), radius, radius);
-  const materialAura = isCenterCard
-    ? "rgba(150,245,255,0.3)"
-    : actionableNode
-      ? "rgba(165,238,246,0.16)"
-      : "rgba(175,218,226,0.07)";
-  const materialShadow = isCenterCard ? "rgba(0,0,0,0.36)" : actionableNode ? "rgba(0,0,0,0.2)" : "rgba(0,0,0,0.1)";
-  const materialStroke = isCenterCard
-    ? "rgba(255,255,255,0.14)"
-    : actionableNode
-      ? "rgba(255,255,255,0.085)"
-      : "rgba(255,255,255,0.045)";
-  const materialStrokeWidth = isCenterCard ? 0.5 * scale : actionableNode ? 0.34 * scale : 0.24 * scale;
-  const surfaceGradient = isCenterCard
-    ? ["rgba(255,255,255,0.92)", "rgba(232,249,251,0.76)", "rgba(181,229,235,0.48)"]
-    : actionableNode
-      ? ["rgba(252,255,255,0.74)", "rgba(222,241,245,0.54)", "rgba(167,214,222,0.34)"]
-      : ["rgba(239,248,249,0.46)", "rgba(207,225,229,0.34)", "rgba(158,190,199,0.22)"];
-  const mistGradient = isCenterCard
-    ? ["rgba(255,255,255,0.68)", "rgba(255,255,255,0.2)", "rgba(255,255,255,0)"]
-    : actionableNode
-      ? ["rgba(255,255,255,0.44)", "rgba(255,255,255,0.14)", "rgba(255,255,255,0)"]
-      : ["rgba(255,255,255,0.23)", "rgba(255,255,255,0.08)", "rgba(255,255,255,0)"];
-  const coolBleedGradient = isCenterCard
-    ? ["rgba(93,236,226,0.34)", "rgba(93,236,226,0.12)", "rgba(93,236,226,0)"]
-    : actionableNode
-      ? ["rgba(107,223,220,0.2)", "rgba(107,223,220,0.07)", "rgba(107,223,220,0)"]
-      : ["rgba(111,205,210,0.1)", "rgba(111,205,210,0.035)", "rgba(111,205,210,0)"];
-  const warmBleedGradient = isCenterCard
-    ? ["rgba(255,179,158,0.16)", "rgba(255,179,158,0.05)", "rgba(255,179,158,0)"]
-    : actionableNode
-      ? ["rgba(255,181,165,0.09)", "rgba(255,181,165,0.03)", "rgba(255,181,165,0)"]
-      : ["rgba(255,181,165,0.05)", "rgba(255,181,165,0.018)", "rgba(255,181,165,0)"];
-  const topHighlightGradient = isCenterCard
-    ? ["rgba(255,255,255,0.72)", "rgba(255,255,255,0.28)", "rgba(255,255,255,0)"]
-    : actionableNode
-      ? ["rgba(255,255,255,0.45)", "rgba(255,255,255,0.16)", "rgba(255,255,255,0)"]
-      : ["rgba(255,255,255,0.22)", "rgba(255,255,255,0.08)", "rgba(255,255,255,0)"];
-  const materialShade = isCenterCard ? "rgba(8,25,34,0.13)" : actionableNode ? "rgba(8,24,34,0.085)" : "rgba(8,24,34,0.052)";
-  const materialInnerGlow = isCenterCard ? "rgba(255,255,255,0.26)" : actionableNode ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.045)";
+  const cardRole = getSphereCardRole(orbitCard);
+  const scaleMultiplier = getSphereCardScaleMultiplier(cardRole);
+  const iconRenderSize = iconSize;
+  const materialStrokeWidth = StyleSheet.hairlineWidth * scale;
+  const iconStrokeWidth = (isCenterCard ? 2.45 : actionableNode ? 2.28 : 1.95) * scale;
   const hasActionableLabel = Boolean(actionableNode);
   const cardProjection = useDerivedValue<SkiaSphereProjection>(() => {
     const progress = Math.max(0, Math.min(1, expandProgress.value));
@@ -1166,27 +1148,29 @@ function SkiaSphereCard({
     const orbitCenterX = centerX + rotatedX * radiusValue * projected;
     const orbitCenterY = centerY + y1 * radiusValue * projected;
     const radial = Math.max(0, Math.min(1, Math.hypot(orbitCenterX - centerX, orbitCenterY - centerY) / (radiusValue * 1.08)));
-    const centerSolidX = Math.max(0, Math.min(1, (radial - 0.22) / 0.2));
-    const centerSolid = 1 - centerSolidX * centerSolidX * (3 - 2 * centerSolidX);
     const centerStepX = Math.max(0, Math.min(1, (radial - 0.08) / 0.92));
     const centerFactor = Math.pow(1 - centerStepX * centerStepX * (3 - 2 * centerStepX), 0.56);
-    const frontFactor = Math.pow(depth, 1.18);
-    const visibility = Math.max(0, Math.min(1, (0.26 + frontFactor * 0.74) * (0.32 + centerFactor * 0.82)));
-    const focusBoost = centerFactor * depth * (0.1 + progress * 0.01);
     const compactScale = 0.38 + depth * 0.6 + centerFactor * 0.055;
     const expandedScale = 0.4 + depth * 0.5 + centerFactor * 0.05;
     const orbitScale = (compactScale + (expandedScale - compactScale) * progress) * projected;
-    const minOpacity = 0.64 + progress * 0.04;
-    const maxOpacity = 0.96 + progress * 0.02;
-    const orbitOpacity = Math.max(minOpacity, Math.min(maxOpacity, minOpacity + visibility * 0.34 + focusBoost * 0.3 + centerSolid * 0.02));
     const targetWidth = (PROTOTYPE_CARD_SIZE + (PROTOTYPE_CENTER_CARD_WIDTH - PROTOTYPE_CARD_SIZE) * centerProgress) * scale;
     const targetHeight = (PROTOTYPE_CARD_SIZE + (PROTOTYPE_CENTER_CARD_HEIGHT - PROTOTYPE_CARD_SIZE) * centerProgress) * scale;
     const sampleCenterX = orbitCenterX + (centerX - orbitCenterX) * centerProgress;
     const sampleCenterY = orbitCenterY + (centerY - orbitCenterY) * centerProgress;
-    const sampleScale = orbitScale + (1 - orbitScale) * centerProgress;
-    const sampleOpacity = orbitOpacity + (1 - orbitOpacity) * centerProgress;
+    const sampleScale = (orbitScale + (1 - orbitScale) * centerProgress) * scaleMultiplier;
+    const projectedZ = rotatedZ + (2 - rotatedZ) * centerProgress;
     const zoomedCenterX = centerX + (sampleCenterX - centerX) * sphereZoom;
     const zoomedCenterY = centerY + (sampleCenterY - centerY) * sphereZoom;
+    const material = resolveHybridSphereGlassMaterial({
+      accentColor: visualNode.accent,
+      projectedX: zoomedCenterX,
+      projectedY: zoomedCenterY,
+      role: cardRole,
+      rotatedZ: projectedZ,
+      sphereCenterX: centerX,
+      sphereCenterY: centerY,
+      sphereRadius: radiusValue,
+    });
     const scaleX = sampleScale * sphereZoom * (targetWidth / frameWidth);
     const scaleY = sampleScale * sphereZoom * (targetHeight / frameHeight);
     let labelOpacity = 0;
@@ -1198,100 +1182,43 @@ function SkiaSphereCard({
 
     return {
       labelOpacity,
-      opacity: sampleOpacity,
+      material,
+      opacity: material.cardOpacity,
       transform: [{ translateX: zoomedCenterX }, { translateY: zoomedCenterY }, { scaleX }, { scaleY }],
     };
   });
   const cardTransform = useDerivedValue<Transforms3d>(() => cardProjection.value.transform);
   const cardOpacity = useDerivedValue(() => cardProjection.value.opacity);
+  const bodyColor = useDerivedValue(() => cardProjection.value.material.bodyColor);
+  const borderColor = useDerivedValue(() => cardProjection.value.material.edgeColor);
+  const glassTintColor = useDerivedValue(() => cardProjection.value.material.glassTintColor);
+  const highlightColor = useDerivedValue(() => cardProjection.value.material.highlightColor);
+  const iconColor = useDerivedValue(() => cardProjection.value.material.iconColor);
+  const iconGlowColor = useDerivedValue(() => cardProjection.value.material.iconGlowColor);
+  const iconOpacity = useDerivedValue(() => cardProjection.value.material.iconOpacity);
+  const shadowBlur = useDerivedValue(() => cardProjection.value.material.shadowRadius * scale);
+  const shadowColor = useDerivedValue(() => `rgba(0, 0, 0, ${Number(cardProjection.value.material.shadowOpacity.toFixed(3))})`);
   const labelOpacity = useDerivedValue(() => cardProjection.value.labelOpacity);
 
   return (
     <Group opacity={cardOpacity} transform={cardTransform}>
       <RoundedRect
-        color={materialShadow}
+        color={shadowColor}
         height={frameHeight}
         r={radius}
         width={frameWidth}
         x={cardX + (isCenterCard ? 4.5 : 2.6) * scale}
         y={cardY + (isCenterCard ? 8 : 4.2) * scale}
-      />
-      <RoundedRect
-        color={materialAura}
-        height={frameHeight + (isCenterCard ? 24 : 16) * scale}
-        r={radius + (isCenterCard ? 12 : 8) * scale}
-        width={frameWidth + (isCenterCard ? 24 : 16) * scale}
-        x={cardX - (isCenterCard ? 12 : 8) * scale}
-        y={cardY - (isCenterCard ? 10 : 7) * scale}
-      />
-      {hasBackdropBlur ? (
-        <BackdropBlur blur={blurAmount} clip={cardClip}>
-          <RoundedRect height={frameHeight} r={radius} width={frameWidth} x={cardX} y={cardY}>
-            <LinearGradient
-              colors={surfaceGradient}
-              end={vec(cardX + frameWidth, cardY + frameHeight)}
-              positions={[0, 0.56, 1]}
-              start={vec(cardX, cardY)}
-            />
-          </RoundedRect>
-        </BackdropBlur>
-      ) : (
-        <RoundedRect height={frameHeight} r={radius} width={frameWidth} x={cardX} y={cardY}>
-          <LinearGradient
-            colors={surfaceGradient}
-            end={vec(cardX + frameWidth, cardY + frameHeight)}
-            positions={[0, 0.56, 1]}
-            start={vec(cardX, cardY)}
-          />
-        </RoundedRect>
-      )}
-      <RoundedRect height={frameHeight} r={radius} width={frameWidth} x={cardX} y={cardY}>
-        <RadialGradient
-          c={vec(cardX + frameWidth * 0.24, cardY + frameHeight * 0.22)}
-          colors={mistGradient}
-          positions={[0, 0.48, 1]}
-          r={frameWidth * (isCenterCard ? 0.78 : 0.72)}
-        />
+      >
+        <BlurMask blur={shadowBlur} style="normal" />
       </RoundedRect>
-      <RoundedRect height={frameHeight} r={radius} width={frameWidth} x={cardX} y={cardY}>
-        <RadialGradient
-          c={vec(cardX + frameWidth * 0.92, cardY + frameHeight * 0.2)}
-          colors={coolBleedGradient}
-          positions={[0, 0.5, 1]}
-          r={frameWidth * (isCenterCard ? 0.82 : 0.72)}
-        />
-      </RoundedRect>
-      <RoundedRect height={frameHeight} r={radius} width={frameWidth} x={cardX} y={cardY}>
-        <RadialGradient
-          c={vec(cardX + frameWidth * 0.08, cardY + frameHeight * 0.86)}
-          colors={warmBleedGradient}
-          positions={[0, 0.5, 1]}
-          r={frameWidth * 0.68}
-        />
-      </RoundedRect>
+      <Group clip={cardClip}>
+        <RoundedRect color={bodyColor} height={frameHeight} r={radius} width={frameWidth} x={cardX} y={cardY} />
+        <RoundedRect color={glassTintColor} height={frameHeight} r={radius} width={frameWidth} x={cardX} y={cardY} />
+        <RoundedRect color={highlightColor} height={frameHeight} r={radius} width={frameWidth} x={cardX} y={cardY} />
+      </Group>
       <RoundedRect
-        color={materialShade}
-        height={frameHeight * 0.42}
-        r={radius}
-        width={frameWidth}
-        x={cardX}
-        y={cardY + frameHeight * 0.58}
-      />
-      {isCenterCard ? (
-        <>
-          <RoundedRect color={materialInnerGlow} height={frameHeight * 0.72} r={radius * 0.9} width={frameWidth * 0.7} x={-frameWidth * 0.38} y={-frameHeight * 0.38} />
-          <RoundedRect height={frameHeight} r={radius} width={frameWidth} x={cardX} y={cardY}>
-            <RadialGradient
-              c={vec(cardX + frameWidth * 0.52, cardY + frameHeight * 0.5)}
-              colors={["rgba(255,255,255,0.34)", "rgba(255,255,255,0.1)", "rgba(255,255,255,0)"]}
-              positions={[0, 0.46, 1]}
-              r={frameWidth * 0.58}
-            />
-          </RoundedRect>
-        </>
-      ) : null}
-      <RoundedRect
-        color={materialStroke}
+        color={borderColor}
         height={frameHeight}
         r={radius}
         style="stroke"
@@ -1300,26 +1227,21 @@ function SkiaSphereCard({
         x={cardX}
         y={cardY}
       />
-      <RoundedRect height={frameHeight * (isCenterCard ? 0.34 : 0.28)} r={radius} width={frameWidth * 0.9} x={-frameWidth * 0.45} y={cardY + 3 * scale}>
-        <LinearGradient
-          colors={topHighlightGradient}
-          end={vec(0, cardY + frameHeight * 0.32)}
-          positions={[0, 0.52, 1]}
-          start={vec(0, cardY + 3 * scale)}
+      <Circle color={iconGlowColor} cx={0} cy={iconOffsetY} r={iconRenderSize * 0.58}>
+        <BlurMask blur={4 * scale} style="normal" />
+      </Circle>
+      <Group opacity={iconOpacity}>
+        <SkiaSphereIcon
+          color={iconColor}
+          icon={visualNode.icon}
+          size={iconRenderSize}
+          strokeWidth={iconStrokeWidth}
+          y={iconOffsetY}
         />
-      </RoundedRect>
-      <RoundedRect
-        color={isCenterCard ? "rgba(255,255,255,0.38)" : actionableNode ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.1)"}
-        height={Math.max(1.4 * scale, frameHeight * 0.045)}
-        r={radius}
-        width={frameWidth * (isCenterCard ? 0.72 : 0.62)}
-        x={-frameWidth * (isCenterCard ? 0.36 : 0.31)}
-        y={cardY + 6 * scale}
-      />
-      <SkiaSphereIcon color={visualNode.accent} icon={visualNode.icon} size={iconSize} strokeWidth={(isCenterCard ? 2.35 : 2) * scale} y={iconOffsetY} />
+      </Group>
       {actionableNode && isExpanded ? (
         <SkiaText
-          color={isCenterCard ? "rgba(18,31,39,0.94)" : "rgba(25,39,75,0.78)"}
+          color={isCenterCard ? "rgba(18,31,39,0.94)" : "rgba(18,35,56,0.86)"}
           font={activeLabelFont}
           opacity={labelOpacity}
           text={label}
@@ -1338,7 +1260,7 @@ function SkiaSphereIcon({
   strokeWidth,
   y = 0,
 }: {
-  color: string;
+  color: string | SharedValue<string>;
   icon: AppIconName;
   size: number;
   strokeWidth: number;
@@ -1460,6 +1382,37 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     zIndex: 1,
   },
+  centerVoiceHero: {
+    alignItems: "center",
+    elevation: 14,
+    justifyContent: "center",
+    overflow: "hidden",
+    position: "absolute",
+    shadowColor: "#A8FFF4",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.34,
+    shadowRadius: 28,
+    zIndex: 30,
+  },
+  centerVoiceHeroContent: {
+    alignItems: "center",
+    flex: 1,
+    gap: 8,
+    justifyContent: "center",
+  },
+  centerVoiceHeroHighlight: {
+    backgroundColor: "rgba(255, 255, 255, 0.34)",
+    height: "42%",
+    left: 12,
+    position: "absolute",
+    right: 12,
+    top: 8,
+  },
+  centerVoiceHeroText: {
+    color: "rgba(12, 28, 30, 0.9)",
+    fontSize: 14,
+    fontWeight: "700",
+  },
   capturedHint: {
     alignItems: "center",
     justifyContent: "center",
@@ -1473,92 +1426,6 @@ const styles = StyleSheet.create({
     overflow: "visible",
     position: "absolute",
     zIndex: 3,
-  },
-  realBlurHeroBottomShade: {
-    backgroundColor: "rgba(9,23,31,0.12)",
-    borderBottomLeftRadius: 22,
-    borderBottomRightRadius: 22,
-    bottom: 0,
-    height: "30%",
-    left: 0,
-    position: "absolute",
-    right: 0,
-  },
-  realBlurHeroContent: {
-    alignItems: "center",
-    gap: 7,
-    height: "100%",
-    justifyContent: "center",
-    position: "relative",
-    width: "100%",
-  },
-  realBlurHeroCoolBleed: {
-    backgroundColor: "rgba(105,235,226,0.24)",
-    borderRadius: 80,
-    height: "78%",
-    position: "absolute",
-    right: "-18%",
-    top: "-12%",
-    transform: [{ rotate: "12deg" }],
-    width: "72%",
-  },
-  realBlurHeroIconHalo: {
-    backgroundColor: "rgba(255,255,255,0.18)",
-    borderRadius: 24,
-    height: 44,
-    position: "absolute",
-    top: "30%",
-    width: 44,
-  },
-  realBlurHeroInnerBloom: {
-    backgroundColor: "rgba(255,255,255,0.26)",
-    borderRadius: 80,
-    height: "68%",
-    left: "16%",
-    position: "absolute",
-    top: "12%",
-    width: "62%",
-  },
-  realBlurHeroLabel: {
-    color: "rgba(20,34,42,0.9)",
-    fontWeight: "800",
-    letterSpacing: 0,
-    lineHeight: 15,
-    marginTop: -1,
-    textAlign: "center",
-  },
-  realBlurHeroMilky: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(247,253,253,0.34)",
-  },
-  realBlurHeroTopHaze: {
-    backgroundColor: "rgba(255,255,255,0.46)",
-    borderRadius: 80,
-    height: "42%",
-    left: "5%",
-    position: "absolute",
-    top: "4%",
-    width: "82%",
-  },
-  realBlurHeroWarmBleed: {
-    backgroundColor: "rgba(255,180,158,0.13)",
-    borderRadius: 80,
-    bottom: "-18%",
-    height: "58%",
-    left: "-12%",
-    position: "absolute",
-    transform: [{ rotate: "-16deg" }],
-    width: "58%",
-  },
-  realBlurHeroWrap: {
-    elevation: 14,
-    overflow: "hidden",
-    position: "absolute",
-    shadowColor: "#000000",
-    shadowOffset: { height: 14, width: 0 },
-    shadowOpacity: 0.32,
-    shadowRadius: 24,
-    zIndex: 8,
   },
   hintText: {
     color: "rgba(202,211,225,0.62)",

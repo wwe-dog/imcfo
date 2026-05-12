@@ -93,7 +93,11 @@ function AppShell() {
   });
   const bottomContentPadding = 128 + insets.bottom;
   const isFuturisticHome = activeScreen === "dashboard";
-  const mainScrollEnabled = activeScreen !== "dashboard" || isDashboardScrollEnabled;
+  const usesDarkChrome = activeScreen === "dashboard" || activeScreen === "record";
+  const mainScrollEnabled =
+    activeScreen === "dashboard"
+      ? isDashboardScrollEnabled
+      : activeScreen !== "record";
 
   const handleExport = async () => exportData();
 
@@ -320,8 +324,8 @@ function AppShell() {
   };
 
   return (
-    <SafeAreaView edges={["top", "left", "right"]} style={[styles.safeArea, isFuturisticHome && styles.safeAreaDark]}>
-      <StatusBar style={isFuturisticHome ? "light" : "dark"} />
+    <SafeAreaView edges={["top", "left", "right"]} style={[styles.safeArea, usesDarkChrome && styles.safeAreaDark]}>
+      <StatusBar style={usesDarkChrome ? "light" : "dark"} />
       {activeScreen === "transactions" ? (
         <View style={[styles.content, styles.virtualizedContent, { paddingBottom: bottomContentPadding }]}>
           <ScreenTransition
@@ -355,8 +359,8 @@ function AppShell() {
           </ScreenTransition>
         </ScrollView>
       )}
-      <View style={[styles.tabBarShell, isFuturisticHome && styles.tabBarShellDark, { paddingBottom: Math.max(insets.bottom, 14) }]}>
-        <View style={[styles.tabBar, isFuturisticHome && styles.tabBarDark]}>
+      <View style={[styles.tabBarShell, usesDarkChrome && styles.tabBarShellDark, { paddingBottom: Math.max(insets.bottom, 14) }]}>
+        <View style={[styles.tabBar, usesDarkChrome && styles.tabBarDark]}>
           {tabs.map((tab) => {
             const isActive = activeScreen === tab.key;
             return (
@@ -366,11 +370,11 @@ function AppShell() {
                 style={[
                   styles.tabButton,
                   isActive && styles.tabButtonActive,
-                  isFuturisticHome && styles.tabButtonDark,
+                  usesDarkChrome && styles.tabButtonDark,
                 ]}
               >
                 <AppIcon
-                  color={isFuturisticHome ? (isActive ? "#FFFFFF" : "rgba(255,255,255,0.52)") : isActive ? theme.colors.primaryDeep : theme.colors.textMuted}
+                  color={usesDarkChrome ? (isActive ? "#FFFFFF" : "rgba(255,255,255,0.52)") : isActive ? theme.colors.primaryDeep : theme.colors.textMuted}
                   name={getTabIcon(tab.key)}
                   size={19}
                   strokeWidth={1.9}
@@ -379,13 +383,13 @@ function AppShell() {
                   style={[
                     styles.tabText,
                     isActive && styles.tabTextActive,
-                    isFuturisticHome && styles.tabTextDark,
-                    isFuturisticHome && isActive && styles.tabTextDarkActive,
+                    usesDarkChrome && styles.tabTextDark,
+                    usesDarkChrome && isActive && styles.tabTextDarkActive,
                   ]}
                 >
                   {tab.label}
                 </Text>
-                {isFuturisticHome && isActive ? <View style={styles.tabActiveUnderline} /> : null}
+                {usesDarkChrome && isActive ? <View style={styles.tabActiveUnderline} /> : null}
               </Pressable>
             );
           })}
@@ -396,12 +400,6 @@ function AppShell() {
 }
 
 const styles = StyleSheet.create({
-  brand: {
-    color: theme.colors.textPrimary,
-    fontSize: 22,
-    fontWeight: "800",
-    letterSpacing: -0.4,
-  },
   content: {
     paddingHorizontal: 18,
     paddingTop: 16,
@@ -413,11 +411,6 @@ const styles = StyleSheet.create({
   },
   virtualizedContent: {
     flex: 1,
-  },
-  header: {
-    backgroundColor: "rgba(255,248,236,0.96)",
-    paddingHorizontal: theme.spacing.container,
-    paddingVertical: 13,
   },
   loading: {
     alignItems: "center",
@@ -435,11 +428,6 @@ const styles = StyleSheet.create({
   },
   safeAreaDark: {
     backgroundColor: "#050607",
-  },
-  subtitle: {
-    color: theme.colors.textMuted,
-    fontSize: 14,
-    marginTop: 2,
   },
   tabBar: {
     backgroundColor: "#FFFFFF",
