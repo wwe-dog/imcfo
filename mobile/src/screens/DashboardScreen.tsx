@@ -23,8 +23,10 @@ import {
   type SkFont,
   type Transforms3d,
 } from "@shopify/react-native-skia";
-import Svg, { Path as SvgPath } from "react-native-svg";
+import Svg, { Defs, LinearGradient, Path as SvgPath, Stop, Text as SvgText } from "react-native-svg";
 import AppIcon, { type AppIconName } from "../components/AppIcon";
+import Skeleton from "../components/Skeleton";
+import SkeletonCard, { SkeletonScreenShell } from "../components/SkeletonCard";
 import ScreenTransition from "../components/ScreenTransition";
 import type { Asset, Liability, ReportSummary, Transaction } from "../domain/models";
 import {
@@ -39,6 +41,7 @@ import ProfitabilityAnalysisScreen from "./ProfitabilityAnalysisScreen";
 
 interface DashboardScreenProps {
   assets: Asset[];
+  isLoading?: boolean;
   liabilities: Liability[];
   onOpenAccounts?: () => void;
   onOpenAssets?: () => void;
@@ -409,6 +412,9 @@ const capturedPrototypeGeometry = {
 } as const;
 
 export default function DashboardScreen({
+  assets,
+  isLoading = false,
+  liabilities,
   onOpenAccounts,
   onOpenAssets,
   onOpenRecord,
@@ -416,6 +422,7 @@ export default function DashboardScreen({
   onOpenSettings,
   onOpenTransactions,
   onScrollEnabledChange,
+  transactions,
 }: DashboardScreenProps) {
   const [route, setRoute] = useState<DashboardRoute>("home");
 
@@ -427,12 +434,20 @@ export default function DashboardScreen({
     };
   }, [onScrollEnabledChange, route]);
 
+  if (isLoading) {
+    return <DashboardSkeleton />;
+  }
+
   if (route === "operationAnalysisReport") {
     return (
       <ScreenTransition animateOnMount transitionKey="operationAnalysisReport" variant="drilldown">
         <OperatingAnalysisReportScreen
+          assets={assets}
+          liabilities={liabilities}
           onBack={() => setRoute("home")}
+          onOpenRecord={onOpenRecord}
           onOpenProfitabilityAnalysis={() => setRoute("profitabilityAnalysis")}
+          transactions={transactions}
         />
       </ScreenTransition>
     );
@@ -457,6 +472,64 @@ export default function DashboardScreen({
       onOpenSettings={onOpenSettings}
       onOpenTransactions={onOpenTransactions}
     />
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <SkeletonScreenShell style={styles.dashboardSkeletonShell}>
+      <View style={styles.dashboardSkeletonHeader}>
+        <Svg height={28} viewBox="0 0 156 28" width={156}>
+          <Defs>
+            <LinearGradient id="dashboardSkeletonWordmark" x1="0" x2="1" y1="0.5" y2="0.5">
+              <Stop offset="0%" stopColor="#FF5DBB" />
+              <Stop offset="34%" stopColor="#8A5CFF" />
+              <Stop offset="68%" stopColor="#3B8BFF" />
+              <Stop offset="100%" stopColor="#00D2D9" />
+            </LinearGradient>
+          </Defs>
+          <SvgText
+            fill="url(#dashboardSkeletonWordmark)"
+            fontSize={18}
+            fontWeight="600"
+            letterSpacing={4}
+            textAnchor="middle"
+            x={78}
+            y={21}
+          >
+            IMCFO
+          </SvgText>
+        </Svg>
+      </View>
+
+      <Skeleton borderRadius={9999} delay={0} height={44} width="100%" />
+
+      <SkeletonCard
+        rows={[
+          { delay: 0, height: 8, width: 50 },
+          { delay: 100, height: 26, style: { marginTop: 7 }, width: 140 },
+          { delay: 200, height: 8, style: { marginTop: 7 }, width: 90 },
+        ]}
+      >
+        <View style={styles.dashboardSkeletonDivider} />
+        <View style={styles.dashboardSkeletonStats}>
+          {[0, 1, 2].map((item) => (
+            <View key={item} style={styles.dashboardSkeletonStat}>
+              <Skeleton delay={300 + item * 100} height={8} width="68%" />
+              <Skeleton delay={380 + item * 100} height={13} style={styles.dashboardSkeletonStatValue} width="84%" />
+            </View>
+          ))}
+        </View>
+      </SkeletonCard>
+
+      <SkeletonCard
+        rows={[
+          { delay: 0, height: 8, width: 56 },
+          { delay: 120, height: 12, style: { marginTop: 12 }, width: "88%" },
+          { delay: 220, height: 12, style: { marginTop: 8 }, width: "72%" },
+        ]}
+      />
+    </SkeletonScreenShell>
   );
 }
 
@@ -1381,6 +1454,34 @@ const styles = StyleSheet.create({
   collapseLayer: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 1,
+  },
+  dashboardSkeletonShell: {
+    marginHorizontal: 0,
+    marginTop: 0,
+    minHeight: 690,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+  },
+  dashboardSkeletonHeader: {
+    alignItems: "center",
+    paddingBottom: 4,
+  },
+  dashboardSkeletonDivider: {
+    backgroundColor: "rgba(255,255,255,0.10)",
+    height: StyleSheet.hairlineWidth,
+    marginTop: 16,
+  },
+  dashboardSkeletonStats: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 14,
+  },
+  dashboardSkeletonStat: {
+    flex: 1,
+    gap: 7,
+  },
+  dashboardSkeletonStatValue: {
+    marginTop: 0,
   },
   centerVoiceHero: {
     alignItems: "center",

@@ -8,7 +8,7 @@ type Accent = "blue" | "green" | "orange" | "purple" | "red";
 const accentColors: Record<Accent, { bg: string; fg: string }> = {
   blue: { bg: theme.colors.blueSoft, fg: theme.colors.blueText },
   green: { bg: theme.colors.greenSoft, fg: theme.colors.greenText },
-  orange: { bg: theme.colors.primarySoft, fg: theme.colors.primaryDeep },
+  orange: { bg: theme.colors.warningSoft, fg: theme.colors.warning },
   purple: { bg: theme.colors.purpleSoft, fg: theme.colors.purpleText },
   red: { bg: theme.colors.dangerSoft, fg: theme.colors.danger },
 };
@@ -59,7 +59,7 @@ export function TopBar({
       </Text>
       {onRightPress ? (
         <Pressable onPress={onRightPress} style={[styles.topBarButton, styles.topBarRightButton]}>
-          {rightLabel ? <Text style={styles.topBarRightText}>{rightLabel}</Text> : <AppIcon color="#FFFFFF" name={rightIcon} size={20} strokeWidth={2.4} />}
+          {rightLabel ? <Text style={styles.topBarRightText}>{rightLabel}</Text> : <AppIcon color={theme.colors.textInverse} name={rightIcon} size={20} strokeWidth={2.4} />}
         </Pressable>
       ) : (
         <View style={styles.topBarButton} />
@@ -211,7 +211,7 @@ export function SearchFilterBar({
         />
       </View>
       <Pressable onPress={onFilterPress} style={styles.filterButton}>
-        <AppIcon color={theme.colors.primaryDeep} name="filter" size={21} strokeWidth={2.1} />
+        <AppIcon color={theme.colors.primary} name="calendar" size={21} strokeWidth={2.1} />
         {filterActive ? <View style={styles.filterDot} /> : null}
       </Pressable>
     </View>
@@ -403,7 +403,7 @@ export function FloatingAddButton({
 }) {
   return (
     <Pressable onPress={onPress} style={styles.floatingAddButton}>
-      <AppIcon color="#FFFFFF" name="add" size={20} strokeWidth={2.4} />
+      <AppIcon color={theme.colors.textInverse} name="add" size={20} strokeWidth={2.4} />
       {label ? <Text style={styles.floatingAddText}>{label}</Text> : null}
     </Pressable>
   );
@@ -543,7 +543,9 @@ const styles = StyleSheet.create({
   },
   iconTile: {
     alignItems: "center",
-    borderRadius: 14,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
     justifyContent: "center",
   },
   dangerAction: {
@@ -582,7 +584,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   floatingAddText: {
-    color: "#FFFFFF",
+    color: theme.colors.textInverse,
     fontSize: 15,
     fontWeight: "900",
   },
@@ -598,7 +600,7 @@ const styles = StyleSheet.create({
   },
   filterDot: {
     backgroundColor: theme.colors.danger,
-    borderColor: "#FFFFFF",
+    borderColor: theme.colors.background,
     borderRadius: 4,
     borderWidth: 1,
     height: 8,
@@ -697,7 +699,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   reportPreviewFooter: {
-    color: theme.colors.primaryDeep,
+    color: theme.colors.primary,
     fontSize: 14,
     fontWeight: "900",
   },
@@ -734,7 +736,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   reportPreviewStatus: {
-    color: theme.colors.primaryDeep,
+    color: theme.colors.primary,
     fontSize: 12,
     fontWeight: "900",
   },
@@ -756,7 +758,7 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   reportPreviewValueEmphasis: {
-    color: theme.colors.primaryDeep,
+    color: theme.colors.primary,
   },
   infoLabel: {
     color: theme.colors.textSecondary,
@@ -822,7 +824,7 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   sheetBackdrop: {
-    backgroundColor: "rgba(31, 27, 21, 0.42)",
+    backgroundColor: "rgba(2, 5, 15, 0.68)",
     flex: 1,
     justifyContent: "flex-end",
     paddingTop: theme.spacing.xl,
@@ -862,7 +864,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   sheetSaveText: {
-    color: theme.colors.primaryDeep,
+    color: theme.colors.primary,
     fontSize: 15,
     fontWeight: "900",
     textAlign: "right",
@@ -911,7 +913,7 @@ const styles = StyleSheet.create({
     minHeight: 42,
   },
   segmentActive: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.primarySoft,
     borderColor: theme.colors.primary,
     borderWidth: 1,
   },
@@ -921,7 +923,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   segmentTextActive: {
-    color: theme.colors.primaryDeep,
+    color: theme.colors.primary,
   },
   segmented: {
     backgroundColor: theme.colors.surfaceElevated,
@@ -958,9 +960,9 @@ const styles = StyleSheet.create({
     color: theme.colors.success,
   },
   statusOrange: {
-    backgroundColor: theme.colors.primarySoft,
-    borderColor: theme.colors.borderStrong,
-    color: theme.colors.primaryDeep,
+    backgroundColor: theme.colors.warningSoft,
+    borderColor: "rgba(251, 191, 36, 0.24)",
+    color: theme.colors.warning,
   },
   statusRed: {
     backgroundColor: theme.colors.dangerSoft,
@@ -1006,7 +1008,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   topBarRightText: {
-    color: "#FFFFFF",
+    color: theme.colors.textInverse,
     fontSize: 15,
     fontWeight: "900",
   },

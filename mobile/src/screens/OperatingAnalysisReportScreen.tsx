@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Line, Polyline } from "react-native-svg";
 import AppIcon, { type AppIconName } from "../components/AppIcon";
+import { EmptyStateScreen } from "../components/EmptyState";
 import {
   type AnalysisMetric,
   type AnalysisRiskRow,
@@ -10,12 +11,19 @@ import {
   type AnalysisTone,
   buildOperatingAnalysisReport,
 } from "../domain/reports/operatingAnalysisReport";
+import type { Asset, Liability, Transaction } from "../domain/models";
 import { theme } from "../styles/theme";
 
 interface OperatingAnalysisReportScreenProps {
+  assets: Asset[];
+  liabilities: Liability[];
   onBack: () => void;
+  onOpenRecord?: () => void;
   onOpenProfitabilityAnalysis?: () => void;
+  transactions: Transaction[];
 }
+
+const emptyAnalysisIllustration = require("../assets/empty/empty-analysis.png");
 
 const percent = (value: number): `${number}%` => `${Math.max(0, Math.min(100, value))}%` as `${number}%`;
 
@@ -24,7 +32,7 @@ const toneColor: Record<AnalysisTone, string> = {
   good: theme.colors.success,
   neutral: theme.colors.textSecondary,
   primary: theme.colors.blueText,
-  warning: theme.colors.primaryDeep,
+  warning: theme.colors.warning,
 };
 
 const toneSoft: Record<AnalysisTone, string> = {
@@ -32,13 +40,35 @@ const toneSoft: Record<AnalysisTone, string> = {
   good: theme.colors.successSoft,
   neutral: "#F7F4EF",
   primary: theme.colors.blueSoft,
-  warning: theme.colors.primarySoft,
+  warning: theme.colors.warningSoft,
 };
 
 export default function OperatingAnalysisReportScreen({
+  assets,
+  liabilities,
   onBack,
+  onOpenRecord,
   onOpenProfitabilityAnalysis,
+  transactions,
 }: OperatingAnalysisReportScreenProps) {
+  const hasAnalysisBasis = transactions.length > 0 || assets.length > 0 || liabilities.length > 0;
+
+  if (!hasAnalysisBasis) {
+    return (
+      <EmptyStateScreen
+        description={"IMCFO 需要先了解你的收入、支出和现金流，\n才能判断你的经营状态。"}
+        illustration={emptyAnalysisIllustration}
+        onBack={onBack}
+        onPrimary={onOpenRecord ?? onBack}
+        onSecondary={() => Alert.alert("经营分析", "经营分析会在基础交易和现金流数据形成后，判断个人财务状态和下一步行动重点。")}
+        primaryLabel="开始记录"
+        screenTitle="经营分析"
+        secondaryLabel="了解经营分析 ›"
+        title="暂时无法形成经营分析"
+      />
+    );
+  }
+
   const report = buildOperatingAnalysisReport();
 
   return (
@@ -871,7 +901,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   section: {
-    backgroundColor: "rgba(255,255,255,0.82)",
+    backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
     borderRadius: 8,
     borderWidth: 1,

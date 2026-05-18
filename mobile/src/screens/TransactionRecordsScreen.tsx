@@ -1,10 +1,8 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
-import type { LayoutAnimationConfig } from "react-native";
 import {
   Animated,
   Easing,
-  LayoutAnimation,
   Modal,
   Platform,
   Pressable,
@@ -12,19 +10,25 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  UIManager,
   View,
+  useWindowDimensions,
 } from "react-native";
 import AppIcon, { type AppIconName } from "../components/AppIcon";
 import {
   AmountText,
   IconTile,
   InfoLineRow,
-  SearchFilterBar,
   SectionCard,
   SummaryHeroCard,
-  TopBar as FinanceTopBar,
 } from "../components/financeUI";
+import {
+  LedgerFullBleedList,
+  LedgerPageHeader,
+  TransactionListRow,
+  TransactionSearchCard,
+  getLedgerScreenPadding,
+  type LedgerRowTone,
+} from "../components/LedgerUI";
 import ScreenTransition from "../components/ScreenTransition";
 import type { Asset, Liability, Transaction } from "../domain/models";
 import {
@@ -32,14 +36,12 @@ import {
   getTransactionCashFlowLabel,
   getTransactionCashStatusLabel,
   getTransactionTypeLabel,
-  groupTransactionDisplayRecords,
   hydrateAllTransactionRecords,
-  hydrateTransactionMonth,
   isTransactionCashInflow,
   type TransactionDisplayRecord,
   type TransactionRecordsIndex,
 } from "../domain/transactions/transactionDisplayIndex";
-import { sharedStyles, theme } from "../styles/theme";
+import { theme } from "../styles/theme";
 import { formatCurrency } from "../utils/formatters";
 
 interface TransactionRecordsScreenProps {
@@ -47,40 +49,17 @@ interface TransactionRecordsScreenProps {
   isPreparingRecordsIndex: boolean;
   liabilities: Liability[];
   onBack: () => void;
+  onOpenRecord?: () => void;
   recordsIndex: TransactionRecordsIndex | null;
 }
 
 const UNKNOWN_VALUE = "无";
 const RULE_BASED_VALUE = "按当前规则计算";
 
-const isFabricRendererEnabled = Boolean((globalThis as { nativeFabricUIManager?: unknown }).nativeFabricUIManager);
-
-if (Platform.OS === "android" && !isFabricRendererEnabled && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
-
-const monthCollapseAnimation = {
-  duration: 210,
-  update: {
-    duration: 210,
-    property: LayoutAnimation.Properties.opacity,
-    type: LayoutAnimation.Types.easeInEaseOut,
-  },
-  delete: {
-    duration: 170,
-    property: LayoutAnimation.Properties.opacity,
-    type: LayoutAnimation.Types.easeInEaseOut,
-  },
-  create: {
-    duration: 190,
-    property: LayoutAnimation.Properties.opacity,
-    type: LayoutAnimation.Types.easeInEaseOut,
-  },
-} satisfies LayoutAnimationConfig;
-
 type TimeFilter = "all" | "currentMonth" | "last7Days" | "last3Months" | "thisYear" | "custom";
 type AccountFilter = "all" | "bank" | "wechat" | "alipay" | "securities" | "fund" | "creditCard" | "other";
 type CashDirectionFilter = "all" | "inflow" | "outflow" | "nonCash";
+type TransactionQuickFilter = "all" | "assetConversion" | "expense" | "income" | "liabilityRepayment";
 
 interface FilterState {
   account: AccountFilter;
@@ -98,10 +77,8 @@ interface CalendarCell {
 
 interface TransactionSection {
   data: TransactionDisplayRecord[];
-  expenseTotalText: string;
-  incomeTotalText: string;
-  monthKey: string;
-  monthLabel: string;
+  dateKey: string;
+  dateLabel: string;
 }
 
 const timeFilterOptions: Array<{ label: string; value: TimeFilter }> = [
@@ -131,6 +108,14 @@ const cashDirectionOptions: Array<{ label: string; value: CashDirectionFilter }>
   { label: "非现金", value: "nonCash" },
 ];
 
+const quickFilterOptions: Array<{ label: string; value: TransactionQuickFilter }> = [
+  { label: "全部", value: "all" },
+  { label: "支出", value: "expense" },
+  { label: "收入", value: "income" },
+  { label: "资产转换", value: "assetConversion" },
+  { label: "负债偿还", value: "liabilityRepayment" },
+];
+
 const weekLabels = ["日", "一", "二", "三", "四", "五", "六"];
 
 const getAssetName = (assets: Asset[], assetId?: string): string | undefined =>
@@ -139,9 +124,9 @@ const getAssetName = (assets: Asset[], assetId?: string): string | undefined =>
 const getLiabilityName = (liabilities: Liability[], liabilityId?: string): string | undefined =>
   liabilityId ? liabilities.find((liability) => liability.id === liabilityId)?.name ?? "未知负债" : undefined;
 
-const getTransactionAccent = (tone: TransactionDisplayRecord["amountTone"]): "green" | "orange" | "red" => {
+const getTransactionAccent = (tone: TransactionDisplayRecord["amountTone"]): "blue" | "green" | "orange" => {
   if (tone === "positive") return "green";
-  if (tone === "negative") return "red";
+  if (tone === "neutral") return "blue";
   return "orange";
 };
 
@@ -322,6 +307,93 @@ const displayRecordMatchesFilters = (
   return transactionMatchesCashDirection(record.transaction, filters.cashDirection);
 };
 
+const assetConversionTypes = new Set<Transaction["type"]>([
+  "assetDecrease",
+  "assetIncrease",
+  "investmentBuy",
+  "investmentSell",
+  "receivableCollect",
+  "receivableRecognize",
+  "transfer",
+]);
+
+const liabilityRepaymentTypes = new Set<Transaction["type"]>([
+  "creditCardRepayment",
+  "liabilityDecrease",
+  "payablePay",
+  "repayment",
+]);
+
+const recordMatchesQuickFilter = (
+  record: TransactionDisplayRecord,
+  quickFilter: TransactionQuickFilter,
+): boolean => {
+  const { type } = record.transaction;
+  switch (quickFilter) {
+    case "assetConversion":
+      return assetConversionTypes.has(type);
+    case "expense":
+      return type === "expense" || type === "creditCardExpense";
+    case "income":
+      return type === "income";
+    case "liabilityRepayment":
+      return liabilityRepaymentTypes.has(type);
+    case "all":
+    default:
+      return true;
+  }
+};
+
+const formatDateGroupLabel = (dateKey: string): string => {
+  const date = parseTransactionDate(dateKey);
+  if (!date) return dateKey;
+  const today = new Date();
+  const todayKey = toDateKey(today);
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const prefix =
+    dateKey === todayKey ? "今天" : dateKey === toDateKey(yesterday) ? "昨天" : `${date.getFullYear()}年`;
+  return `${prefix} · ${date.getMonth() + 1} 月 ${date.getDate()} 日`;
+};
+
+const getRecordTimeText = (record: TransactionDisplayRecord): string => {
+  const [, time] = record.dateTime.split(" ");
+  if (time) return time;
+
+  const createdAt = new Date(record.transaction.createdAt);
+  if (Number.isNaN(createdAt.getTime())) return "";
+
+  const hours = String(createdAt.getHours()).padStart(2, "0");
+  const minutes = String(createdAt.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+};
+
+const groupRecordsByDate = (records: TransactionDisplayRecord[]): TransactionSection[] => {
+  const sections: TransactionSection[] = [];
+  let currentSection: TransactionSection | undefined;
+
+  records.forEach((record) => {
+    if (!currentSection || currentSection.dateKey !== record.date) {
+      currentSection = {
+        data: [],
+        dateKey: record.date,
+        dateLabel: formatDateGroupLabel(record.date),
+      };
+      sections.push(currentSection);
+    }
+    currentSection.data.push(record);
+  });
+
+  return sections;
+};
+
+const getRecordTone = (record: TransactionDisplayRecord): LedgerRowTone => {
+  if (record.amountTone === "positive") return "green";
+  if (assetConversionTypes.has(record.transaction.type) || record.transaction.cashFlowType === "nonCash") return "blue";
+  if (liabilityRepaymentTypes.has(record.transaction.type)) return "amber";
+  return "default";
+};
+
 const buildCalendarCells = (monthKey: string): Array<CalendarCell | null> => {
   const [yearText, monthText] = monthKey.split("-");
   const year = Number(yearText);
@@ -367,15 +439,18 @@ export default function TransactionRecordsScreen({
   isPreparingRecordsIndex,
   liabilities,
   onBack,
+  onOpenRecord,
   recordsIndex,
 }: TransactionRecordsScreenProps) {
+  const { width } = useWindowDimensions();
+  const horizontalPadding = getLedgerScreenPadding(width);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [quickFilter, setQuickFilter] = useState<TransactionQuickFilter>("all");
   const [selectedRecord, setSelectedRecord] = useState<TransactionDisplayRecord | null>(null);
   const [isFilterVisible, setIsFilterVisible] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(() => createDefaultFilters(recordsIndex?.latestDateKey));
   const [draftFilters, setDraftFilters] = useState<FilterState>(() => createDefaultFilters(recordsIndex?.latestDateKey));
-  const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
   const [fullRecords, setFullRecords] = useState<TransactionDisplayRecord[] | null>(null);
   const [hydratedRecordsByMonth, setHydratedRecordsByMonth] = useState<Map<string, TransactionDisplayRecord[]>>(
     () => new Map(recordsIndex?.recordsByMonth),
@@ -399,7 +474,6 @@ export default function TransactionRecordsScreen({
 
   useEffect(() => {
     setFullRecords(null);
-    setCollapsedMonths({});
     setHydratedRecordsByMonth(new Map(recordsIndex?.recordsByMonth));
   }, [recordsIndex]);
 
@@ -415,105 +489,73 @@ export default function TransactionRecordsScreen({
 
   const normalizedQuery = debouncedQuery.trim().toLowerCase();
   const isFilterActive = hasActiveFilters(appliedFilters);
-  const isDefaultLazyMode = !normalizedQuery && !isFilterActive;
+  const hasQuickFilter = quickFilter !== "all";
+  const isDefaultLazyMode = !normalizedQuery && !isFilterActive && !hasQuickFilter;
 
   useEffect(() => {
     if (!recordsIndex || isDefaultLazyMode || fullRecords) return;
     setFullRecords(hydrateAllTransactionRecords(recordsIndex));
   }, [fullRecords, isDefaultLazyMode, recordsIndex]);
 
-  const filteredGroups = useMemo(() => {
+  const filteredRecords = useMemo(() => {
     if (!recordsIndex) return [];
 
-    if (isDefaultLazyMode) {
-      return recordsIndex.monthSummaries.map((summary) => ({
-        expenseTotal: summary.expenseTotal,
-        incomeTotal: summary.incomeTotal,
-        items: hydratedRecordsByMonth.get(summary.monthKey) ?? [],
-        monthKey: summary.monthKey,
-        monthLabel: summary.monthLabel,
-      }));
-    }
+    const sourceRecords = isDefaultLazyMode
+      ? recordsIndex.monthSummaries.flatMap((summary) => hydratedRecordsByMonth.get(summary.monthKey) ?? [])
+      : fullRecords ?? [];
 
-    if (!fullRecords) return [];
+    if (!isDefaultLazyMode && !fullRecords) return [];
 
     const dateRange = appliedFilters.time === "all"
       ? null
       : getDateRangeForFilters(appliedFilters, recordsIndex.latestDateKey);
 
-    const filtered = fullRecords.filter((record) => {
+    return sourceRecords.filter((record) => {
       const matchesSearch = normalizedQuery ? record.searchableText.includes(normalizedQuery) : true;
       if (!matchesSearch) return false;
+      if (!recordMatchesQuickFilter(record, quickFilter)) return false;
       if (!isFilterActive) return true;
       return displayRecordMatchesFilters(record, appliedFilters, dateRange);
     });
+  }, [
+    appliedFilters,
+    fullRecords,
+    hydratedRecordsByMonth,
+    isDefaultLazyMode,
+    isFilterActive,
+    normalizedQuery,
+    quickFilter,
+    recordsIndex,
+  ]);
 
-    return groupTransactionDisplayRecords(filtered);
-  }, [appliedFilters, fullRecords, hydratedRecordsByMonth, isDefaultLazyMode, isFilterActive, normalizedQuery, recordsIndex]);
-
-  const sections = useMemo<TransactionSection[]>(
-    () =>
-      filteredGroups.map((group) => {
-        const isCollapsed = collapsedMonths[group.monthKey] ?? group.monthKey !== recordsIndex?.latestMonthKey;
-
-        return {
-          data: isCollapsed ? [] : group.items,
-          expenseTotalText: formatCurrency(group.expenseTotal),
-          incomeTotalText: formatCurrency(group.incomeTotal),
-          monthKey: group.monthKey,
-          monthLabel: group.monthLabel,
-        };
-      }),
-    [collapsedMonths, filteredGroups, recordsIndex?.latestMonthKey],
-  );
+  const sections = useMemo<TransactionSection[]>(() => groupRecordsByDate(filteredRecords), [filteredRecords]);
 
   const isPreparingRecords = isPreparingRecordsIndex || !recordsIndex;
   const isPreparingFilteredRecords = !isDefaultLazyMode && !fullRecords;
   const hasTransactions = Boolean(recordsIndex?.monthSummaries.length) || isPreparingRecords;
-  const hasResult = !isPreparingRecords && !isPreparingFilteredRecords && filteredGroups.length > 0;
+  const hasResult = !isPreparingRecords && !isPreparingFilteredRecords && filteredRecords.length > 0;
   const openFilterPanel = useCallback(() => {
     setDraftFilters(appliedFilters);
     setIsFilterVisible(true);
   }, [appliedFilters]);
 
-  const toggleMonthCollapse = useCallback((month: string) => {
-    if (!recordsIndex) return;
-
-    LayoutAnimation.configureNext(monthCollapseAnimation);
-    setHydratedRecordsByMonth((current) => {
-      if (current.has(month)) return current;
-      const next = new Map(current);
-      next.set(month, hydrateTransactionMonth(recordsIndex, month));
-      return next;
-    });
-    setCollapsedMonths((current) => ({
-      ...current,
-      [month]: !(current[month] ?? month !== recordsIndex?.latestMonthKey),
-    }));
-  }, [recordsIndex]);
-
   const renderTransactionRow = useCallback(
     ({ index, item, section }: { index: number; item: TransactionDisplayRecord; section: TransactionSection }) => (
       <TransactionRow
+        horizontalPadding={horizontalPadding}
         isLast={index === section.data.length - 1}
         onSelect={setSelectedRecord}
         record={item}
       />
     ),
-    [],
+    [horizontalPadding],
   );
 
-  const renderMonthHeader = useCallback(
+  const renderDateHeader = useCallback(
     ({ section }: { section: TransactionSection }) => (
-      <MonthHeader
-        expenseTotal={section.expenseTotalText}
-        incomeTotal={section.incomeTotalText}
-        isCollapsed={collapsedMonths[section.monthKey] ?? section.monthKey !== recordsIndex?.latestMonthKey}
-        month={section.monthLabel}
-        onPress={() => toggleMonthCollapse(section.monthKey)}
-      />
+      <DateHeader horizontalPadding={horizontalPadding} label={section.dateLabel} />
     ),
-    [collapsedMonths, recordsIndex?.latestMonthKey, toggleMonthCollapse],
+    [horizontalPadding],
   );
 
   const keyExtractor = useCallback((record: TransactionDisplayRecord) => record.id, []);
@@ -533,19 +575,25 @@ export default function TransactionRecordsScreen({
 
   return (
     <View style={styles.screen}>
-      <FinanceTopBar onBack={onBack} title="交易记录" />
+      <LedgerPageHeader onBack={onBack} title="交易记录" />
 
-      <SearchFilterBar
+      <TransactionSearchCard
+        activeFilter={quickFilter}
         filterActive={isFilterActive}
+        filters={quickFilterOptions}
         onChangeText={setQuery}
         onFilterPress={openFilterPanel}
-        placeholder="搜索交易、金额、备注"
+        onQuickFilterChange={setQuickFilter}
+        placeholder="搜索金额、账户、分类或备注"
         value={query}
       />
 
       {!hasTransactions ? (
         <EmptyState
+          actionLabel="去记一笔"
           description="你可以先在管理页记一笔，系统会在这里显示记录。"
+          horizontalPadding={horizontalPadding}
+          onAction={onOpenRecord}
           title="暂无交易记录"
         />
       ) : null}
@@ -553,6 +601,7 @@ export default function TransactionRecordsScreen({
       {hasTransactions && (isPreparingRecords || isPreparingFilteredRecords) ? (
         <EmptyState
           description="正在整理交易记录..."
+          horizontalPadding={horizontalPadding}
           title="请稍候"
         />
       ) : null}
@@ -560,7 +609,8 @@ export default function TransactionRecordsScreen({
       {hasTransactions && !isPreparingRecords && !isPreparingFilteredRecords && !hasResult ? (
         <EmptyState
           description="试试调整关键词或筛选条件。"
-          title="没有找到符合条件的交易"
+          horizontalPadding={horizontalPadding}
+          title="没有搜索结果"
         />
       ) : null}
 
@@ -572,11 +622,17 @@ export default function TransactionRecordsScreen({
           maxToRenderPerBatch={18}
           removeClippedSubviews={Platform.OS === "android"}
           renderItem={renderTransactionRow}
-          renderSectionHeader={renderMonthHeader}
+          renderSectionHeader={renderDateHeader}
           sections={sections}
           showsVerticalScrollIndicator={false}
           stickySectionHeadersEnabled={false}
-          style={styles.transactionList}
+          style={[
+            styles.transactionList,
+            {
+              marginLeft: -horizontalPadding,
+              marginRight: -horizontalPadding,
+            },
+          ]}
           updateCellsBatchingPeriod={60}
           windowSize={7}
         />
@@ -619,11 +675,11 @@ function TransactionDetail({
   const accountDisplay = record.accountDisplay;
   const assetName = getAssetName(assets, transaction.relatedAssetId) ?? UNKNOWN_VALUE;
   const liabilityName = getLiabilityName(liabilities, transaction.relatedLiabilityId) ?? UNKNOWN_VALUE;
-  const amountTone = record.amountTone === "neutral" ? "default" : record.amountTone;
+  const amountTone = record.amountTone === "positive" ? "positive" : "default";
 
   return (
     <ScrollView contentContainerStyle={styles.stack} showsVerticalScrollIndicator={false}>
-      <FinanceTopBar onBack={onBack} title="交易详情" />
+      <LedgerPageHeader onBack={onBack} title="交易详情" />
 
       <SummaryHeroCard style={styles.detailHero}>
         <IconTile accent={getTransactionAccent(record.amountTone)} icon={getTransactionIconName(transaction)} size={54} />
@@ -663,75 +719,40 @@ function TransactionDetail({
 }
 
 const TransactionRow = memo(function TransactionRow({
+  horizontalPadding,
   isLast,
   record,
   onSelect,
 }: {
+  horizontalPadding: number;
   isLast: boolean;
   record: TransactionDisplayRecord;
   onSelect: (record: TransactionDisplayRecord) => void;
 }) {
-  const amountTone = record.amountTone === "neutral" ? "default" : record.amountTone;
+  const timeText = getRecordTimeText(record);
+  const tone = getRecordTone(record);
 
   return (
-    <Pressable
-      accessibilityLabel={`查看${record.title}详情`}
+    <TransactionListRow
+      amount={record.amountText.replace("CN¥", "¥")}
+      horizontalPadding={horizontalPadding}
+      last={isLast}
       onPress={() => onSelect(record)}
-      style={[styles.transactionCard, isLast ? styles.transactionCardLast : null]}
-    >
-      <IconTile
-        accent={getTransactionAccent(record.amountTone)}
-        icon={getTransactionIconName(record.transaction)}
-        size={42}
-      />
-      <View style={styles.transactionMain}>
-        <Text numberOfLines={1} style={styles.transactionTitle}>
-          {record.title}
-        </Text>
-        <Text numberOfLines={1} style={styles.transactionMeta}>
-          {getTransactionSubtitle(record)}
-        </Text>
-      </View>
-      <View style={styles.transactionAmountBox}>
-        <AmountText size="normal" tone={amountTone}>
-          {record.amountText}
-        </AmountText>
-      </View>
-    </Pressable>
+      time={timeText}
+      title={record.title}
+      tone={tone}
+    />
   );
 });
 
-const MonthHeader = memo(function MonthHeader({
-  expenseTotal,
-  incomeTotal,
-  isCollapsed,
-  month,
-  onPress,
+const DateHeader = memo(function DateHeader({
+  horizontalPadding,
+  label,
 }: {
-  expenseTotal: string;
-  incomeTotal: string;
-  isCollapsed: boolean;
-  month: string;
-  onPress: () => void;
+  horizontalPadding: number;
+  label: string;
 }) {
-  return (
-    <Pressable
-      accessibilityLabel={`${month}${isCollapsed ? "已折叠" : "已展开"}`}
-      onPress={onPress}
-      style={[styles.monthHeaderRow, isCollapsed ? styles.monthHeaderCollapsed : null]}
-    >
-      <View style={styles.monthHeaderMain}>
-        <Text style={styles.monthTitle}>{month}</Text>
-        <View style={styles.monthTotals}>
-          <Text style={styles.monthIncomeText}>收入 {incomeTotal}</Text>
-          <Text style={styles.monthExpenseText}>支出 {expenseTotal}</Text>
-        </View>
-      </View>
-      <View style={[styles.monthChevronIcon, !isCollapsed ? styles.monthChevronExpanded : null]}>
-        <AppIcon color={theme.colors.textMuted} name="chevronRight" size={18} strokeWidth={2.1} />
-      </View>
-    </Pressable>
-  );
+  return <Text style={[styles.dateHeader, { paddingHorizontal: horizontalPadding }]}>{label}</Text>;
 });
 
 function FilterPanel({
@@ -979,18 +1000,46 @@ function FilterChip({
   );
 }
 
-function EmptyState({ description, title }: { description: string; title: string }) {
+function EmptyState({
+  actionLabel,
+  description,
+  horizontalPadding,
+  onAction,
+  title,
+}: {
+  actionLabel?: string;
+  description: string;
+  horizontalPadding: number;
+  onAction?: () => void;
+  title: string;
+}) {
   return (
-    <View style={[sharedStyles.card, styles.emptyCard]}>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      <Text style={sharedStyles.emptyText}>{description}</Text>
-    </View>
+    <LedgerFullBleedList horizontalPadding={horizontalPadding}>
+      <View style={styles.emptyState}>
+        <View style={styles.emptyIcon}>
+          <AppIcon color={theme.colors.textSecondary} name="transaction" size={19} strokeWidth={1.8} />
+        </View>
+        <Text style={styles.emptyTitle}>{title}</Text>
+        <Text style={styles.emptyDescription}>{description}</Text>
+        {actionLabel ? (
+          <Pressable accessibilityRole="button" onPress={onAction} style={styles.emptyAction}>
+            <Text style={styles.emptyActionText}>{actionLabel}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </LedgerFullBleedList>
   );
 }
 
 const styles = StyleSheet.create({
   amount_negative: {
-    color: theme.colors.danger,
+    color: theme.colors.textPrimary,
+  },
+  amount_amber: {
+    color: theme.colors.warning,
+  },
+  amount_blue: {
+    color: theme.colors.blueText,
   },
   amount_neutral: {
     color: theme.colors.textPrimary,
@@ -1013,6 +1062,13 @@ const styles = StyleSheet.create({
     color: theme.colors.backButtonText,
     fontSize: 13,
     fontWeight: "800",
+  },
+  dateHeader: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 12,
+    paddingHorizontal: 2,
   },
   detailAmount: {
     fontSize: 30,
@@ -1075,13 +1131,49 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     textAlign: "right",
   },
-  emptyCard: {
-    gap: theme.spacing.sm,
+  emptyAction: {
+    backgroundColor: "rgba(255,255,255,0.055)",
+    borderColor: "rgba(255,255,255,0.10)",
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginTop: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  emptyActionText: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  emptyDescription: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    maxWidth: 250,
+    textAlign: "center",
+  },
+  emptyIcon: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: "rgba(255,255,255,0.09)",
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 38,
+    justifyContent: "center",
+    marginBottom: 12,
+    width: 38,
+  },
+  emptyState: {
+    alignItems: "center",
+    paddingHorizontal: 18,
+    paddingVertical: 28,
   },
   emptyTitle: {
     color: theme.colors.textPrimary,
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: "900",
+    marginBottom: 7,
+    textAlign: "center",
   },
   filterButton: {
     alignItems: "center",
@@ -1328,10 +1420,8 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   monthHeaderCollapsed: {
-    borderBottomLeftRadius: theme.radius.xl,
-    borderBottomRightRadius: theme.radius.xl,
-    borderBottomWidth: 1,
-    marginBottom: theme.spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginBottom: 0,
   },
   monthHeaderMain: {
     flex: 1,
@@ -1340,24 +1430,18 @@ const styles = StyleSheet.create({
   },
   monthHeaderRow: {
     alignItems: "center",
-    backgroundColor: theme.colors.surfaceElevated,
-    borderColor: theme.colors.border,
-    borderTopLeftRadius: theme.radius.xl,
-    borderTopRightRadius: theme.radius.xl,
-    borderWidth: 1,
-    borderBottomWidth: 0,
+    backgroundColor: "rgba(255,255,255,0.035)",
+    borderBottomColor: theme.colors.divider,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(255,255,255,0.09)",
+    borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: theme.spacing.sm,
     justifyContent: "space-between",
-    minHeight: 66,
-    marginTop: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 12,
-    shadowColor: theme.colors.shadowSoft,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 1,
-    shadowRadius: 16,
-    elevation: 2,
+    minHeight: 58,
+    marginTop: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
   monthIncomeText: {
     color: theme.colors.success,
@@ -1388,6 +1472,34 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     textAlign: "center",
   },
+  quickFilterChip: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: "rgba(255,255,255,0.09)",
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: "center",
+    minHeight: 32,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+  },
+  quickFilterChipActive: {
+    backgroundColor: "rgba(255,93,187,0.13)",
+    borderColor: "rgba(255,93,187,0.42)",
+  },
+  quickFilterRow: {
+    flexDirection: "row",
+    gap: 6,
+    paddingRight: 4,
+  },
+  quickFilterText: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  quickFilterTextActive: {
+    color: theme.colors.textPrimary,
+  },
   searchBox: {
     alignItems: "center",
     backgroundColor: theme.colors.surfaceElevated,
@@ -1410,7 +1522,7 @@ const styles = StyleSheet.create({
   },
   screen: {
     flex: 1,
-    gap: theme.spacing.md,
+    gap: 14,
   },
   selectedDateText: {
     color: theme.colors.textMuted,
@@ -1429,10 +1541,17 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   transactionList: {
+    backgroundColor: "rgba(255,255,255,0.035)",
+    borderBottomColor: "rgba(255,255,255,0.08)",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(255,255,255,0.08)",
+    borderTopWidth: StyleSheet.hairlineWidth,
     flex: 1,
   },
   transactionAmount: {
+    color: theme.colors.textPrimary,
     fontSize: 16,
+    fontVariant: ["tabular-nums"],
     fontWeight: "900",
     minWidth: 92,
     textAlign: "right",
@@ -1443,24 +1562,23 @@ const styles = StyleSheet.create({
   },
   transactionCard: {
     alignItems: "center",
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
+    backgroundColor: "rgba(255,255,255,0.042)",
+    borderColor: "transparent",
     borderBottomColor: theme.colors.divider,
-    borderBottomWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: theme.spacing.sm,
     justifyContent: "space-between",
-    minHeight: 72,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 10,
+    minHeight: 62,
+    paddingVertical: 11,
+  },
+  transactionCardFirst: {
+    borderTopColor: "rgba(255,255,255,0.085)",
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   transactionCardLast: {
-    borderBottomColor: theme.colors.border,
-    borderBottomLeftRadius: theme.radius.xl,
-    borderBottomRightRadius: theme.radius.xl,
-    marginBottom: theme.spacing.md,
+    borderBottomColor: theme.colors.divider,
+    marginBottom: 12,
   },
   transactionMain: {
     flex: 1,
@@ -1474,8 +1592,13 @@ const styles = StyleSheet.create({
   },
   transactionTitle: {
     color: theme.colors.textPrimary,
-    fontSize: 16,
-    fontWeight: "900",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  transactionTime: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: "600",
   },
   weekLabel: {
     color: theme.colors.textMuted,

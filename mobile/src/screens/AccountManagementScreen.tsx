@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import {
   calculateReconciliationDiff,
   getReconciliationReasonOptions,
@@ -9,23 +9,30 @@ import {
 import type { AccountInput } from "../domain/accounting/transactionRules";
 import type { Account, AccountType, Transaction } from "../domain/models";
 import type { AppIconName } from "../components/AppIcon";
+import { EmptyStateScreen } from "../components/EmptyState";
+import Skeleton from "../components/Skeleton";
+import SkeletonCard, { SkeletonScreenShell } from "../components/SkeletonCard";
 import {
   AmountText,
   BottomSheetFrame,
   DangerActionButton,
   InfoLineRow,
-  LineListRow,
-  SectionCard,
-  StatusTag,
   SummaryHeroCard,
   TopBar as FinanceTopBar,
 } from "../components/financeUI";
+import {
+  LedgerFullBleedList,
+  LedgerSectionHeader,
+  LedgerValueRow,
+  getLedgerScreenPadding,
+} from "../components/LedgerUI";
 import ScreenTransition from "../components/ScreenTransition";
 import { sharedStyles, theme } from "../styles/theme";
 import { formatCurrency } from "../utils/formatters";
 
 interface AccountManagementScreenProps {
   accounts: Account[];
+  isLoading?: boolean;
   transactions: Transaction[];
   onBack: () => void;
   onDeleteAccount: (accountId: string) => Promise<void>;
@@ -100,6 +107,8 @@ const accountGroups: AccountGroupMeta[] = [
   { title: "投资账户", subtitle: "证券、基金", types: ["securities", "fund"], accent: "purple" },
   { title: "其他", subtitle: "其他自定义账户", types: ["other"], accent: "green" },
 ];
+
+const emptyAccountsIllustration = require("../assets/empty/empty-accounts.png");
 
 const emptyForm = (type: AccountType = "bank"): AccountFormState => ({
   name: "",
@@ -209,6 +218,7 @@ const buildFormFromAccount = (account: Account): AccountFormState => {
 
 export default function AccountManagementScreen({
   accounts,
+  isLoading = false,
   transactions,
   onBack,
   onDeleteAccount,
@@ -216,6 +226,8 @@ export default function AccountManagementScreen({
   onSaveAccount,
   onSaveReconciliation,
 }: AccountManagementScreenProps) {
+  const { width } = useWindowDimensions();
+  const horizontalPadding = getLedgerScreenPadding(width);
   const [route, setRoute] = useState<AccountRoute>({ name: "overview" });
   const [form, setForm] = useState<AccountFormState>(emptyForm());
   const [formSheet, setFormSheet] = useState<AccountFormSheetState | null>(null);
@@ -499,6 +511,27 @@ export default function AccountManagementScreen({
 
   const selectedAccount = form.id ? accounts.find((account) => account.id === form.id) : undefined;
 
+  useEffect(() => {
+    if (formSheet && form.id && !selectedAccount) {
+      setFormSheet(null);
+      setForm(emptyForm(formSheet.type));
+    }
+  }, [form.id, formSheet, selectedAccount]);
+
+  useEffect(() => {
+    setReconciliation((current) => {
+      if (!current.account) return current;
+      return accounts.some((account) => account.id === current.account?.id)
+        ? current
+        : {
+            actualValue: "",
+            isConfirming: false,
+            isSaving: false,
+            note: "",
+          };
+    });
+  }, [accounts]);
+
   const renderAccountFormSheet = () => (
     <AccountFormSheet
       form={form}
@@ -524,6 +557,30 @@ export default function AccountManagementScreen({
     />
   );
 
+  if (isLoading) {
+    return <AccountManagementSkeleton />;
+  }
+
+  if (route.name === "overview" && accounts.length === 0) {
+    return (
+      <View style={styles.stack}>
+        <EmptyStateScreen
+          description={"添加现金、银行卡、支付宝等账户后，\n你的资金去向会更清晰。"}
+          illustration={emptyAccountsIllustration}
+          onBack={handleBack}
+          onPrimary={() => openCreateForm()}
+          onSecondary={() => Alert.alert("账户类型", "账户用于承载现金、银行卡、支付钱包、信用卡和投资账户等资金位置。")}
+          primaryLabel="添加账户"
+          screenTitle="账户管理"
+          secondaryLabel="了解账户类型 ›"
+          title="还没有账户"
+        />
+        {renderAccountFormSheet()}
+        {renderReconciliationModal()}
+      </View>
+    );
+  }
+
   if (route.name === "categoryDetail") {
     const meta = getCategoryMeta(route.type);
     const categoryAccounts = accounts.filter((account) => normalizeAccountType(account.type) === route.type);
@@ -546,47 +603,51 @@ export default function AccountManagementScreen({
             title={meta.detailTitle}
           />
           <CategorySummaryCard accounts={categoryAccounts} meta={meta} />
-          <SectionCard title="账户列表">
-            {categoryAccounts.length > 0 ? (
-              categoryAccounts.map((account) => (
+          <LedgerSectionHeader title="账户列表" />
+          {categoryAccounts.length > 0 ? (
+            <LedgerFullBleedList horizontalPadding={horizontalPadding}>
+              {categoryAccounts.map((account, index) => (
                 <AccountDetailRow
                   account={account}
                   key={account.id}
+                  last={index === categoryAccounts.length - 1}
                   onEdit={() => openEditForm(account, route.type)}
                 />
-              ))
-            ) : (
-              <View style={styles.emptyStateBox}>
-                <Text style={styles.emptyStateTitle}>暂无账户</Text>
-                <Text style={styles.emptyStateDescription}>
-                  你可以新增一个{meta.label}账户，用于后续记账和资产统计。
-                </Text>
-                <Pressable onPress={() => openCreateForm(route.type, route.type)} style={sharedStyles.primaryButton}>
-                  <Text style={sharedStyles.primaryButtonText}>新增账户</Text>
-                </Pressable>
-              </View>
-            )}
-          </SectionCard>
+              ))}
+            </LedgerFullBleedList>
+          ) : (
+            <View style={styles.emptyStateBox}>
+              <Text style={styles.emptyStateTitle}>暂无账户</Text>
+              <Text style={styles.emptyStateDescription}>
+                你可以新增一个{meta.label}账户，用于后续记账和资产统计。
+              </Text>
+              <Pressable onPress={() => openCreateForm(route.type, route.type)} style={sharedStyles.primaryButton}>
+                <Text style={sharedStyles.primaryButtonText}>新增账户</Text>
+              </Pressable>
+            </View>
+          )}
 
-          <SectionCard right={<Text style={styles.groupSubtitle}>最近 3 笔</Text>} title="近期变动">
-            {recentCategoryTransactions.length > 0 ? (
-              recentCategoryTransactions.map((transaction) => (
-                <LineListRow
-                  accent={transaction.amount >= 0 ? "green" : "orange"}
-                  amount={formatCurrency(transaction.amount)}
+          <LedgerSectionHeader action="最近 3 笔" title="近期变动" />
+          {recentCategoryTransactions.length > 0 ? (
+            <LedgerFullBleedList horizontalPadding={horizontalPadding}>
+              {recentCategoryTransactions.map((transaction, index) => (
+                <LedgerValueRow
                   icon="transaction"
                   key={transaction.id}
                   subtitle={`${transaction.date.slice(5, 10)} · ${transaction.category}`}
+                  last={index === recentCategoryTransactions.length - 1}
                   title={transaction.note || transaction.category}
+                  tone={transaction.amount >= 0 ? "green" : "default"}
+                  value={formatCurrency(transaction.amount)}
                 />
-              ))
-            ) : (
-              <View style={styles.emptyStateBox}>
-                <Text style={styles.emptyStateTitle}>暂无近期变动</Text>
-                <Text style={styles.emptyStateDescription}>这个分类下暂时没有可展示的交易记录。</Text>
-              </View>
-            )}
-          </SectionCard>
+              ))}
+            </LedgerFullBleedList>
+          ) : (
+            <View style={styles.emptyStateBox}>
+              <Text style={styles.emptyStateTitle}>暂无近期变动</Text>
+              <Text style={styles.emptyStateDescription}>这个分类下暂时没有可展示的交易记录。</Text>
+            </View>
+          )}
         </View>
         {renderAccountFormSheet()}
         {renderReconciliationModal()}
@@ -613,29 +674,50 @@ export default function AccountManagementScreen({
       </SummaryHeroCard>
 
       {accountGroups.map((group) => (
-        <SectionCard key={group.title} right={<Text style={styles.groupSubtitle}>{group.subtitle}</Text>} title={group.title}>
-          {group.types.map((type) => {
-            const category = getCategoryMeta(type);
-            const categoryAccounts = accounts.filter((account) => normalizeAccountType(account.type) === type);
-            const categoryAmount = getCategoryAmount(accounts, type);
+        <View key={group.title} style={styles.listSection}>
+          <LedgerSectionHeader action={group.subtitle} title={group.title} />
+          <LedgerFullBleedList horizontalPadding={horizontalPadding}>
+            {group.types.map((type, index) => {
+              const category = getCategoryMeta(type);
+              const categoryAccounts = accounts.filter((account) => normalizeAccountType(account.type) === type);
+              const categoryAmount = getCategoryAmount(accounts, type);
 
-            return (
-              <LineListRow
-                accent={group.accent}
-                amount={formatCategoryAmount(type, categoryAmount)}
-                icon={getAccountTypeIcon(type)}
-                key={type}
-                onPress={() => openCategoryDetail(type)}
-                subtitle={`${categoryAccounts.length} ${category.countUnit}`}
-                title={category.label}
-              />
-            );
-          })}
-        </SectionCard>
+              return (
+                <LedgerValueRow
+                  icon={getAccountTypeIcon(type)}
+                  key={type}
+                  last={index === group.types.length - 1}
+                  onPress={() => openCategoryDetail(type)}
+                  subtitle={`${categoryAccounts.length} ${category.countUnit}`}
+                  title={category.label}
+                  value={formatCategoryAmount(type, categoryAmount)}
+                />
+              );
+            })}
+          </LedgerFullBleedList>
+        </View>
       ))}
       {renderAccountFormSheet()}
       {renderReconciliationModal()}
     </View>
+  );
+}
+
+function AccountManagementSkeleton() {
+  return (
+    <SkeletonScreenShell>
+      <Skeleton delay={0} height={9} width={60} />
+      {[0, 1].map((item) => (
+        <SkeletonCard
+          key={item}
+          rows={[
+            { delay: item * 150, height: 9, width: 80 },
+            { delay: item * 150 + 90, height: 18, style: { marginTop: 9 }, width: "64%" },
+          ]}
+          style={styles.accountSkeletonCard}
+        />
+      ))}
+    </SkeletonScreenShell>
   );
 }
 
@@ -669,28 +751,26 @@ function CategorySummaryCard({ accounts, meta }: CategorySummaryCardProps) {
 
 interface AccountDetailRowProps {
   account: Account;
+  last?: boolean;
   onEdit: () => void;
 }
 
-function AccountDetailRow({ account, onEdit }: AccountDetailRowProps) {
+function AccountDetailRow({ account, last, onEdit }: AccountDetailRowProps) {
   const enabled = isAccountEnabled(account);
   const isCreditCard = normalizeAccountType(account.type) === "creditCard";
   const noteText = account.note ? ` · ${account.note}` : "";
   const creditLimitText = isCreditCard && account.creditLimit ? ` · 额度 ${formatCurrency(account.creditLimit)}` : "";
 
   return (
-    <LineListRow
-      accent={enabled ? "orange" : "red"}
+    <LedgerValueRow
       icon={getAccountTypeIcon(account.type)}
+      last={last}
       onPress={onEdit}
-      right={
-        <View style={styles.accountRowRight}>
-          <Text style={styles.accountRowAmount}>{formatAccountBalance(account)}</Text>
-          <StatusTag text={enabled ? "纳入" : "未纳入"} tone={enabled ? "green" : "red"} />
-        </View>
-      }
       subtitle={`${getAccountTypeLabel(account.type)}${creditLimitText}${noteText || " · 未填写备注"}`}
       title={account.name}
+      tone={enabled ? "default" : "amber"}
+      value={formatAccountBalance(account)}
+      valueDetail={enabled ? "纳入" : "未纳入"}
     />
   );
 }
@@ -1227,6 +1307,10 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     gap: 5,
   },
+  accountSkeletonCard: {
+    marginBottom: 10,
+    minHeight: 68,
+  },
   fieldLabel: {
     color: theme.colors.textSecondary,
     fontSize: theme.typography.label,
@@ -1256,17 +1340,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   listSection: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.xl,
-    borderWidth: 1,
-    gap: 2,
-    padding: theme.spacing.md,
-    shadowColor: theme.colors.shadowSoft,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 1,
-    shadowRadius: 16,
-    elevation: 2,
+    gap: 8,
   },
   modalActions: {
     flexDirection: "row",

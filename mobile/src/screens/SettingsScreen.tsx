@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import AppIcon, { type AppIconName } from "../components/AppIcon";
+import InlineError from "../components/InlineError";
 import {
   ActionTile,
   AmountText,
@@ -49,6 +50,7 @@ export default function SettingsScreen({
   const [route, setRoute] = useState<SettingsRoute>("root");
   const [exportedJson, setExportedJson] = useState("");
   const [importJson, setImportJson] = useState("");
+  const [importErrorMessage, setImportErrorMessage] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -72,16 +74,23 @@ export default function SettingsScreen({
     }
 
     setIsImporting(true);
+    setImportErrorMessage("");
     try {
       await onImport(importJson);
       setExportedJson(importJson);
       setImportJson("");
+      setImportErrorMessage("");
       Alert.alert("导入成功", "本地数据已刷新。");
     } catch {
-      Alert.alert("导入失败", "JSON 格式或结构校验失败。");
+      setImportErrorMessage("请检查 JSON 格式是否正确");
     } finally {
       setIsImporting(false);
     }
+  };
+
+  const retryImport = () => {
+    setImportErrorMessage("");
+    setImportJson("");
   };
 
   const confirmReset = () => {
@@ -137,7 +146,10 @@ export default function SettingsScreen({
             <View style={styles.inlineImport}>
               <TextInput
                 multiline
-                onChangeText={setImportJson}
+                onChangeText={(text) => {
+                  setImportJson(text);
+                  setImportErrorMessage("");
+                }}
                 placeholder="把完整 JSON 粘贴到这里"
                 placeholderTextColor={theme.colors.textMuted}
                 style={[sharedStyles.input, sharedStyles.textArea, styles.importArea]}
@@ -152,6 +164,14 @@ export default function SettingsScreen({
               >
                 <Text style={sharedStyles.primaryButtonText}>{isImporting ? "正在导入..." : "开始导入"}</Text>
               </Pressable>
+              {importErrorMessage ? (
+                <InlineError
+                  message="导入的文件格式有问题"
+                  primaryAction={{ label: "重新选择", onPress: retryImport }}
+                  style={styles.importInlineError}
+                  subMessage={importErrorMessage}
+                />
+              ) : null}
             </View>
             <LineListRow
               accent="purple"
@@ -319,7 +339,7 @@ function StatusStat({
 const statusAccentColors = {
   blue: { bg: theme.colors.blueSoft, fg: theme.colors.blueText },
   green: { bg: theme.colors.greenSoft, fg: theme.colors.greenText },
-  orange: { bg: theme.colors.primarySoft, fg: theme.colors.primaryDeep },
+  orange: { bg: theme.colors.warningSoft, fg: theme.colors.warning },
   purple: { bg: theme.colors.purpleSoft, fg: theme.colors.purpleText },
 };
 
@@ -393,6 +413,9 @@ const styles = StyleSheet.create({
   importArea: {
     minHeight: 112,
   },
+  importInlineError: {
+    borderRadius: 12,
+  },
   inlineImport: {
     gap: theme.spacing.sm,
     paddingBottom: theme.spacing.md,
@@ -417,11 +440,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   orangeBadge: {
-    backgroundColor: theme.colors.primarySoft,
+    backgroundColor: theme.colors.warningSoft,
     borderColor: theme.colors.borderStrong,
     borderRadius: theme.radius.md,
     borderWidth: 1,
-    color: theme.colors.primaryDeep,
+    color: theme.colors.warning,
     fontSize: 13,
     fontWeight: "900",
     overflow: "hidden",

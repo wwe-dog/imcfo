@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
   type LayoutChangeEvent,
+  useWindowDimensions,
 } from "react-native";
 import AppIcon from "../components/AppIcon";
 import type { AppIconName } from "../components/AppIcon";
@@ -17,15 +18,19 @@ import {
   DangerActionButton,
   IconTile,
   InfoLineRow,
-  LineListCard,
-  LineListRow,
   SectionCard,
-  SegmentedControl,
   StatBlock,
   StatusTag,
   SummaryHeroCard,
-  TopBar,
 } from "../components/financeUI";
+import {
+  LedgerFullBleedList,
+  LedgerGlassHero,
+  LedgerPageHeader,
+  LedgerSectionHeader,
+  LedgerValueRow,
+  getLedgerScreenPadding,
+} from "../components/LedgerUI";
 import ScreenTransition from "../components/ScreenTransition";
 import {
   assetAccountingSubjects,
@@ -48,10 +53,12 @@ import { formatCurrency } from "../utils/formatters";
 interface AssetsLiabilitiesScreenProps {
   accounts: Account[];
   assets: Asset[];
+  isLoading?: boolean;
   liabilities: Liability[];
   onBack: () => void;
   onDeleteAsset: (assetId: string) => Promise<void>;
   onDeleteLiability: (liabilityId: string) => Promise<void>;
+  onOpenAccounts?: () => void;
   onSaveAsset: (input: AssetInput) => Promise<void>;
   onSaveLiability: (input: LiabilityInput) => Promise<void>;
   onSaveReconciliation: (input: ReconciliationInput) => Promise<void>;
@@ -225,6 +232,8 @@ const getLiabilityTypeLabel = (category: Liability["category"]): string =>
 const getLinkedAccountName = (accounts: Account[], accountId?: string): string =>
   accountId ? accounts.find((account) => account.id === accountId)?.name ?? "已删除账户" : "无";
 
+const formatLedgerCurrency = (value: number): string => formatCurrency(value).replace("CN¥", "¥");
+
 const normalizeSearchText = (value: unknown): string => String(value ?? "").trim().toLowerCase();
 
 const doesSubjectGroupMatchSearch = (group: AssetSubjectGroup | LiabilitySubjectGroup, rawQuery: string): boolean => {
@@ -300,19 +309,34 @@ const getSubjectIconName = (kind: LedgerKind, subjectId: string): AppIconName =>
 const getKindCopy = (kind: LedgerKind): { accent: "green" | "orange" | "red"; label: string; tone: "default" | "negative" } =>
   kind === "asset"
     ? { accent: "green", label: "资产", tone: "default" }
-    : { accent: "red", label: "负债", tone: "negative" };
+    : { accent: "orange", label: "负债", tone: "default" };
+
+const formatShare = (amount: number, total: number): string => {
+  if (total <= 0) return "0%";
+  return `${Math.round((amount / total) * 100)}%`;
+};
+
+const getLiabilityStatus = (group: LiabilitySubjectGroup): string => {
+  if (group.amount <= 0) return "稳定";
+  if (group.subject.id.includes("payable") || group.subject.id.includes("borrowings")) return "需关注";
+  return "稳定";
+};
 
 export default function AssetsLiabilitiesScreen({
   accounts,
   assets,
+  isLoading: _isLoading = false,
   liabilities,
   onBack,
   onDeleteAsset,
   onDeleteLiability,
+  onOpenAccounts: _onOpenAccounts,
   onSaveAsset,
   onSaveLiability,
   onSaveReconciliation,
 }: AssetsLiabilitiesScreenProps) {
+  const { width } = useWindowDimensions();
+  const horizontalPadding = getLedgerScreenPadding(width);
   const [activeKind, setActiveKind] = useState<LedgerKind>("asset");
   const [subjectSearchQuery, setSubjectSearchQuery] = useState("");
   const [route, setRoute] = useState<LedgerRoute>({ name: "overview" });
@@ -537,76 +561,67 @@ export default function AssetsLiabilitiesScreen({
   };
 
   const renderOverview = () => {
-    const groups = activeKind === "asset" ? assetGroups : liabilityGroups;
-    const visibleGroups = groups.filter((group) => doesSubjectGroupMatchSearch(group, subjectSearchQuery));
-    const totalAmount = groups.reduce((sum, group) => sum + group.amount, 0);
-    const totalItems = groups.reduce((sum, group) => sum + group.items.length, 0);
-    const kindCopy = getKindCopy(activeKind);
-    const handleKindChange = (kind: LedgerKind) => {
-      setOpenHelpSubjectId(null);
-      setActiveKind(kind);
-    };
-    const handleSearchChange = (value: string) => {
-      setOpenHelpSubjectId(null);
-      setSubjectSearchQuery(value);
-    };
-    const handleSubjectHelpPress = (subject: AccountingSubject) => {
-      setOpenHelpSubjectId((current) => (current === subject.id ? null : subject.id));
-    };
+    const assetTotal = assetGroups.reduce((sum, group) => sum + group.amount, 0);
+    const liabilityTotal = liabilityGroups.reduce((sum, group) => sum + group.amount, 0);
+    const netWorth = assetTotal - liabilityTotal;
+    const leverageRatio = assetTotal > 0 ? Math.round((liabilityTotal / assetTotal) * 100) : 0;
+    const visibleAssetGroups = assetGroups.filter((group) => group.amount > 0 || group.items.length > 0);
+    const visibleLiabilityGroups = liabilityGroups.filter((group) => group.amount > 0 || group.items.length > 0);
+    const assetRows = visibleAssetGroups.length > 0 ? visibleAssetGroups : assetGroups.slice(0, 3);
+    const liabilityRows = visibleLiabilityGroups.length > 0 ? visibleLiabilityGroups : liabilityGroups.slice(0, 3);
 
     return (
-      <ScreenTransition animateOnMount transitionKey={`ledger-overview-${activeKind}`} variant="drilldown">
+      <ScreenTransition animateOnMount transitionKey="ledger-overview" variant="drilldown">
         <View style={styles.stack}>
-          <LedgerTopBar onAdd={() => openCreateForm(activeKind)} onBack={onBack} title="资产负债管理" />
-          <SegmentedControl
-            onChange={handleKindChange}
-            options={[
-              { label: "资产类", value: "asset" },
-              { label: "负债类", value: "liability" },
+          <LedgerTopBar onBack={onBack} title="资产负债" />
+          <LedgerGlassHero
+            badge="健康"
+            eyebrow="当前净资产"
+            metrics={[
+              { label: "资产总额", value: formatLedgerCurrency(assetTotal) },
+              { label: "负债总额", tone: "amber", value: formatLedgerCurrency(liabilityTotal) },
+              { label: "负债率", value: `${leverageRatio}%` },
             ]}
-            value={activeKind}
-          />
+            title={formatLedgerCurrency(netWorth)}
+          >
+            <Text style={styles.netWorthHint}>资产 - 负债</Text>
+          </LedgerGlassHero>
 
-          <SummaryHeroCard style={styles.overviewSummaryCard}>
-            <StatBlock
-              accent={kindCopy.accent}
-              helper={`${totalItems} 条明细，${groups.length} 个会计科目`}
-              icon={activeKind}
-              label={`${kindCopy.label}合计`}
-              value={formatCurrency(totalAmount)}
-            />
-            <Text style={styles.overviewSummaryText}>
-              按中国会计科目管理个人{kindCopy.label}，先看科目，再进入明细。
-            </Text>
-          </SummaryHeroCard>
-
-          <View style={styles.subjectSearchRow}>
-            <View style={styles.subjectSearchBox}>
-              <AppIcon color={theme.colors.textMuted} name="search" size={18} />
-              <TextInput
-                onChangeText={handleSearchChange}
-                placeholder="搜索科目、金额、备注"
-                placeholderTextColor={theme.colors.textMuted}
-                style={styles.subjectSearchInput}
-                value={subjectSearchQuery}
-              />
-            </View>
-          </View>
-
-          <View style={styles.subjectList}>
-            {visibleGroups.map((group) => (
-              <SubjectRow
-                amount={group.amount}
-                kind={activeKind}
-                isHelpVisible={openHelpSubjectId === group.subject.id}
+          <LedgerSectionHeader action="新增资产" onAction={() => openCreateForm("asset")} title="资产" />
+          <LedgerFullBleedList horizontalPadding={horizontalPadding}>
+            {assetRows.map((group, index) => (
+              <LedgerValueRow
+                icon={getSubjectIconName("asset", group.subject.id)}
                 key={group.subject.id}
-                onExplain={handleSubjectHelpPress}
-                onPress={() => setRoute({ kind: activeKind, name: "subject", subjectId: group.subject.id })}
-                subject={group.subject}
+                last={index === assetRows.length - 1}
+                onPress={() => setRoute({ kind: "asset", name: "subject", subjectId: group.subject.id })}
+                subtitle={group.subject.rowExamples[0] ?? group.subject.description}
+                title={group.subject.displayName}
+                value={formatLedgerCurrency(group.amount)}
+                valueDetail={formatShare(group.amount, assetTotal)}
               />
             ))}
-            {visibleGroups.length === 0 ? <EmptyBox description="试试调整关键词。" title="没有找到科目" /> : null}
-          </View>
+          </LedgerFullBleedList>
+
+          <LedgerSectionHeader action="新增负债" onAction={() => openCreateForm("liability")} title="负债" />
+          <LedgerFullBleedList horizontalPadding={horizontalPadding}>
+            {liabilityRows.map((group, index) => {
+              const status = getLiabilityStatus(group);
+              return (
+                <LedgerValueRow
+                  icon={getSubjectIconName("liability", group.subject.id)}
+                  key={group.subject.id}
+                  last={index === liabilityRows.length - 1}
+                  onPress={() => setRoute({ kind: "liability", name: "subject", subjectId: group.subject.id })}
+                  subtitle={group.subject.rowExamples[0] ?? group.subject.description}
+                  title={group.subject.displayName}
+                  tone={status === "需关注" ? "amber" : "default"}
+                  value={formatLedgerCurrency(group.amount)}
+                  valueDetail={status}
+                />
+              );
+            })}
+          </LedgerFullBleedList>
         </View>
       </ScreenTransition>
     );
@@ -639,36 +654,39 @@ export default function AssetsLiabilitiesScreen({
             </View>
           </SummaryHeroCard>
 
-          <LineListCard>
-            <Text style={styles.sectionHeading}>明细项目</Text>
-            {items.length === 0 ? (
-              <View style={styles.emptyBox}>
-                <Text style={styles.emptyTitle}>暂无明细项目</Text>
-                <Text style={styles.emptyText}>可点击右上角新增。</Text>
-              </View>
-            ) : null}
-            {kind === "asset"
-              ? (items as Asset[]).map((asset) => (
+          <LedgerSectionHeader title="明细项目" />
+          {items.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyTitle}>暂无明细项目</Text>
+              <Text style={styles.emptyText}>可点击右上角新增。</Text>
+            </View>
+          ) : (
+            <LedgerFullBleedList horizontalPadding={horizontalPadding}>
+              {kind === "asset"
+                ? (items as Asset[]).map((asset, index) => (
                   <DetailItemRow
                     amount={getAssetValue(asset)}
                     icon={getSubjectIconName(kind, subject.id)}
                     key={asset.id}
+                    last={index === items.length - 1}
                     note={asset.note}
                     onPress={() => setRoute({ id: asset.id, kind, name: "detail", subjectId })}
                     title={asset.name}
                   />
                 ))
-              : (items as Liability[]).map((liability) => (
+                : (items as Liability[]).map((liability, index) => (
                   <DetailItemRow
                     amount={liability.amount}
                     icon={getSubjectIconName(kind, subject.id)}
                     key={liability.id}
+                    last={index === items.length - 1}
                     note={liability.note ?? liability.dueDate}
                     onPress={() => setRoute({ id: liability.id, kind, name: "detail", subjectId })}
                     title={liability.name}
                   />
                 ))}
-          </LineListCard>
+            </LedgerFullBleedList>
+          )}
         </View>
       </ScreenTransition>
     );
@@ -813,8 +831,8 @@ export default function AssetsLiabilitiesScreen({
   );
 }
 
-function LedgerTopBar({ onAdd, onBack, title }: { onAdd?: () => void; onBack: () => void; title: string }) {
-  return <TopBar onBack={onBack} onRightPress={onAdd} rightIcon="add" title={title} />;
+function LedgerTopBar({ onBack, title }: { onAdd?: () => void; onBack: () => void; title: string }) {
+  return <LedgerPageHeader onBack={onBack} title={title} />;
 }
 
 function SubjectRow({
@@ -882,7 +900,7 @@ function SubjectRow({
             </Text>
           </View>
           <View style={styles.subjectAmountWrap}>
-            <AmountText size="normal" tone={kind === "liability" ? "negative" : "default"}>
+            <AmountText size="normal" tone="default">
               {formatCurrency(amount)}
             </AmountText>
             <AppIcon color={theme.colors.textMuted} name="chevronRight" size={16} />
@@ -928,24 +946,26 @@ function SubjectHelpBubble({
 function DetailItemRow({
   amount,
   icon,
+  last,
   note,
   onPress,
   title,
 }: {
   amount: number;
   icon: AppIconName;
+  last?: boolean;
   note?: string;
   onPress: () => void;
   title: string;
 }) {
   return (
-    <LineListRow
-      accent="orange"
-      amount={formatCurrency(amount)}
+    <LedgerValueRow
       icon={icon}
+      last={last}
       onPress={onPress}
       subtitle={note || "无备注"}
       title={title}
+      value={formatCurrency(amount)}
     />
   );
 }
@@ -1697,6 +1717,12 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     fontSize: 22,
     fontWeight: "900",
+  },
+  netWorthHint: {
+    color: theme.colors.success,
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 6,
   },
   operationButton: {
     alignItems: "center",

@@ -10,6 +10,7 @@ import { BlurView } from "expo-blur";
 import { Animated, Easing, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from "react-native";
 import AppIcon from "../components/AppIcon";
 import type { AppIconName } from "../components/AppIcon";
+import InlineError from "../components/InlineError";
 import LiquidGlassVoiceInput from "../components/LiquidGlassVoiceInput";
 import type { TransactionInput } from "../domain/accounting/transactionRules";
 import type { Account, Liability } from "../domain/models";
@@ -24,8 +25,16 @@ import { SpeechTranscriptionError, transcribeAudio } from "../services/speechTra
 
 interface RecordScreenProps {
   accounts: Account[];
+  externalDraftPayload?: {
+    draft: CandidateTransactionDraft;
+    nonce: number;
+    transcriptionText: string;
+  } | null;
+  externalManualEntryNonce?: number | null;
   liabilities: Liability[];
   onSave: (input: TransactionInput) => Promise<void>;
+  onExternalDraftConsumed?: () => void;
+  onExternalManualEntryConsumed?: () => void;
   onOpenAccounts: () => void;
   onOpenReports: () => void;
   onOpenAssets: () => void;
@@ -50,6 +59,7 @@ interface RepaymentTargetOption {
 }
 
 type VoiceInputState = "idle" | "recording" | "transcribing" | "result" | "recognizing" | "draftReady" | "recognitionError" | "error";
+type DraftErrorKind = "validation" | "save" | null;
 
 const maxVoiceDurationMs = 30_000;
 const voiceRecordingOptions: RecordingOptions = {
@@ -90,9 +100,9 @@ const getStatusText = (state: VoiceInputState): string => {
     case "draftReady":
       return "识别完成";
     case "recognitionError":
-      return "识别失败";
+      return "智能识别暂时不可用";
     case "error":
-      return "转写失败";
+      return "语音识别出了点问题";
     case "idle":
     default:
       return "点击开始说话";
@@ -277,7 +287,11 @@ const managementActions: Array<{
 
 export default function RecordScreen({
   accounts,
+  externalDraftPayload,
+  externalManualEntryNonce,
   liabilities,
+  onExternalDraftConsumed,
+  onExternalManualEntryConsumed,
   onOpenAccounts,
   onOpenAssets,
   onOpenReports,
@@ -295,6 +309,7 @@ export default function RecordScreen({
   const [draftEdit, setDraftEdit] = useState<DraftEditState | null>(null);
   const [isDraftSheetVisible, setIsDraftSheetVisible] = useState(false);
   const [draftErrorMessage, setDraftErrorMessage] = useState("");
+  const [draftErrorKind, setDraftErrorKind] = useState<DraftErrorKind>(null);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const audioRecorder = useAudioRecorder(voiceRecordingOptions);
   const pulseProgress = useRef(new Animated.Value(0)).current;
@@ -309,6 +324,28 @@ export default function RecordScreen({
   const draftSheetMaxHeight = Math.round(windowHeight * 0.74);
 
   audioRecorderRef.current = audioRecorder;
+
+  useEffect(() => {
+    if (!externalDraftPayload) return;
+
+    setTranscriptionText(externalDraftPayload.transcriptionText);
+    setLastDurationMs(0);
+    setCandidateDraft(externalDraftPayload.draft);
+    setDraftEdit(createDraftEditState(externalDraftPayload.draft, accounts, liabilities));
+    setDraftErrorMessage("");
+    setDraftErrorKind(null);
+    setErrorMessage("");
+    setInfoMessage("");
+    setIsDraftSheetVisible(true);
+    setVoiceState("draftReady");
+    onExternalDraftConsumed?.();
+  }, [
+    accounts,
+    externalDraftPayload,
+    externalDraftPayload?.nonce,
+    liabilities,
+    onExternalDraftConsumed,
+  ]);
 
   const isWorking = voiceState === "recording" || voiceState === "transcribing" || voiceState === "recognizing";
   const isPrimaryActionDisabled = voiceState === "transcribing" || voiceState === "recognizing";
@@ -335,7 +372,7 @@ export default function RecordScreen({
   const shouldShowManagementPanel = !transcriptionText;
   const inputPrimaryText = voiceState === "idle" ? "自然语言记一笔…" : statusText;
   const inputSecondaryText =
-    errorMessage
+    voiceState === "error" && errorMessage
       ? errorMessage
       : voiceState === "recording"
       ? formatDuration(shownDurationMs)
@@ -427,6 +464,7 @@ export default function RecordScreen({
     setDraftEdit(null);
     setIsDraftSheetVisible(false);
     setDraftErrorMessage("");
+    setDraftErrorKind(null);
     setIsSavingDraft(false);
     isSavingDraftRef.current = false;
     lastSavedDraftSignatureRef.current = null;
@@ -492,6 +530,7 @@ export default function RecordScreen({
       setDraftEdit(null);
       setIsDraftSheetVisible(false);
       setDraftErrorMessage("");
+      setDraftErrorKind(null);
       setState("result");
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
@@ -579,6 +618,43 @@ export default function RecordScreen({
     void startRecording();
   };
 
+  const openManualEntry = () => {
+    const sourceText = transcriptionText.trim() || "手动填写";
+    const manualDraft: CandidateTransactionDraft = {
+      accountName: null,
+      amount: null,
+      category: null,
+      confidence: 0,
+      dateText: "今天",
+      direction: "expense",
+      impactPreview: "手动填写后，由交易规则层计算正式影响",
+      needsReview: true,
+      note: sourceText === "手动填写" ? null : sourceText,
+      sourceText,
+      transactionType: "expense",
+    };
+
+    setCandidateDraft(manualDraft);
+    setDraftEdit(createDraftEditState(manualDraft, accounts, liabilities));
+    setDraftErrorMessage("");
+    setDraftErrorKind(null);
+    setErrorMessage("");
+    setInfoMessage("");
+    setIsDraftSheetVisible(true);
+    setState("draftReady");
+  };
+
+  const retryTranscription = () => {
+    resetVoiceInput();
+    void startRecording();
+  };
+
+  useEffect(() => {
+    if (!externalManualEntryNonce) return;
+    openManualEntry();
+    onExternalManualEntryConsumed?.();
+  }, [externalManualEntryNonce, onExternalManualEntryConsumed]);
+
   const handleUseText = async () => {
     const text = transcriptionText.trim();
     if (!text) {
@@ -594,12 +670,14 @@ export default function RecordScreen({
     setDraftEdit(null);
     setIsDraftSheetVisible(false);
     setDraftErrorMessage("");
+    setDraftErrorKind(null);
 
     try {
       const draft = await recognizeTransactionDraft(text);
       setCandidateDraft(draft);
       setDraftEdit(createDraftEditState(draft, accounts, liabilities));
       setDraftErrorMessage("");
+      setDraftErrorKind(null);
       setIsDraftSheetVisible(true);
       setState("draftReady");
     } catch (error) {
@@ -612,6 +690,7 @@ export default function RecordScreen({
     if (isSavingDraftRef.current) return;
     setIsDraftSheetVisible(false);
     setDraftErrorMessage("");
+    setDraftErrorKind(null);
     setState("result");
   };
 
@@ -619,6 +698,7 @@ export default function RecordScreen({
     if (isSavingDraftRef.current) return;
     setIsDraftSheetVisible(false);
     setDraftErrorMessage("");
+    setDraftErrorKind(null);
     setInfoMessage("编辑字段将在下一步接入");
     setState("result");
   };
@@ -626,6 +706,7 @@ export default function RecordScreen({
   const updateDraftEdit = (patch: Partial<DraftEditState>) => {
     setDraftEdit((current) => (current ? { ...current, ...patch } : current));
     setDraftErrorMessage("");
+    setDraftErrorKind(null);
   };
 
   const buildTransactionInputFromDraft = (
@@ -701,6 +782,7 @@ export default function RecordScreen({
       transactionInput = buildTransactionInputFromDraft(candidateDraft, draftEdit);
     } catch (error) {
       setDraftErrorMessage(error instanceof Error ? error.message : "这笔交易信息不完整，请继续修改");
+      setDraftErrorKind("validation");
       return;
     }
 
@@ -719,10 +801,12 @@ export default function RecordScreen({
       lastSavedDraftSignatureRef.current = draftSignature;
       setIsDraftSheetVisible(false);
       setDraftErrorMessage("");
+      setDraftErrorKind(null);
       setInfoMessage("已确认入账");
       setState("result");
     } catch {
-      setDraftErrorMessage("保存失败，这笔记录没有入账，请稍后重试");
+      setDraftErrorMessage("你的内容已保留，请再试一次");
+      setDraftErrorKind("save");
     } finally {
       isSavingDraftRef.current = false;
       setIsSavingDraft(false);
@@ -749,25 +833,33 @@ export default function RecordScreen({
       </View>
 
       <View style={styles.inputStage}>
-        <Animated.View style={[styles.mainInputAnimated, isWorking ? { transform: [{ scale: micScale }] } : undefined]}>
-          <LiquidGlassVoiceInput
-            accessibilityLabel={statusText}
-            disabled={isPrimaryActionDisabled}
-            onPress={handleMicPress}
-            placeholder={inputPrimaryText}
-            style={styles.mainInputGlass}
-            subtext={inputSecondaryText}
-            tone={
-              errorMessage
-                ? "error"
-                : voiceState === "recording"
+        {voiceState === "error" ? (
+          <InlineError
+            message="语音识别出了点问题"
+            primaryAction={{ label: "重试", onPress: retryTranscription }}
+            secondaryAction={{ label: "文字输入", onPress: openManualEntry }}
+            style={styles.voiceInlineError}
+            subMessage="可以改用文字输入"
+          />
+        ) : (
+          <Animated.View style={[styles.mainInputAnimated, isWorking ? { transform: [{ scale: micScale }] } : undefined]}>
+            <LiquidGlassVoiceInput
+              accessibilityLabel={statusText}
+              disabled={isPrimaryActionDisabled}
+              onPress={handleMicPress}
+              placeholder={inputPrimaryText}
+              style={styles.mainInputGlass}
+              subtext={inputSecondaryText}
+              tone={
+                voiceState === "recording"
                   ? "recording"
                   : voiceState === "transcribing"
                     ? "transcribing"
                     : "default"
-            }
-          />
-        </Animated.View>
+              }
+            />
+          </Animated.View>
+        )}
 
         {isWorking ? (
           <View style={styles.inputFeedbackRow}>
@@ -790,6 +882,15 @@ export default function RecordScreen({
           </View>
         ) : null}
       </View>
+
+      {voiceState === "recognitionError" && errorMessage ? (
+        <InlineError
+          message="智能识别暂时不可用"
+          primaryAction={{ label: "手动填写", onPress: openManualEntry }}
+          style={styles.recognitionInlineError}
+          subMessage="已为你保留原始文字，可以手动填写"
+        />
+      ) : null}
 
       {shouldShowManagementPanel ? (
       <View style={styles.managementPanel}>
@@ -1058,11 +1159,6 @@ export default function RecordScreen({
                   <Text style={styles.impactText}>{candidateDraft.impactPreview}</Text>
                 </View>
 
-                {draftErrorMessage ? (
-                  <View style={styles.draftErrorBox}>
-                    <Text style={styles.draftErrorText}>{draftErrorMessage}</Text>
-                  </View>
-                ) : null}
               </ScrollView>
 
               <View style={styles.sheetFooter}>
@@ -1074,6 +1170,17 @@ export default function RecordScreen({
                     <Text style={styles.sheetPrimaryText}>{isSavingDraft ? "入账中..." : "确认入账"}</Text>
                   </Pressable>
                 </View>
+                {draftErrorMessage ? (
+                  <InlineError
+                    message={draftErrorKind === "save" ? "记录保存时遇到问题" : "这笔信息还需要补全"}
+                    primaryAction={{
+                      label: draftErrorKind === "save" ? "重试保存" : "继续修改",
+                      onPress: draftErrorKind === "save" ? () => void handleConfirmDraft() : () => setDraftErrorMessage(""),
+                    }}
+                    style={styles.sheetInlineError}
+                    subMessage={draftErrorKind === "save" ? "你的内容已保留，请再试一次" : draftErrorMessage}
+                  />
+                ) : null}
               </View>
             </View>
           ) : null}
@@ -1168,20 +1275,6 @@ const styles = StyleSheet.create({
   },
   draftValueIncome: {
     color: "#75EFC8",
-  },
-  draftErrorBox: {
-    backgroundColor: "rgba(255, 106, 138, 0.1)",
-    borderColor: "rgba(255, 106, 138, 0.22)",
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  draftErrorText: {
-    color: "#FF8EA7",
-    fontSize: 13,
-    fontWeight: "800",
-    lineHeight: 19,
   },
   draftSheet: {
     backgroundColor: "rgba(5, 14, 23, 0.96)",
@@ -1292,6 +1385,12 @@ const styles = StyleSheet.create({
     minHeight: 108,
     paddingVertical: 0,
   },
+  recognitionInlineError: {
+    alignSelf: "center",
+    borderRadius: 12,
+    marginTop: -2,
+    maxWidth: 420,
+  },
   inputFeedbackRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -1301,8 +1400,8 @@ const styles = StyleSheet.create({
   },
   mainInputBox: {
     alignItems: "center",
-    backgroundColor: "rgba(248, 253, 255, 0.96)",
-    borderColor: "rgba(197, 226, 239, 0.72)",
+    backgroundColor: "rgba(34, 49, 68, 0.56)",
+    borderColor: "rgba(222, 242, 255, 0.32)",
     borderRadius: 30,
     borderWidth: 1,
     flexDirection: "row",
@@ -1316,17 +1415,13 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   mainInputBoxRecording: {
-    backgroundColor: "rgba(238, 253, 255, 0.98)",
+    backgroundColor: "rgba(26, 58, 78, 0.62)",
     borderColor: "rgba(94, 231, 255, 0.46)",
     shadowOpacity: 0.22,
   },
   mainInputBoxTranscribing: {
-    backgroundColor: "rgba(239, 255, 249, 0.98)",
+    backgroundColor: "rgba(25, 58, 52, 0.62)",
     borderColor: "rgba(117, 239, 200, 0.48)",
-  },
-  mainInputBoxError: {
-    backgroundColor: "rgba(255, 243, 247, 0.98)",
-    borderColor: "rgba(255, 142, 167, 0.5)",
   },
   mainInputAnimated: {
     width: "100%",
@@ -1352,10 +1447,6 @@ const styles = StyleSheet.create({
     color: "rgba(50, 72, 88, 0.64)",
     fontSize: 12,
     fontWeight: "700",
-  },
-  mainInputSubtextError: {
-    color: "rgba(180, 52, 78, 0.9)",
-    lineHeight: 17,
   },
   mainInputText: {
     color: "rgba(16, 31, 45, 0.96)",
@@ -1490,7 +1581,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   optionEmptyText: {
-    color: "#FF8EA7",
+    color: "#fbbf24",
     fontSize: 12,
     fontWeight: "800",
   },
@@ -1648,6 +1739,10 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     paddingTop: 12,
   },
+  sheetInlineError: {
+    borderRadius: 12,
+    marginTop: 12,
+  },
   sheetOverlay: {
     flex: 1,
     justifyContent: "flex-end",
@@ -1716,6 +1811,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     minHeight: 44,
+  },
+  voiceInlineError: {
+    borderRadius: 9999,
+    minHeight: 72,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   waveform: {
     alignItems: "center",

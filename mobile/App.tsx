@@ -1,17 +1,20 @@
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppData } from "./src/app/useAppData";
 import { useTransactionRecordsIndex } from "./src/hooks/useTransactionRecordsIndex";
+import AppLoadingScreen from "./src/components/AppLoadingScreen";
+import FullScreenError from "./src/components/FullScreenError";
 import type {
   AccountInput,
   AssetInput,
@@ -20,38 +23,35 @@ import type {
 } from "./src/domain/accounting/transactionRules";
 import type { ReconciliationInput } from "./src/domain/accounting/reconciliationRules";
 import { filterTransactionsByReportPeriod } from "./src/domain/accounting/periodFilters";
-import AppIcon, { type AppIconName } from "./src/components/AppIcon";
 import AccountManagementScreen from "./src/screens/AccountManagementScreen";
 import AssetsLiabilitiesScreen from "./src/screens/AssetsLiabilitiesScreen";
 import DashboardScreen from "./src/screens/DashboardScreen";
+import LedgerModuleScreen from "./src/screens/LedgerModuleScreen";
 import RecordScreen from "./src/screens/RecordScreen";
 import ReportsScreen from "./src/screens/ReportsScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import TransactionRecordsScreen from "./src/screens/TransactionRecordsScreen";
 import ScreenTransition from "./src/components/ScreenTransition";
+import { BottomNavBar, type BottomNavTab } from "./src/components/BottomNavBar";
+import { RecordFanMenu, type RecordFanAction } from "./src/components/RecordFanMenu";
+import { RecordingScreen } from "./src/components/RecordingScreen";
+import type { CandidateTransactionDraft } from "./src/services/recordRecognitionService";
 import { theme } from "./src/styles/theme";
 
 type ScreenKey = "dashboard" | "record" | "assets" | "accounts" | "transactions" | "reports" | "settings";
-
-const tabs: Array<{ key: Exclude<ScreenKey, "assets" | "accounts" | "transactions">; label: string }> = [
-  { key: "dashboard", label: "首页" },
-  { key: "record", label: "管理" },
-  { key: "reports", label: "报表" },
-  { key: "settings", label: "我的" },
-];
-
-const getTabIcon = (key: Exclude<ScreenKey, "assets" | "accounts" | "transactions">): AppIconName => {
-  switch (key) {
-    case "dashboard":
-      return "home";
-    case "record":
-      return "manage";
-    case "reports":
-      return "reports";
-    case "settings":
-      return "profile";
-  }
+type BottomTabScreenKey = "dashboard" | "reports" | "record" | "settings";
+type PendingRecordDraft = {
+  draft: CandidateTransactionDraft;
+  nonce: number;
+  transcriptionText: string;
 };
+
+const bottomNavTabs: BottomNavTab[] = [
+  { key: "dashboard", label: "经营", icon: "home" },
+  { key: "reports", label: "报告", icon: "reports" },
+  { key: "record", label: "管理", icon: "manage" },
+  { key: "settings", label: "我的", icon: "profile" },
+];
 
 const isBottomTabScreen = (screen: ScreenKey): boolean =>
   screen === "dashboard" || screen === "record" || screen === "reports" || screen === "settings";
@@ -67,12 +67,20 @@ export default function App() {
 function AppShell() {
   const [activeScreen, setActiveScreen] = useState<ScreenKey>("dashboard");
   const [isDashboardScrollEnabled, setIsDashboardScrollEnabled] = useState(false);
+  const [isRecordFanOpen, setIsRecordFanOpen] = useState(false);
+  const [isRecordingScreenOpen, setIsRecordingScreenOpen] = useState(false);
+  const [isRecordWorkflowOpen, setIsRecordWorkflowOpen] = useState(false);
+  const [pendingRecordDraft, setPendingRecordDraft] = useState<PendingRecordDraft | null>(null);
+  const [manualEntryNonce, setManualEntryNonce] = useState<number | null>(null);
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const {
     data,
     summary,
     errorMessage,
+    status,
     isLoading,
+    reloadData,
     saveTransaction,
     saveReconciliation,
     saveAccount,
@@ -92,17 +100,62 @@ function AppShell() {
     transactions: data?.transactions,
   });
   const bottomContentPadding = 128 + insets.bottom;
+  const adaptiveHorizontalPadding = windowWidth <= 340 ? 12 : 16;
   const isFuturisticHome = activeScreen === "dashboard";
-  const usesDarkChrome = activeScreen === "dashboard" || activeScreen === "record";
+  const usesDarkChrome = true;
+  const fanCenterX = windowWidth / 2;
+  const fanCenterY = windowHeight - Math.max(insets.bottom, 8) - 48;
+  const activeBottomTab: BottomTabScreenKey =
+    activeScreen === "accounts" || activeScreen === "assets" || activeScreen === "transactions"
+      ? "record"
+      : activeScreen === "dashboard" || activeScreen === "reports" || activeScreen === "settings"
+        ? activeScreen
+        : "record";
   const mainScrollEnabled =
     activeScreen === "dashboard"
       ? isDashboardScrollEnabled
-      : activeScreen !== "record";
+      : true;
 
   const handleExport = async () => exportData();
 
   const handleImport = async (serializedData: string) => {
     await importData(serializedData);
+  };
+
+  const handleOpenSupport = () => {
+    void Linking.openURL("mailto:support@imcfo.local?subject=IMCFO%20support").catch(() => undefined);
+  };
+
+  const handleBottomTabPress = (key: string) => {
+    setIsRecordFanOpen(false);
+    setActiveScreen(key as BottomTabScreenKey);
+  };
+
+  const handleRecordFanSelect = (action: RecordFanAction) => {
+    setIsRecordFanOpen(false);
+    if (action === "voice") {
+      setIsRecordingScreenOpen(true);
+      return;
+    }
+
+    if (action === "manual") {
+      setManualEntryNonce(Date.now());
+    }
+
+    setIsRecordWorkflowOpen(true);
+  };
+
+  const handleRecordingDraftReady = (
+    draft: CandidateTransactionDraft,
+    transcriptionText: string,
+  ) => {
+    setPendingRecordDraft({
+      draft,
+      nonce: Date.now(),
+      transcriptionText,
+    });
+    setIsRecordingScreenOpen(false);
+    setIsRecordWorkflowOpen(true);
   };
 
   const handleReset = async () => {
@@ -214,15 +267,11 @@ function AppShell() {
   };
 
   const renderScreen = () => {
-    if (isLoading || !data || !summary) {
-      return (
-        <View style={styles.loading}>
-          <ActivityIndicator color={theme.colors.primaryDeep} />
-          <Text style={styles.loadingText}>{errorMessage ?? "正在加载本地数据..."}</Text>
-        </View>
-      );
+    if (!data || !summary) {
+      return <AppLoadingScreen />;
     }
 
+    const showScreenSkeleton = isLoading;
     const receivableAmount = data.assets
       .filter((asset) => asset.category === "receivable" || asset.category === "应收款")
       .reduce((total, asset) => total + asset.currentValue, 0);
@@ -232,6 +281,7 @@ function AppShell() {
         return (
           <DashboardScreen
             assets={data.assets}
+            isLoading={showScreenSkeleton}
             liabilities={data.liabilities}
             onOpenAccounts={() => setActiveScreen("accounts")}
             onOpenAssets={() => setActiveScreen("assets")}
@@ -246,23 +296,20 @@ function AppShell() {
         );
       case "record":
         return (
-          <RecordScreen
-            accounts={data.accounts}
-            liabilities={data.liabilities}
-            onOpenAccounts={() => setActiveScreen("accounts")}
+          <LedgerModuleScreen
             onOpenAssets={() => setActiveScreen("assets")}
             onOpenTransactions={() => setActiveScreen("transactions")}
-            onOpenReports={() => setActiveScreen("reports")}
-            onSave={handleSaveTransaction}
+            transactions={data.transactions}
           />
         );
       case "transactions":
         return (
           <TransactionRecordsScreen
             assets={data.assets}
-            isPreparingRecordsIndex={transactionRecordsIndex.isPreparing}
+            isPreparingRecordsIndex={showScreenSkeleton || transactionRecordsIndex.isPreparing}
             liabilities={data.liabilities}
             onBack={() => setActiveScreen("record")}
+            onOpenRecord={() => setActiveScreen("record")}
             recordsIndex={transactionRecordsIndex.index}
           />
         );
@@ -270,6 +317,7 @@ function AppShell() {
         return (
           <AccountManagementScreen
             accounts={data.accounts}
+            isLoading={showScreenSkeleton}
             transactions={data.transactions}
             onBack={() => setActiveScreen("record")}
             onDeleteAccount={handleDeleteAccount}
@@ -283,10 +331,12 @@ function AppShell() {
           <AssetsLiabilitiesScreen
             accounts={data.accounts}
             assets={data.assets}
+            isLoading={showScreenSkeleton}
             liabilities={data.liabilities}
             onBack={() => setActiveScreen("record")}
             onDeleteAsset={handleDeleteAsset}
             onDeleteLiability={handleDeleteLiability}
+            onOpenAccounts={() => setActiveScreen("accounts")}
             onSaveReconciliation={handleSaveReconciliation}
             onSaveAsset={handleSaveAsset}
             onSaveLiability={handleSaveLiability}
@@ -297,7 +347,10 @@ function AppShell() {
         return (
           <ReportsScreen
             assets={data.assets}
+            isLoading={showScreenSkeleton}
             liabilities={data.liabilities}
+            onBack={() => setActiveScreen("dashboard")}
+            onOpenRecord={() => setActiveScreen("record")}
             period={data.currentPeriod}
             transactions={periodTransactions}
           />
@@ -323,11 +376,28 @@ function AppShell() {
     }
   };
 
+  if (status === "error" && !data) {
+    return (
+      <FullScreenError
+        description="IMCFO 暂时无法读取你的财务数据。这不会影响你的数据安全。"
+        primaryAction={{ label: "重新加载", onPress: () => void reloadData() }}
+        secondaryAction={{ label: "联系支持", onPress: handleOpenSupport }}
+        title="数据加载出了问题"
+      />
+    );
+  }
+
   return (
     <SafeAreaView edges={["top", "left", "right"]} style={[styles.safeArea, usesDarkChrome && styles.safeAreaDark]}>
       <StatusBar style={usesDarkChrome ? "light" : "dark"} />
       {activeScreen === "transactions" ? (
-        <View style={[styles.content, styles.virtualizedContent, { paddingBottom: bottomContentPadding }]}>
+        <View
+          style={[
+            styles.content,
+            styles.virtualizedContent,
+            { paddingBottom: bottomContentPadding, paddingHorizontal: adaptiveHorizontalPadding },
+          ]}
+        >
           <ScreenTransition
             animateOnMount
             style={styles.virtualizedContent}
@@ -343,7 +413,7 @@ function AppShell() {
           contentContainerStyle={[
             styles.content,
             isFuturisticHome && styles.futuristicContent,
-            { paddingBottom: bottomContentPadding },
+            { paddingBottom: bottomContentPadding, paddingHorizontal: adaptiveHorizontalPadding },
           ]}
           bounces={mainScrollEnabled}
           overScrollMode={mainScrollEnabled ? "auto" : "never"}
@@ -359,42 +429,75 @@ function AppShell() {
           </ScreenTransition>
         </ScrollView>
       )}
-      <View style={[styles.tabBarShell, usesDarkChrome && styles.tabBarShellDark, { paddingBottom: Math.max(insets.bottom, 14) }]}>
-        <View style={[styles.tabBar, usesDarkChrome && styles.tabBarDark]}>
-          {tabs.map((tab) => {
-            const isActive = activeScreen === tab.key;
-            return (
-              <Pressable
-                key={tab.key}
-                onPress={() => setActiveScreen(tab.key)}
-                style={[
-                  styles.tabButton,
-                  isActive && styles.tabButtonActive,
-                  usesDarkChrome && styles.tabButtonDark,
-                ]}
-              >
-                <AppIcon
-                  color={usesDarkChrome ? (isActive ? "#FFFFFF" : "rgba(255,255,255,0.52)") : isActive ? theme.colors.primaryDeep : theme.colors.textMuted}
-                  name={getTabIcon(tab.key)}
-                  size={19}
-                  strokeWidth={1.9}
-                />
-                <Text
-                  style={[
-                    styles.tabText,
-                    isActive && styles.tabTextActive,
-                    usesDarkChrome && styles.tabTextDark,
-                    usesDarkChrome && isActive && styles.tabTextDarkActive,
-                  ]}
-                >
-                  {tab.label}
-                </Text>
-                {usesDarkChrome && isActive ? <View style={styles.tabActiveUnderline} /> : null}
-              </Pressable>
-            );
-          })}
-        </View>
+      <View style={styles.tabBarShell}>
+        <BottomNavBar
+          activeKey={activeBottomTab}
+          bottomInset={insets.bottom}
+          onRecordLongPress={() => {
+            setIsRecordFanOpen(false);
+            setIsRecordingScreenOpen(true);
+          }}
+          onRecordPress={() => setIsRecordFanOpen(true)}
+          onTabPress={handleBottomTabPress}
+          tabs={bottomNavTabs}
+        />
       </View>
+      {isRecordWorkflowOpen && data ? (
+        <View style={styles.recordWorkflowOverlay}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setIsRecordWorkflowOpen(false);
+              setPendingRecordDraft(null);
+              setManualEntryNonce(null);
+            }}
+            style={[styles.recordWorkflowClose, { top: Math.max(insets.top, 12) + 8 }]}
+          >
+            <Text style={styles.recordWorkflowCloseText}>关闭</Text>
+          </Pressable>
+          <RecordScreen
+            accounts={data.accounts}
+            externalDraftPayload={pendingRecordDraft}
+            externalManualEntryNonce={manualEntryNonce}
+            liabilities={data.liabilities}
+            onExternalDraftConsumed={() => setPendingRecordDraft(null)}
+            onExternalManualEntryConsumed={() => setManualEntryNonce(null)}
+            onOpenAccounts={() => {
+              setIsRecordWorkflowOpen(false);
+              setActiveScreen("accounts");
+            }}
+            onOpenAssets={() => {
+              setIsRecordWorkflowOpen(false);
+              setActiveScreen("assets");
+            }}
+            onOpenReports={() => {
+              setIsRecordWorkflowOpen(false);
+              setActiveScreen("reports");
+            }}
+            onOpenTransactions={() => {
+              setIsRecordWorkflowOpen(false);
+              setActiveScreen("transactions");
+            }}
+            onSave={async (input) => {
+              await handleSaveTransaction(input);
+              setIsRecordWorkflowOpen(false);
+            }}
+          />
+        </View>
+      ) : null}
+      <RecordFanMenu
+        centerX={fanCenterX}
+        centerY={fanCenterY}
+        onDismiss={() => setIsRecordFanOpen(false)}
+        onSelect={handleRecordFanSelect}
+        visible={isRecordFanOpen}
+      />
+      {isRecordingScreenOpen ? (
+        <RecordingScreen
+          onCancel={() => setIsRecordingScreenOpen(false)}
+          onDraftReady={handleRecordingDraftReady}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -427,10 +530,32 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   safeAreaDark: {
-    backgroundColor: "#050607",
+    backgroundColor: theme.colors.background,
+  },
+  recordWorkflowClose: {
+    alignSelf: "flex-end",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.14)",
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginRight: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    position: "absolute",
+    zIndex: 2,
+  },
+  recordWorkflowCloseText: {
+    color: "rgba(255,255,255,0.76)",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  recordWorkflowOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: theme.colors.background,
+    zIndex: 90,
   },
   tabBar: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: theme.colors.surface,
     borderTopColor: theme.colors.divider,
     borderTopWidth: 1,
     flexDirection: "row",
@@ -444,8 +569,8 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   tabBarDark: {
-    backgroundColor: "rgba(9,10,13,0.82)",
-    borderColor: "rgba(255,255,255,0.18)",
+    backgroundColor: "rgba(9, 12, 29, 0.86)",
+    borderColor: "rgba(255,255,255,0.12)",
     borderRadius: 32,
     borderTopWidth: 0,
     borderWidth: 1,
@@ -453,7 +578,7 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
     paddingTop: 8,
     shadowColor: "#000000",
-    shadowOpacity: 0.6,
+    shadowOpacity: 0.44,
     shadowRadius: 24,
   },
   tabBarShell: {
@@ -504,6 +629,6 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.52)",
   },
   tabTextDarkActive: {
-    color: "#FFFFFF",
+    color: theme.colors.textPrimary,
   },
 });

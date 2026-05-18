@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   chartShell: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: theme.colors.surfaceSoft,
     borderColor: theme.colors.divider,
     borderRadius: 8,
     borderWidth: 1,
@@ -537,7 +537,7 @@ const styles = StyleSheet.create({
   },
   summaryRow: {
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "transparent",
     flexDirection: "row",
     gap: 12,
     justifyContent: "space-between",
@@ -546,7 +546,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   summaryRows: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: theme.colors.surfaceSoft,
   },
   summaryTitle: {
     backgroundColor: theme.colors.surfaceSoft,

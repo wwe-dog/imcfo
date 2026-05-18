@@ -68,7 +68,6 @@ export function useAppData(storage: StorageAdapter = asyncStorageAdapter): UseAp
     } catch {
       setStatus("error");
       setErrorMessage(DEFAULT_ERROR_MESSAGE);
-      throw new Error(DEFAULT_ERROR_MESSAGE);
     }
   }, [storage]);
 

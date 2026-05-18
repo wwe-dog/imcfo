@@ -237,25 +237,12 @@ const updateAssetById = (assets: Asset[], assetId: string | undefined, delta: nu
   );
 };
 
-const updateFirstLiability = (liabilities: Liability[], delta: number): Liability[] =>
-  liabilities.map((liability, index) =>
-    index === 0
-      ? {
-          ...liability,
-          amount: Math.max(0, liability.amount + delta),
-          updatedAt: new Date().toISOString(),
-        }
-      : liability,
-  );
-
 const updateLiabilityById = (
   liabilities: Liability[],
   liabilityId: string | undefined,
   delta: number,
 ): Liability[] => {
-  if (!liabilityId || !liabilities.some((liability) => liability.id === liabilityId)) {
-    return updateFirstLiability(liabilities, delta);
-  }
+  if (!liabilityId || !liabilities.some((liability) => liability.id === liabilityId)) return liabilities;
 
   return liabilities.map((liability) =>
     liability.id === liabilityId
@@ -314,7 +301,7 @@ const updateLiabilityByIdOrAccount = (
     );
   }
 
-  return updateFirstLiability(liabilities, delta);
+  return liabilities;
 };
 
 const syncAssetsByAccountBalance = (assets: Asset[], accountId: string, balance: number): Asset[] => {

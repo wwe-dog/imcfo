@@ -32,7 +32,7 @@ const toneColor: Record<ProfitabilityTone, string> = {
   good: theme.colors.success,
   neutral: theme.colors.textSecondary,
   primary: theme.colors.blueText,
-  warning: theme.colors.primaryDeep,
+  warning: theme.colors.warning,
 };
 
 
@@ -916,7 +916,7 @@ const styles = StyleSheet.create({
     width: 18,
   },
   legendLineDot: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: theme.colors.backgroundAlt,
     borderRadius: 6,
     borderWidth: 2,
     height: 9,
@@ -1027,7 +1027,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   section: {
-    backgroundColor: "rgba(255,255,255,0.86)",
+    backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
     borderRadius: 8,
     borderWidth: 1,
@@ -1069,7 +1069,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   segmentActive: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: theme.colors.primarySoft,
     borderColor: theme.colors.primary,
     borderWidth: 1,
   },
@@ -1160,7 +1160,9 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   sheetPanel: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: theme.colors.backgroundAlt,
+    borderColor: theme.colors.border,
+    borderWidth: 1,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     paddingBottom: 30,
@@ -1344,7 +1346,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   trendTable: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: theme.colors.surfaceSoft,
   },
   trendTableCell: {
     color: theme.colors.textPrimary,
@@ -1377,6 +1379,6 @@ const styles = StyleSheet.create({
     minHeight: 42,
   },
   trendTableRowActive: {
-    backgroundColor: "rgba(255,122,26,0.08)",
+    backgroundColor: theme.colors.primarySoft,
   },
 });

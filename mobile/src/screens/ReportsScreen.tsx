@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import AppIcon, { type AppIconName } from "../components/AppIcon";
+import { EmptyStateScreen } from "../components/EmptyState";
+import Skeleton from "../components/Skeleton";
+import SkeletonCard, { SkeletonScreenShell } from "../components/SkeletonCard";
 import type { Asset, Liability, ReportMode, ReportPeriod, Transaction } from "../domain/models";
 import { buildBalanceSheetSummary } from "../domain/reports/balanceSheet";
 import { buildCashFlowStatementSummary } from "../domain/reports/cashFlowStatement";
@@ -9,7 +12,10 @@ import { theme } from "../styles/theme";
 
 interface ReportsScreenProps {
   assets: Asset[];
+  isLoading?: boolean;
   liabilities: Liability[];
+  onBack: () => void;
+  onOpenRecord: () => void;
   period: ReportPeriod;
   transactions: Transaction[];
 }
@@ -21,6 +27,8 @@ interface ReportRow {
 }
 
 type ReportKey = "balanceSheet" | "cashFlow" | "incomeStatement";
+
+const emptyReportsIllustration = require("../assets/empty/empty-reports.png");
 
 const reportTabs: Array<{ key: ReportKey; label: string }> = [
   { key: "balanceSheet", label: "资产负债表" },
@@ -251,7 +259,10 @@ function FullReportPanel({
 
 export default function ReportsScreen({
   assets,
+  isLoading = false,
   liabilities,
+  onBack,
+  onOpenRecord,
   period,
   transactions,
 }: ReportsScreenProps) {
@@ -265,6 +276,28 @@ export default function ReportsScreen({
   );
 
   const periodLabel = formatPeriodLabel(period);
+  const hasReportInputs = assets.length > 0 || liabilities.length > 0 || transactions.length > 0;
+
+  if (isLoading) {
+    return <ReportsSkeleton />;
+  }
+
+  if (!hasReportInputs) {
+    return (
+      <EmptyStateScreen
+        description={"先记录收入、支出、资产或负债，\nIMCFO 会自动生成资产负债表、利润表和现金流量表。"}
+        illustration={emptyReportsIllustration}
+        onBack={onBack}
+        onPrimary={onOpenRecord}
+        onSecondary={() => Alert.alert("三大报表", "资产负债表看底账，利润表看本期经营结果，现金流量表看资金流入流出。")}
+        primaryLabel="开始记录"
+        screenTitle="报表"
+        secondaryLabel="了解三大报表 ›"
+        title="还没有可生成的报表"
+      />
+    );
+  }
+
   const balanceRows: ReportRow[] = [
     { label: "资产总计", value: formatMoney(balanceSheet.totalAssets), emphasis: true },
     { label: "负债合计", value: formatMoney(balanceSheet.totalLiabilities), emphasis: true },
@@ -323,6 +356,25 @@ export default function ReportsScreen({
         />
       ) : null}
     </View>
+  );
+}
+
+function ReportsSkeleton() {
+  return (
+    <SkeletonScreenShell>
+      <Skeleton delay={0} height={16} width={80} />
+      {[0, 1, 2].map((item) => (
+        <SkeletonCard
+          key={item}
+          rows={[
+            { delay: item * 150, height: 9, width: 72 },
+            { delay: item * 150 + 80, height: 16, style: { marginTop: 10 }, width: "82%" },
+            { delay: item * 150 + 160, height: 9, style: { marginTop: 8 }, width: "48%" },
+          ]}
+          style={styles.reportSkeletonCard}
+        />
+      ))}
+    </SkeletonScreenShell>
   );
 }
 
@@ -625,6 +677,10 @@ const styles = StyleSheet.create({
   reportSwitcher: {
     flexDirection: "row",
     gap: 6,
+  },
+  reportSkeletonCard: {
+    marginBottom: 10,
+    minHeight: 72,
   },
   reportTab: {
     alignItems: "center",
