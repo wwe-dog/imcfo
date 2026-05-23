@@ -1,0 +1,10 @@
+{
+  "name": "imcfo-record-ai-scf",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Provider-neutral transaction recognition proxy for IMCFO.",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test-local.js"
+  }
+}

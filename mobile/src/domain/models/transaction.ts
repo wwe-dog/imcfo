@@ -17,6 +17,7 @@ export type TransactionType =
   | "creditCardRepayment";
 
 export type CashFlowType = "operating" | "investing" | "financing" | "nonCash";
+export type TransactionStatus = "active" | "reversal" | "voided";
 
 export interface Transaction {
   id: string;
@@ -32,6 +33,11 @@ export interface Transaction {
   relatedAssetId?: string;
   relatedLiabilityId?: string;
   journalEntryId?: string;
+  replacementOfId?: string;
+  replacedById?: string;
+  reversalOfId?: string;
+  status?: TransactionStatus;
+  voidReason?: string;
   createdAt: string;
   updatedAt: string;
 }

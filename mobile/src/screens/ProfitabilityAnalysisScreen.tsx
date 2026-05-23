@@ -4,6 +4,7 @@ import Svg, { Circle, G, Line, Polyline, Rect, Text as SvgText } from "react-nat
 import DrilldownIncomeSankeySection from "../components/DrilldownIncomeSankeySection";
 import AppIcon from "../components/AppIcon";
 import { buildIncomeStructureFlowRoot } from "../domain/reports/incomeStructureFlow";
+import type { ReportPeriod, Transaction } from "../domain/models";
 import {
   buildProfitabilityAnalysisReport,
   type CompositionItem,
@@ -15,6 +16,8 @@ import { theme } from "../styles/theme";
 
 interface ProfitabilityAnalysisScreenProps {
   onBack: () => void;
+  period: ReportPeriod;
+  transactions: Transaction[];
 }
 
 type SheetState =
@@ -36,8 +39,11 @@ const toneColor: Record<ProfitabilityTone, string> = {
 };
 
 
-export default function ProfitabilityAnalysisScreen({ onBack }: ProfitabilityAnalysisScreenProps) {
-  const report = useMemo(() => buildProfitabilityAnalysisReport(), []);
+export default function ProfitabilityAnalysisScreen({ onBack, period, transactions }: ProfitabilityAnalysisScreenProps) {
+  const report = useMemo(
+    () => buildProfitabilityAnalysisReport({ period, transactions }),
+    [period, transactions],
+  );
   const incomeStructureRoot = useMemo(
     () => buildIncomeStructureFlowRoot(report.incomeStructureRoot),
     [report],
@@ -423,7 +429,7 @@ function TrendChart({
           return (
             <G key={`tick-${tick}`}>
               <Line
-                stroke="#E8DDD0"
+                stroke="rgba(255,255,255,0.12)"
                 strokeDasharray={tick === 0 ? undefined : "3 4"}
                 strokeWidth={1}
                 x1={left}
@@ -474,7 +480,7 @@ function TrendChart({
         })}
 
         <Line
-          stroke="#D8CDC0"
+          stroke="rgba(255,255,255,0.16)"
           strokeWidth={1.2}
           x1={left}
           x2={chartWidth - right}
@@ -497,7 +503,7 @@ function TrendChart({
             >
               {isSelected ? (
                 <Line
-                  stroke="rgba(47,123,234,0.22)"
+                  stroke="rgba(59,139,255,0.26)"
                   strokeDasharray="4 4"
                   strokeWidth={1.2}
                   x1={x}
@@ -507,7 +513,7 @@ function TrendChart({
                 />
               ) : null}
               <Rect
-                fill={isSelected ? "#1664E8" : "rgba(47,123,234,0.52)"}
+                fill={isSelected ? theme.colors.primaryDeep : "rgba(59,139,255,0.48)"}
                 height={barHeight}
                 rx={4}
                 width={barWidth}
@@ -804,7 +810,7 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   compositionBlock: {
-    backgroundColor: "#FFFCF8",
+    backgroundColor: "rgba(255,255,255,0.035)",
     borderColor: theme.colors.divider,
     borderRadius: 8,
     borderWidth: 1,
@@ -874,7 +880,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   compositionTrack: {
-    backgroundColor: "#EDE8E2",
+    backgroundColor: "rgba(255,255,255,0.075)",
     borderRadius: 4,
     height: 8,
     overflow: "hidden",
@@ -1082,7 +1088,7 @@ const styles = StyleSheet.create({
     color: theme.colors.primaryDeep,
   },
   segmented: {
-    backgroundColor: "#F4EFE8",
+    backgroundColor: "rgba(255,255,255,0.035)",
     borderColor: theme.colors.divider,
     borderRadius: 10,
     borderWidth: 1,
@@ -1090,7 +1096,7 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   sheetBackdrop: {
-    backgroundColor: "rgba(21,19,15,0.42)",
+    backgroundColor: "rgba(0,0,0,0.54)",
     flex: 1,
     justifyContent: "flex-end",
   },
@@ -1102,7 +1108,7 @@ const styles = StyleSheet.create({
   },
   sheetHandle: {
     alignSelf: "center",
-    backgroundColor: "#D9D2CB",
+    backgroundColor: "rgba(255,255,255,0.28)",
     borderRadius: 3,
     height: 5,
     marginBottom: 12,
@@ -1213,8 +1219,8 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   suggestionCard: {
-    backgroundColor: "#F8FEFA",
-    borderColor: "#D8ECDF",
+    backgroundColor: "rgba(74,222,128,0.07)",
+    borderColor: "rgba(74,222,128,0.16)",
     borderRadius: 8,
     borderWidth: 1,
     flexDirection: "row",
@@ -1278,7 +1284,7 @@ const styles = StyleSheet.create({
   },
   trendAnalysisHeader: {
     alignItems: "center",
-    backgroundColor: "#FFFCF8",
+    backgroundColor: "rgba(255,255,255,0.035)",
     flexDirection: "row",
     justifyContent: "space-between",
     paddingHorizontal: 12,
@@ -1305,7 +1311,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   trendChartShell: {
-    backgroundColor: "#FFFCF8",
+    backgroundColor: "rgba(255,255,255,0.035)",
     borderColor: theme.colors.divider,
     borderRadius: 10,
     borderWidth: 1,
@@ -1326,7 +1332,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   trendFloatingTooltip: {
-    backgroundColor: "#242424",
+    backgroundColor: "rgba(8,12,28,0.96)",
     borderRadius: 10,
     minWidth: 148,
     paddingHorizontal: 12,

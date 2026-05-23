@@ -27,9 +27,11 @@ export interface ReportSummary {
 
 export interface AppSettings {
   currency: string;
+  dashboardLookbackMonths?: number;
   defaultPeriod: ReportPeriodType;
   defaultReportMode: ReportMode;
   enableSampleData: boolean;
+  includeVoidedTransactionsInReports?: boolean;
   createdAt: string;
   updatedAt: string;
 }

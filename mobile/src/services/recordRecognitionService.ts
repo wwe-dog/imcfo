@@ -29,6 +29,12 @@ export interface CandidateTransactionDraft {
   model?: string;
 }
 
+export interface RecordRecognitionContext {
+  accounts?: Array<{ id: string; name: string; type: string }>;
+  currentDate?: string;
+  liabilities?: Array<{ id: string; name: string; category: string }>;
+}
+
 export class RecordRecognitionError extends Error {
   code: "EMPTY_TEXT" | "AMOUNT_MISSING" | "REMOTE_CONFIG_INVALID" | "RECOGNITION_FAILED";
 
@@ -215,7 +221,10 @@ const normalizeRemoteDraft = (sourceText: string, payload: unknown): CandidateTr
   };
 };
 
-export const recognizeByRemoteModel = async (inputText: string): Promise<CandidateTransactionDraft> => {
+export const recognizeByRemoteModel = async (
+  inputText: string,
+  context?: RecordRecognitionContext,
+): Promise<CandidateTransactionDraft> => {
   const sourceText = inputText.trim();
   if (!sourceText) {
     throw new RecordRecognitionError("EMPTY_TEXT", "请先完成语音转写");
@@ -233,6 +242,7 @@ export const recognizeByRemoteModel = async (inputText: string): Promise<Candida
   try {
     const response = await fetch(endpoint, {
       body: JSON.stringify({
+        context,
         locale: "zh-CN",
         text: sourceText,
       }),
@@ -258,7 +268,10 @@ export const recognizeByRemoteModel = async (inputText: string): Promise<Candida
   }
 };
 
-export const recognizeTransactionDraft = async (inputText: string): Promise<CandidateTransactionDraft> => {
+export const recognizeTransactionDraft = async (
+  inputText: string,
+  context?: RecordRecognitionContext,
+): Promise<CandidateTransactionDraft> => {
   const localDraft = recognizeByLocalRules(inputText);
   if (localDraft.confidence >= 0.9 && !localDraft.needsReview) {
     return localDraft;
@@ -273,7 +286,7 @@ export const recognizeTransactionDraft = async (inputText: string): Promise<Cand
 
   if (getRemoteEndpoint()) {
     try {
-      return await recognizeByRemoteModel(inputText);
+      return await recognizeByRemoteModel(inputText, context);
     } catch (error) {
       if (localDraft.amount !== null || hasLocalSignal) {
         return localDraft;

@@ -1,6 +1,7 @@
 ﻿import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import {
+  Alert,
   Animated,
   Easing,
   Modal,
@@ -10,6 +11,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -31,6 +33,7 @@ import {
 } from "../components/LedgerUI";
 import ScreenTransition from "../components/ScreenTransition";
 import type { Asset, Liability, Transaction } from "../domain/models";
+import type { TransactionInput } from "../domain/accounting/transactionRules";
 import {
   buildTransactionDisplayRecord,
   getTransactionCashFlowLabel,
@@ -50,6 +53,8 @@ interface TransactionRecordsScreenProps {
   liabilities: Liability[];
   onBack: () => void;
   onOpenRecord?: () => void;
+  onReplaceTransaction?: (transactionId: string, input: TransactionInput, reason?: string) => Promise<void>;
+  onVoidTransaction?: (transactionId: string, reason?: string) => Promise<void>;
   recordsIndex: TransactionRecordsIndex | null;
 }
 
@@ -440,6 +445,8 @@ export default function TransactionRecordsScreen({
   liabilities,
   onBack,
   onOpenRecord,
+  onReplaceTransaction,
+  onVoidTransaction,
   recordsIndex,
 }: TransactionRecordsScreenProps) {
   const { width } = useWindowDimensions();
@@ -567,6 +574,8 @@ export default function TransactionRecordsScreen({
           assets={assets}
           liabilities={liabilities}
           onBack={() => setSelectedRecord(null)}
+          onReplaceTransaction={onReplaceTransaction}
+          onVoidTransaction={onVoidTransaction}
           record={selectedRecord}
         />
       </ScreenTransition>
@@ -664,14 +673,23 @@ function TransactionDetail({
   assets,
   liabilities,
   onBack,
+  onReplaceTransaction,
+  onVoidTransaction,
   record,
 }: {
   assets: Asset[];
   liabilities: Liability[];
   onBack: () => void;
+  onReplaceTransaction?: (transactionId: string, input: TransactionInput, reason?: string) => Promise<void>;
+  onVoidTransaction?: (transactionId: string, reason?: string) => Promise<void>;
   record: TransactionDisplayRecord;
 }) {
   const transaction = record.transaction;
+  const [isEditing, setEditing] = useState(false);
+  const [amountText, setAmountText] = useState(String(transaction.amount));
+  const [categoryText, setCategoryText] = useState(transaction.category);
+  const [dateText, setDateText] = useState(transaction.date);
+  const [noteText, setNoteText] = useState(transaction.note ?? "");
   const accountDisplay = record.accountDisplay;
   const assetName = getAssetName(assets, transaction.relatedAssetId) ?? UNKNOWN_VALUE;
   const liabilityName = getLiabilityName(liabilities, transaction.relatedLiabilityId) ?? UNKNOWN_VALUE;
@@ -714,6 +732,113 @@ function TransactionDetail({
         <InfoLineRow label="关联资产" value={assetName} />
         <InfoLineRow label="关联负债" value={liabilityName} />
       </SectionCard>
+
+      <SectionCard title="审计操作">
+        <View style={styles.auditActionRow}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setEditing(true)}
+            style={[styles.auditActionButton, styles.auditActionPrimary]}
+          >
+            <Text style={styles.auditActionPrimaryText}>编辑并替换</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              Alert.alert("作废交易", "作废会生成冲销记录，报表默认不再统计这笔交易。", [
+                { text: "取消", style: "cancel" },
+                {
+                  text: "确认作废",
+                  style: "destructive",
+                  onPress: () => {
+                    void onVoidTransaction?.(transaction.id, "用户在交易详情作废").then(onBack);
+                  },
+                },
+              ]);
+            }}
+            style={styles.auditActionButton}
+          >
+            <Text style={styles.auditActionText}>作废</Text>
+          </Pressable>
+        </View>
+        <InfoLineRow label="凭证" value={transaction.journalEntryId ?? "尚未生成"} />
+        <InfoLineRow label="状态" value={transaction.status ?? "active"} />
+      </SectionCard>
+
+      <Modal animationType="fade" onRequestClose={() => setEditing(false)} transparent visible={isEditing}>
+        <View style={styles.editModalRoot}>
+          <Pressable onPress={() => setEditing(false)} style={styles.filterBackdrop} />
+          <View style={styles.editPanel}>
+            <Text style={styles.filterTitle}>编辑替换交易</Text>
+            <Text style={styles.filterSubtitle}>保存后会作废原记录，并生成新的有效交易。</Text>
+            <TextInput
+              keyboardType="numeric"
+              onChangeText={setAmountText}
+              placeholder="金额"
+              placeholderTextColor={theme.colors.textMuted}
+              style={styles.editInput}
+              value={amountText}
+            />
+            <TextInput
+              onChangeText={setCategoryText}
+              placeholder="分类"
+              placeholderTextColor={theme.colors.textMuted}
+              style={styles.editInput}
+              value={categoryText}
+            />
+            <TextInput
+              onChangeText={setDateText}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={theme.colors.textMuted}
+              style={styles.editInput}
+              value={dateText}
+            />
+            <TextInput
+              onChangeText={setNoteText}
+              placeholder="备注"
+              placeholderTextColor={theme.colors.textMuted}
+              style={styles.editInput}
+              value={noteText}
+            />
+            <View style={styles.auditActionRow}>
+              <Pressable onPress={() => setEditing(false)} style={styles.auditActionButton}>
+                <Text style={styles.auditActionText}>取消</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  const amount = Number(amountText.replace(/[^\d.-]/g, ""));
+                  if (!Number.isFinite(amount) || amount <= 0 || !categoryText.trim() || !dateText.trim()) {
+                    Alert.alert("无法保存", "请填写有效金额、分类和日期。");
+                    return;
+                  }
+                  void onReplaceTransaction?.(
+                    transaction.id,
+                    {
+                      accountId: transaction.accountId,
+                      amount,
+                      category: categoryText.trim(),
+                      counterAccountId: transaction.counterAccountId,
+                      date: dateText.trim(),
+                      note: noteText.trim(),
+                      relatedAssetId: transaction.relatedAssetId,
+                      relatedLiabilityId: transaction.relatedLiabilityId,
+                      tags: transaction.tags,
+                      type: transaction.type,
+                    },
+                    "用户在交易详情编辑替换",
+                  ).then(() => {
+                    setEditing(false);
+                    onBack();
+                  });
+                }}
+                style={[styles.auditActionButton, styles.auditActionPrimary]}
+              >
+                <Text style={styles.auditActionPrimaryText}>保存替换</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -1032,6 +1157,35 @@ function EmptyState({
 }
 
 const styles = StyleSheet.create({
+  auditActionButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(255,255,255,0.12)",
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  auditActionPrimary: {
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.primary,
+  },
+  auditActionPrimaryText: {
+    color: theme.colors.primaryDeep,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  auditActionRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 10,
+  },
+  auditActionText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "900",
+  },
   amount_negative: {
     color: theme.colors.textPrimary,
   },
@@ -1209,6 +1363,40 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 15,
     fontWeight: "900",
+  },
+  filterSubtitle: {
+    color: theme.colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  filterTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  editInput: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(255,255,255,0.12)",
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    color: theme.colors.textPrimary,
+    fontSize: 14,
+    fontWeight: "800",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  editModalRoot: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 18,
+  },
+  editPanel: {
+    backgroundColor: theme.colors.surfaceElevated,
+    borderColor: "rgba(255,255,255,0.12)",
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 10,
+    padding: 16,
   },
   filterBackdrop: {
     ...StyleSheet.absoluteFillObject,

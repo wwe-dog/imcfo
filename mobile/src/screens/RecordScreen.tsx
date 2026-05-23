@@ -673,7 +673,15 @@ export default function RecordScreen({
     setDraftErrorKind(null);
 
     try {
-      const draft = await recognizeTransactionDraft(text);
+      const draft = await recognizeTransactionDraft(text, {
+        accounts: accounts.map((account) => ({ id: account.id, name: account.name, type: account.type })),
+        currentDate: today(),
+        liabilities: liabilities.map((liability) => ({
+          category: liability.category,
+          id: liability.id,
+          name: liability.name,
+        })),
+      });
       setCandidateDraft(draft);
       setDraftEdit(createDraftEditState(draft, accounts, liabilities));
       setDraftErrorMessage("");

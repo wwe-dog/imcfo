@@ -2,14 +2,17 @@ import type {
   Account,
   AppSettings,
   Asset,
+  BudgetPlan,
   JournalEntry,
   Liability,
   ReportPeriod,
   Transaction,
+  TransactionAuditEvent,
 } from "../domain/models";
+import { generateJournalEntryForTransaction } from "../domain/accounting/journalEntryRules";
 import { generateHistoricalTransactions } from "./historicalDemoData";
 
-export const APP_VERSION = "0.1.0";
+export const APP_VERSION = "0.2.0";
 
 const now = "2026-04-30T00:00:00.000Z";
 
@@ -19,7 +22,9 @@ export interface AppData {
   transactions: Transaction[];
   assets: Asset[];
   liabilities: Liability[];
+  budgets: BudgetPlan[];
   journalEntries: JournalEntry[];
+  transactionAuditEvents: TransactionAuditEvent[];
   settings: AppSettings;
   currentPeriod: ReportPeriod;
 }
@@ -931,20 +936,88 @@ const april2026Transactions: Transaction[] = [
   },
 ];
 
-const transactions: Transaction[] = [...generateHistoricalTransactions(), ...april2026Transactions];
+const transactions: Transaction[] = [...generateHistoricalTransactions(), ...april2026Transactions].map(
+  (transaction) => ({
+    ...transaction,
+    status: transaction.status ?? "active",
+  }),
+);
+
+const budgets: BudgetPlan[] = [
+  {
+    id: "budget-2026-04-food",
+    type: "category",
+    periodId: "period-2026-04",
+    title: "餐饮",
+    category: "餐饮",
+    amount: 1200,
+    thresholdPercent: 80,
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    id: "budget-2026-04-traffic",
+    type: "category",
+    periodId: "period-2026-04",
+    title: "交通",
+    category: "交通",
+    amount: 600,
+    thresholdPercent: 80,
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    id: "budget-2026-04-side-project",
+    type: "project",
+    periodId: "period-2026-04",
+    title: "副业项目",
+    tag: "项目",
+    amount: 2000,
+    thresholdPercent: 90,
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    id: "budget-2026-04-rent",
+    type: "fixed",
+    periodId: "period-2026-04",
+    title: "房租",
+    category: "房租",
+    amount: 2000,
+    thresholdPercent: 100,
+    fixedStatus: "pending",
+    dueDate: "2026-04-20",
+    createdAt: now,
+    updatedAt: now,
+  },
+];
+
+const journalEntries: JournalEntry[] = transactions
+  .slice(0, 20)
+  .map((transaction) => generateJournalEntryForTransaction(transaction, now));
 
 export const seedData: AppData = {
   version: APP_VERSION,
   accounts,
   assets,
   liabilities,
+  budgets,
   transactions,
-  journalEntries: [],
+  journalEntries,
+  transactionAuditEvents: journalEntries.map((entry) => ({
+    id: `audit-${entry.id}`,
+    transactionId: entry.transactionId,
+    type: "journalEntryGenerated",
+    relatedTransactionId: entry.id,
+    createdAt: now,
+  })),
   settings: {
     currency: "CNY",
+    dashboardLookbackMonths: 6,
     defaultPeriod: "month",
     defaultReportMode: "simple",
     enableSampleData: true,
+    includeVoidedTransactionsInReports: false,
     createdAt: now,
     updatedAt: now,
   },
@@ -963,7 +1036,9 @@ export const createEmptyAppData = (): AppData => ({
   transactions: [],
   assets: [],
   liabilities: [],
+  budgets: [],
   journalEntries: [],
+  transactionAuditEvents: [],
   settings: {
     ...seedData.settings,
   },

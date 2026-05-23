@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { buildDashboardSummary } from "../domain/accounting/calculations";
 import { filterTransactionsByReportPeriod } from "../domain/accounting/periodFilters";
 import {
-  applyTransactionToFinancialState,
+  applyConfirmedTransactionToFinancialState,
+  createTransactionReplacement,
   createTransactionFromInput,
   deleteAccountFromFinancialState,
   deleteAssetFromFinancialState,
@@ -11,11 +12,13 @@ import {
   upsertAccountInFinancialState,
   upsertAssetInFinancialState,
   upsertLiabilityInFinancialState,
+  voidTransaction,
   type AccountInput,
   type AssetInput,
   type LiabilityInput,
   type TransactionInput,
 } from "../domain/accounting/transactionRules";
+import { getEffectiveTransactions } from "../domain/accounting/transactionAuditRules";
 import {
   applyReconciliationAdjustment,
   type ReconciliationInput,
@@ -23,6 +26,7 @@ import {
 import { asyncStorageAdapter } from "../storage/asyncStorageAdapter";
 import type { AppData } from "../storage/seedData";
 import type { StorageAdapter } from "../storage/storageAdapter";
+import type { AppSettings, BudgetPlan } from "../domain/models";
 
 type AppDataStatus = "idle" | "loading" | "ready" | "saving" | "error";
 
@@ -35,6 +39,11 @@ interface UseAppDataResult {
   isSaving: boolean;
   reloadData: () => Promise<void>;
   saveTransaction: (input: TransactionInput) => Promise<void>;
+  replaceTransaction: (transactionId: string, input: TransactionInput, reason?: string) => Promise<AppData>;
+  voidTransactionById: (transactionId: string, reason?: string) => Promise<AppData>;
+  saveBudget: (input: BudgetPlan) => Promise<AppData>;
+  deleteBudget: (budgetId: string) => Promise<AppData>;
+  saveSettings: (settings: Partial<AppSettings>) => Promise<AppData>;
   saveReconciliation: (input: ReconciliationInput) => Promise<AppData>;
   saveAccount: (input: AccountInput) => Promise<AppData>;
   disableAccount: (accountId: string) => Promise<AppData>;
@@ -110,9 +119,65 @@ export function useAppData(storage: StorageAdapter = asyncStorageAdapter): UseAp
     async (input: TransactionInput) => {
       await replaceData((currentData) => {
         const transaction = createTransactionFromInput(input);
-        return applyTransactionToFinancialState(currentData, transaction);
+        return applyConfirmedTransactionToFinancialState(currentData, transaction);
       });
     },
+    [replaceData],
+  );
+
+  const replaceTransaction = useCallback(
+    async (transactionId: string, input: TransactionInput, reason?: string) =>
+      replaceData((currentData) => createTransactionReplacement(currentData, transactionId, input, reason)),
+    [replaceData],
+  );
+
+  const voidTransactionById = useCallback(
+    async (transactionId: string, reason?: string) =>
+      replaceData((currentData) => voidTransaction(currentData, transactionId, reason)),
+    [replaceData],
+  );
+
+  const saveBudget = useCallback(
+    async (input: BudgetPlan) =>
+      replaceData((currentData) => {
+        const exists = currentData.budgets.some((budget) => budget.id === input.id);
+        const timestamp = new Date().toISOString();
+        const nextBudget = {
+          ...input,
+          updatedAt: timestamp,
+          createdAt: exists
+            ? currentData.budgets.find((budget) => budget.id === input.id)?.createdAt ?? input.createdAt
+            : input.createdAt || timestamp,
+        };
+        return {
+          ...currentData,
+          budgets: exists
+            ? currentData.budgets.map((budget) => (budget.id === input.id ? nextBudget : budget))
+            : [nextBudget, ...currentData.budgets],
+        };
+      }),
+    [replaceData],
+  );
+
+  const deleteBudget = useCallback(
+    async (budgetId: string) =>
+      replaceData((currentData) => ({
+        ...currentData,
+        budgets: currentData.budgets.filter((budget) => budget.id !== budgetId),
+      })),
+    [replaceData],
+  );
+
+  const saveSettings = useCallback(
+    async (settings: Partial<AppSettings>) =>
+      replaceData((currentData) => ({
+        ...currentData,
+        settings: {
+          ...currentData.settings,
+          ...settings,
+          updatedAt: new Date().toISOString(),
+        },
+      })),
     [replaceData],
   );
 
@@ -223,7 +288,10 @@ export function useAppData(storage: StorageAdapter = asyncStorageAdapter): UseAp
 
   const summary = useMemo(() => {
     if (!data) return null;
-    const periodTransactions = filterTransactionsByReportPeriod(data.transactions, data.currentPeriod);
+    const reportTransactions = getEffectiveTransactions(data.transactions, {
+      includeVoided: data.settings.includeVoidedTransactionsInReports,
+    });
+    const periodTransactions = filterTransactionsByReportPeriod(reportTransactions, data.currentPeriod);
     return buildDashboardSummary(data.currentPeriod, data.assets, data.liabilities, periodTransactions);
   }, [data]);
 
@@ -236,6 +304,11 @@ export function useAppData(storage: StorageAdapter = asyncStorageAdapter): UseAp
     isSaving: status === "saving",
     reloadData: loadFromStorage,
     saveTransaction,
+    replaceTransaction,
+    voidTransactionById,
+    saveBudget,
+    deleteBudget,
+    saveSettings,
     saveReconciliation,
     saveAccount,
     disableAccount,

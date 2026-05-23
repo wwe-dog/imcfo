@@ -5,6 +5,7 @@ import {
   buildTransactionRecordsIndex,
   type TransactionRecordsIndex,
 } from "../domain/transactions/transactionDisplayIndex";
+import { getEffectiveTransactions } from "../domain/accounting/transactionAuditRules";
 
 export const useTransactionRecordsIndex = ({
   accounts,
@@ -27,7 +28,7 @@ export const useTransactionRecordsIndex = ({
     setIsPreparing(true);
 
     const task = InteractionManager.runAfterInteractions(() => {
-      const nextIndex = buildTransactionRecordsIndex(transactions, accounts);
+      const nextIndex = buildTransactionRecordsIndex(getEffectiveTransactions(transactions), accounts);
       if (isCancelled) return;
       setIndex(nextIndex);
       setIsPreparing(false);

@@ -1,7 +1,9 @@
 import React from "react";
 import { LinearGradient } from "expo-linear-gradient";
 import {
+  Animated,
   Modal,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,22 +23,33 @@ import {
   getLedgerScreenPadding,
   type LedgerRowTone,
 } from "../components/LedgerUI";
-import type { Transaction } from "../domain/models";
+import { calculateBudgetProgress, type BudgetProgress } from "../domain/accounting/budgetRules";
+import type { BudgetPlan, ReportPeriod, Transaction } from "../domain/models";
+import { getEffectiveTransactions } from "../domain/accounting/transactionAuditRules";
 import { theme } from "../styles/theme";
 import { formatCurrency } from "../utils/formatters";
 
 type LedgerModuleRoute = "budget" | "projects" | "root";
 type BudgetTab = "category" | "fixed" | "overview" | "project";
-type BudgetSheet = "edit" | "new" | null;
 type NewBudgetType = "category" | "fixed" | "project";
 type BudgetTone = "amber" | "blue" | "danger" | "default" | "green";
 type BudgetThreshold = "100%" | "80%" | "90%";
 type FixedPaymentStatus = "已支付" | "待扣款" | "未支付" | "需保留";
 type FixedRepeatCycle = "每年" | "每月" | "一次性";
+type BudgetActionTarget = { budget?: BudgetPlan; kind: NewBudgetType; title: string };
+type ActiveBudgetSheet =
+  | { type: "delete"; target: BudgetActionTarget }
+  | { type: "edit"; target: BudgetActionTarget }
+  | { type: "new" }
+  | null;
 
 interface LedgerModuleScreenProps {
+  budgets: BudgetPlan[];
+  currentPeriod: ReportPeriod;
+  onDeleteBudget: (budgetId: string) => Promise<void>;
   onOpenAssets: () => void;
   onOpenTransactions: () => void;
+  onSaveBudget: (budget: BudgetPlan) => Promise<void>;
   transactions: Transaction[];
 }
 
@@ -50,16 +63,23 @@ interface BudgetRow {
 }
 
 interface CategoryBudgetRow extends BudgetRow {
+  budgetAmount: string;
+  id: string;
   percent: string;
   rank: number;
   status?: string;
+  threshold: BudgetThreshold;
+  usedAmount: string;
 }
 
 interface ProjectBudgetRow {
   amount: string;
+  id: string;
+  items: ProjectBudgetItem[];
   remaining: string;
   progress: number;
   status: string;
+  threshold: BudgetThreshold;
   title: string;
   tone?: BudgetTone;
 }
@@ -67,6 +87,8 @@ interface ProjectBudgetRow {
 interface FixedOccupancyRow {
   amount: string;
   date: string;
+  id: string;
+  repeatCycle: FixedRepeatCycle;
   status: string;
   subtitle: string;
   title: string;
@@ -75,8 +97,10 @@ interface FixedOccupancyRow {
 
 interface ProjectBudgetItem {
   amount: string;
+  amountPlaceholder?: string;
   id: number;
   name: string;
+  namePlaceholder?: string;
 }
 
 const projectRows = [
@@ -120,50 +144,140 @@ const overviewBudgetRows: BudgetRow[] = [
 ];
 
 const categoryBudgetRows: CategoryBudgetRow[] = [
-  { amount: "¥760 / ¥600", detail: "已超 ¥160", percent: "127%", progress: 100, rank: 1, status: "超支", title: "娱乐", tone: "danger" },
-  { amount: "¥420 / ¥500", detail: "接近上限", percent: "84%", progress: 84, rank: 2, status: "留意", title: "交通", tone: "amber" },
-  { amount: "¥860 / ¥1,200", percent: "72%", progress: 72, rank: 3, title: "餐饮" },
-  { amount: "¥320 / ¥800", percent: "40%", progress: 40, rank: 4, title: "学习成长", tone: "green" },
+  {
+    amount: "¥760 / ¥600",
+    budgetAmount: "¥600",
+    detail: "已超 ¥160",
+    id: "entertainment",
+    percent: "127%",
+    progress: 100,
+    rank: 1,
+    status: "超支",
+    threshold: "80%",
+    title: "娱乐",
+    tone: "danger",
+    usedAmount: "¥760",
+  },
+  {
+    amount: "¥420 / ¥500",
+    budgetAmount: "¥500",
+    detail: "接近上限",
+    id: "transport",
+    percent: "84%",
+    progress: 84,
+    rank: 2,
+    status: "留意",
+    threshold: "80%",
+    title: "交通",
+    tone: "amber",
+    usedAmount: "¥420",
+  },
+  {
+    amount: "¥860 / ¥1,200",
+    budgetAmount: "¥1,200",
+    id: "food",
+    percent: "72%",
+    progress: 72,
+    rank: 3,
+    threshold: "80%",
+    title: "餐饮",
+    usedAmount: "¥860",
+  },
+  {
+    amount: "¥320 / ¥800",
+    budgetAmount: "¥800",
+    id: "learning",
+    percent: "40%",
+    progress: 40,
+    rank: 4,
+    threshold: "80%",
+    title: "学习成长",
+    tone: "green",
+    usedAmount: "¥320",
+  },
 ];
 
 const projectBudgetRows: ProjectBudgetRow[] = [
   {
     amount: "¥899 / ¥1,200",
+    id: "xiaohongshu",
+    items: [
+      { amount: "¥399", id: 1, name: "拍摄设备" },
+      { amount: "¥299", id: 2, name: "课程学习" },
+      { amount: "¥300", id: 3, name: "推广投流" },
+    ],
     progress: 75,
     remaining: "还剩 ¥301",
     status: "75%",
+    threshold: "80%",
     title: "小红书接单",
     tone: "blue",
   },
   {
     amount: "¥120 / ¥300",
+    id: "xianyu",
+    items: [
+      { amount: "¥180", id: 1, name: "包装耗材" },
+      { amount: "¥120", id: 2, name: "平台服务费" },
+    ],
     progress: 40,
     remaining: "还剩 ¥180",
     status: "40%",
+    threshold: "80%",
     title: "闲鱼卖货",
     tone: "green",
   },
   {
     amount: "¥0 / ¥500",
+    id: "course",
+    items: [{ amount: "¥500", id: 1, name: "内容制作" }],
     progress: 0,
     remaining: "还剩 ¥500",
     status: "0%",
+    threshold: "80%",
     title: "课程产品",
   },
 ];
 
 const fixedOccupancyRows: FixedOccupancyRow[] = [
-  { amount: "¥2,000", date: "5 月 20 日", status: "未支付", subtitle: "固定生活支出", title: "房租" },
+  {
+    amount: "¥2,000",
+    date: "5 月 20 日",
+    id: "rent",
+    repeatCycle: "每月",
+    status: "未支付",
+    subtitle: "固定生活支出",
+    title: "房租",
+  },
   {
     amount: "¥6,800",
     date: "5 月 22 日",
+    id: "credit-card",
+    repeatCycle: "每月",
     status: "需保留",
     subtitle: "到期还款，不属于可控消费预算",
     title: "信用卡还款",
     tone: "amber",
   },
-  { amount: "¥68", date: "5 月 25 日", status: "待扣款", subtitle: "自动续费", title: "订阅服务" },
-  { amount: "¥59", date: "每月 10 日", status: "已支付", subtitle: "通讯固定占用", title: "手机话费", tone: "green" },
+  {
+    amount: "¥68",
+    date: "5 月 25 日",
+    id: "subscription",
+    repeatCycle: "每月",
+    status: "待扣款",
+    subtitle: "自动续费",
+    title: "订阅服务",
+  },
+  {
+    amount: "¥59",
+    date: "每月 10 日",
+    id: "phone",
+    repeatCycle: "每月",
+    status: "已支付",
+    subtitle: "通讯固定占用",
+    title: "手机话费",
+    tone: "green",
+  },
 ];
 
 const newBudgetTypes: Array<{ label: string; value: NewBudgetType }> = [
@@ -174,32 +288,35 @@ const newBudgetTypes: Array<{ label: string; value: NewBudgetType }> = [
 
 const categoryTemplates = ["餐饮", "交通", "娱乐", "学习成长", "购物"];
 const thresholdOptions: BudgetThreshold[] = ["80%", "90%", "100%"];
-const initialProjectBudgetItems: ProjectBudgetItem[] = [
-  { amount: "¥399", id: 1, name: "拍摄设备" },
-  { amount: "¥299", id: 2, name: "课程学习" },
-  { amount: "¥300", id: 3, name: "推广投流" },
-  { amount: "¥120", id: 4, name: "交通差旅" },
-  { amount: "¥82", id: 5, name: "备用预算" },
+const initialNewProjectBudgetItems: ProjectBudgetItem[] = [
+  { amount: "", amountPlaceholder: "¥399", id: 1, name: "", namePlaceholder: "拍摄设备" },
+  { amount: "", amountPlaceholder: "¥299", id: 2, name: "", namePlaceholder: "课程学习" },
+  { amount: "", amountPlaceholder: "¥300", id: 3, name: "", namePlaceholder: "推广投流" },
+  { amount: "", amountPlaceholder: "¥120", id: 4, name: "", namePlaceholder: "交通差旅" },
+  { amount: "", amountPlaceholder: "¥82", id: 5, name: "", namePlaceholder: "备用预算" },
 ];
 const projectTemplates = ["设备", "课程", "推广", "差旅", "外包"];
 const fixedPaymentStatusOptions: FixedPaymentStatus[] = ["未支付", "已支付", "待扣款", "需保留"];
 const fixedRepeatCycleOptions: FixedRepeatCycle[] = ["每月", "一次性", "每年"];
-const editBudgetOptions: Array<{ icon: AppIconName; subtitle: string; title: string }> = [
-  { icon: "reports", subtitle: "调整分类预算和项目预算总额", title: "编辑可控预算" },
-  { icon: "chart", subtitle: "调整餐饮、交通、娱乐等分类额度", title: "编辑分类预算" },
-  { icon: "cashFlow", subtitle: "调整小红书接单、闲鱼卖货等投入额度", title: "编辑项目预算" },
-  { icon: "report", subtitle: "更新金额、日期和支付状态", title: "管理固定占用" },
-];
 
 export default function LedgerModuleScreen({
+  budgets,
+  currentPeriod,
+  onDeleteBudget,
   onOpenAssets,
   onOpenTransactions,
+  onSaveBudget,
   transactions,
 }: LedgerModuleScreenProps) {
   const [route, setRoute] = React.useState<LedgerModuleRoute>("root");
   const { width } = useWindowDimensions();
   const horizontalPadding = getLedgerScreenPadding(width);
-  const recentTransactions = transactions.slice(0, 3);
+  const effectiveTransactions = React.useMemo(() => getEffectiveTransactions(transactions), [transactions]);
+  const recentTransactions = effectiveTransactions.slice(0, 3);
+  const budgetProgress = React.useMemo(
+    () => calculateBudgetProgress(budgets, transactions, currentPeriod),
+    [budgets, currentPeriod, transactions],
+  );
 
   const goRoot = () => setRoute("root");
 
@@ -266,7 +383,17 @@ export default function LedgerModuleScreen({
         </View>
       ) : null}
 
-      {route === "budget" ? <BudgetManagementView horizontalPadding={horizontalPadding} onBack={goRoot} /> : null}
+      {route === "budget" ? (
+        <BudgetManagementView
+          budgets={budgets}
+          currentPeriod={currentPeriod}
+          horizontalPadding={horizontalPadding}
+          onBack={goRoot}
+          onDeleteBudget={onDeleteBudget}
+          onSaveBudget={onSaveBudget}
+          progress={budgetProgress}
+        />
+      ) : null}
 
       {route === "projects" ? (
         <View style={styles.scrollContent}>
@@ -330,11 +457,50 @@ function EntryTile({
   );
 }
 
-function BudgetManagementView({ horizontalPadding, onBack }: { horizontalPadding: number; onBack: () => void }) {
+function BudgetManagementView({
+  budgets,
+  currentPeriod,
+  horizontalPadding,
+  onBack,
+  onDeleteBudget,
+  onSaveBudget,
+  progress,
+}: {
+  budgets: BudgetPlan[];
+  currentPeriod: ReportPeriod;
+  horizontalPadding: number;
+  onBack: () => void;
+  onDeleteBudget: (budgetId: string) => Promise<void>;
+  onSaveBudget: (budget: BudgetPlan) => Promise<void>;
+  progress: BudgetProgress[];
+}) {
   const [activeTab, setActiveTab] = React.useState<BudgetTab>("overview");
-  const [activeSheet, setActiveSheet] = React.useState<BudgetSheet>(null);
+  const [activeSheet, setActiveSheet] = React.useState<ActiveBudgetSheet>(null);
   const [newBudgetType, setNewBudgetType] = React.useState<NewBudgetType>("category");
+  const [openRowKey, setOpenRowKey] = React.useState<string | null>(null);
+  const periodBudgets = budgets.filter((budget) => budget.periodId === currentPeriod.id);
+  const categoryRows = progress
+    .filter((item) => item.budget.type === "category")
+    .map((item, index) => budgetProgressToCategoryRow(item, index + 1));
+  const projectRowsForPeriod = progress
+    .filter((item) => item.budget.type === "project")
+    .map(budgetProgressToProjectRow);
+  const fixedRows = progress
+    .filter((item) => item.budget.type === "fixed")
+    .map(budgetProgressToFixedRow);
   const closeSheet = () => setActiveSheet(null);
+  const openEditSheet = (target: BudgetActionTarget) => {
+    setOpenRowKey(null);
+    setActiveSheet({ target, type: "edit" });
+  };
+  const openDeleteSheet = (target: BudgetActionTarget) => {
+    setOpenRowKey(null);
+    setActiveSheet({ target, type: "delete" });
+  };
+  const handleDeleteBudget = async (budgetId: string) => {
+    await onDeleteBudget(budgetId);
+    closeSheet();
+  };
 
   return (
     <View style={styles.scrollContent}>
@@ -347,7 +513,15 @@ function BudgetManagementView({ horizontalPadding, onBack }: { horizontalPadding
             预算管理
           </Text>
         </View>
-        <Pressable accessibilityRole="button" onPress={() => setActiveSheet("new")} style={styles.glassAddButton}>
+        <Pressable
+          accessibilityLabel="新建预算"
+          accessibilityRole="button"
+          onPress={() => {
+            setOpenRowKey(null);
+            setActiveSheet({ type: "new" });
+          }}
+          style={styles.glassAddButton}
+        >
           <LinearGradient
             colors={["rgba(255,255,255,0.18)", "rgba(255,255,255,0.065)", "rgba(255,255,255,0.035)"]}
             pointerEvents="none"
@@ -359,28 +533,75 @@ function BudgetManagementView({ horizontalPadding, onBack }: { horizontalPadding
 
       <View style={styles.budgetToolbar}>
         <View style={styles.budgetPeriod}>
-          <Text style={styles.budgetPeriodTitle}>2026 年 5 月</Text>
+          <Text style={styles.budgetPeriodTitle}>{currentPeriod.label || currentPeriod.id}</Text>
           <Text style={styles.budgetPeriodDesc}>设置预算额度，查看使用进度和偏差</Text>
         </View>
-        <Pressable accessibilityRole="button" onPress={() => setActiveSheet("edit")} style={styles.budgetEditButton}>
-          <Text style={styles.budgetEditText}>编辑</Text>
-        </Pressable>
       </View>
 
       <BudgetTabs activeTab={activeTab} onChange={setActiveTab} />
 
-      {activeTab === "overview" ? <BudgetOverview horizontalPadding={horizontalPadding} /> : null}
-      {activeTab === "category" ? <BudgetCategory horizontalPadding={horizontalPadding} /> : null}
-      {activeTab === "project" ? <BudgetProject horizontalPadding={horizontalPadding} /> : null}
-      {activeTab === "fixed" ? <FixedOccupancyPanel horizontalPadding={horizontalPadding} /> : null}
+      {activeTab === "overview" ? (
+        <BudgetOverview
+          fixedRows={fixedRows}
+          horizontalPadding={horizontalPadding}
+          progress={progress}
+        />
+      ) : null}
+      {activeTab === "category" ? (
+        <BudgetCategory
+          budgets={periodBudgets}
+          horizontalPadding={horizontalPadding}
+          onDelete={openDeleteSheet}
+          onEdit={openEditSheet}
+          onOpenRowChange={setOpenRowKey}
+          openRowKey={openRowKey}
+          rows={categoryRows}
+        />
+      ) : null}
+      {activeTab === "project" ? (
+        <BudgetProject
+          budgets={periodBudgets}
+          horizontalPadding={horizontalPadding}
+          onDelete={openDeleteSheet}
+          onEdit={openEditSheet}
+          onOpenRowChange={setOpenRowKey}
+          openRowKey={openRowKey}
+          rows={projectRowsForPeriod}
+        />
+      ) : null}
+      {activeTab === "fixed" ? (
+        <FixedOccupancyPanel
+          budgets={periodBudgets}
+          horizontalPadding={horizontalPadding}
+          onDelete={openDeleteSheet}
+          onEdit={openEditSheet}
+          onOpenRowChange={setOpenRowKey}
+          openRowKey={openRowKey}
+          rows={fixedRows}
+        />
+      ) : null}
 
-      <NewBudgetSheet
-        activeType={newBudgetType}
-        onChangeType={setNewBudgetType}
-        onClose={closeSheet}
-        visible={activeSheet === "new"}
-      />
-      <EditBudgetSheet onClose={closeSheet} visible={activeSheet === "edit"} />
+      {activeSheet?.type === "new" ? (
+        <NewBudgetSheet
+          activeType={newBudgetType}
+          currentPeriod={currentPeriod}
+          onChangeType={setNewBudgetType}
+          onClose={closeSheet}
+          onSave={onSaveBudget}
+          visible
+        />
+      ) : null}
+      {activeSheet?.type === "edit" ? (
+        <EditBudgetSheet onClose={closeSheet} onSave={onSaveBudget} target={activeSheet.target} visible />
+      ) : null}
+      {activeSheet?.type === "delete" ? (
+        <DeleteConfirmSheet
+          onClose={closeSheet}
+          onDelete={handleDeleteBudget}
+          target={activeSheet.target}
+          visible
+        />
+      ) : null}
     </View>
   );
 }
@@ -406,7 +627,43 @@ function BudgetTabs({ activeTab, onChange }: { activeTab: BudgetTab; onChange: (
   );
 }
 
-function BudgetOverview({ horizontalPadding }: { horizontalPadding: number }) {
+function BudgetOverview({
+  fixedRows,
+  horizontalPadding,
+  progress,
+}: {
+  fixedRows: FixedOccupancyRow[];
+  horizontalPadding: number;
+  progress: BudgetProgress[];
+}) {
+  const controllable = progress.filter((item) => item.budget.type !== "fixed");
+  const fixed = progress.filter((item) => item.budget.type === "fixed");
+  const totalBudget = controllable.reduce((sum, item) => sum + item.budget.amount, 0);
+  const totalSpent = controllable.reduce((sum, item) => sum + item.spent, 0);
+  const fixedAmount = fixed.reduce((sum, item) => sum + item.budget.amount, 0);
+  const usagePercent = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
+  const overCount = progress.filter((item) => item.status === "over").length;
+  const warningCount = progress.filter((item) => item.status === "warning").length;
+  const overviewRows: BudgetRow[] = [
+    { amount: "分类预算 + 项目预算", detail: formatBudgetAmount(totalBudget), progress: 100, title: "可控预算" },
+    {
+      amount: "来自已确认交易",
+      detail: formatBudgetAmount(totalSpent),
+      progress: Math.min(100, usagePercent),
+      rightSub: `${usagePercent}%`,
+      title: "已用",
+      tone: usagePercent >= 100 ? "danger" : usagePercent >= 80 ? "amber" : "green",
+    },
+    {
+      amount: "可控预算剩余额度",
+      detail: formatBudgetAmount(totalBudget - totalSpent),
+      progress: Math.max(0, 100 - usagePercent),
+      rightSub: `${Math.max(0, 100 - usagePercent)}%`,
+      title: "剩余",
+      tone: totalBudget - totalSpent < 0 ? "danger" : "green",
+    },
+  ];
+
   return (
     <View style={styles.budgetPanel}>
       <LedgerSectionHeader action="本月" title="总览" />
@@ -415,31 +672,33 @@ function BudgetOverview({ horizontalPadding }: { horizontalPadding: number }) {
         <View style={styles.visualHead}>
           <View>
             <Text style={styles.visualLabel}>可控预算使用率</Text>
-            <Text style={styles.visualAmount}>¥3,920 / ¥5,200</Text>
+            <Text style={styles.visualAmount}>
+              {formatBudgetAmount(totalSpent)} / {formatBudgetAmount(totalBudget)}
+            </Text>
           </View>
           <View style={styles.visualRight}>
-            <Text style={styles.visualPercent}>75%</Text>
-            <Text style={styles.visualSub}>剩余 ¥1,280</Text>
+            <Text style={styles.visualPercent}>{usagePercent}%</Text>
+            <Text style={styles.visualSub}>剩余 {formatBudgetAmount(totalBudget - totalSpent)}</Text>
           </View>
         </View>
-        <ProgressBar progress={75} size="large" />
+        <ProgressBar progress={Math.min(100, usagePercent)} size="large" />
       </BudgetVisualPanel>
       <LedgerFullBleedList horizontalPadding={horizontalPadding}>
-        {overviewBudgetRows.map((row, index) => (
+        {overviewRows.map((row) => (
           <BudgetProgressRow key={row.title} row={row} />
         ))}
         <FixedSummaryRow
-          amount="¥8,927"
-          detail="4 项"
+          amount={formatBudgetAmount(fixedAmount)}
+          detail={`${fixedRows.length} 项`}
           subtitle="本月确定会发生的支出，不计入可控预算使用率"
           title="固定占用"
         />
         <FixedSummaryRow
-          amount="1"
-          detail="超支"
-          subtitle="正常 8 项｜接近上限 2 项｜超支 1 项"
+          amount={`${overCount}`}
+          detail={overCount > 0 ? "超支" : warningCount > 0 ? "留意" : "正常"}
+          subtitle={`正常 ${Math.max(0, progress.length - warningCount - overCount)} 项｜接近上限 ${warningCount} 项｜超支 ${overCount} 项`}
           title="预算状态"
-          tone="danger"
+          tone={overCount > 0 ? "danger" : warningCount > 0 ? "amber" : "green"}
           last
         />
       </LedgerFullBleedList>
@@ -447,57 +706,233 @@ function BudgetOverview({ horizontalPadding }: { horizontalPadding: number }) {
   );
 }
 
-function BudgetCategory({ horizontalPadding }: { horizontalPadding: number }) {
+function BudgetCategory({
+  budgets,
+  horizontalPadding,
+  onDelete,
+  onEdit,
+  onOpenRowChange,
+  openRowKey,
+  rows = categoryBudgetRows,
+}: {
+  budgets: BudgetPlan[];
+  horizontalPadding: number;
+  onDelete: (target: BudgetActionTarget) => void;
+  onEdit: (target: BudgetActionTarget) => void;
+  onOpenRowChange: (rowKey: string | null) => void;
+  openRowKey: string | null;
+  rows?: CategoryBudgetRow[];
+}) {
   return (
     <View style={styles.budgetPanel}>
-      <LedgerSectionHeader action="管理分类" title="分类预算" />
+      <LedgerSectionHeader title="分类预算" />
       <Text style={styles.moduleDesc}>分类预算用于日常消费额度管理。接近上限或超支时才显示提示。</Text>
       <LedgerFullBleedList horizontalPadding={horizontalPadding}>
-        {categoryBudgetRows.map((row, index) => (
-          <CategoryBudgetRowView key={row.title} last={index === categoryBudgetRows.length - 1} row={row} />
+        {rows.map((row, index) => (
+          <SwipeableBudgetRow
+            key={row.id}
+            onDelete={() => onDelete({ budget: budgets.find((budget) => budget.id === row.id), kind: "category", title: row.title })}
+            onEdit={() => onEdit({ budget: budgets.find((budget) => budget.id === row.id), kind: "category", title: row.title })}
+            onOpenChange={onOpenRowChange}
+            openKey={openRowKey}
+            rowKey={`category-${row.id}`}
+          >
+            <CategoryBudgetRowView last={index === rows.length - 1} row={row} />
+          </SwipeableBudgetRow>
         ))}
       </LedgerFullBleedList>
     </View>
   );
 }
 
-function BudgetProject({ horizontalPadding }: { horizontalPadding: number }) {
+function BudgetProject({
+  budgets,
+  horizontalPadding,
+  onDelete,
+  onEdit,
+  onOpenRowChange,
+  openRowKey,
+  rows = projectBudgetRows,
+}: {
+  budgets: BudgetPlan[];
+  horizontalPadding: number;
+  onDelete: (target: BudgetActionTarget) => void;
+  onEdit: (target: BudgetActionTarget) => void;
+  onOpenRowChange: (rowKey: string | null) => void;
+  openRowKey: string | null;
+  rows?: ProjectBudgetRow[];
+}) {
   return (
     <View style={styles.budgetPanel}>
-      <LedgerSectionHeader action="新建项目" title="项目预算" />
+      <LedgerSectionHeader title="项目预算" />
       <Text style={styles.moduleDesc}>项目预算只管理本月批准投入、已用和剩余。项目回报分析放到经营项目页。</Text>
       <LedgerFullBleedList horizontalPadding={horizontalPadding}>
-        {projectBudgetRows.map((row, index) => (
-          <ProjectBudgetRowView key={row.title} last={index === projectBudgetRows.length - 1} row={row} />
+        {rows.map((row, index) => (
+          <SwipeableBudgetRow
+            key={row.id}
+            onDelete={() => onDelete({ budget: budgets.find((budget) => budget.id === row.id), kind: "project", title: row.title })}
+            onEdit={() => onEdit({ budget: budgets.find((budget) => budget.id === row.id), kind: "project", title: row.title })}
+            onOpenChange={onOpenRowChange}
+            openKey={openRowKey}
+            rowKey={`project-${row.id}`}
+          >
+            <ProjectBudgetRowView last={index === rows.length - 1} row={row} />
+          </SwipeableBudgetRow>
         ))}
       </LedgerFullBleedList>
     </View>
   );
 }
 
-function FixedOccupancyPanel({ horizontalPadding }: { horizontalPadding: number }) {
+function FixedOccupancyPanel({
+  budgets,
+  horizontalPadding,
+  onDelete,
+  onEdit,
+  onOpenRowChange,
+  openRowKey,
+  rows = fixedOccupancyRows,
+}: {
+  budgets: BudgetPlan[];
+  horizontalPadding: number;
+  onDelete: (target: BudgetActionTarget) => void;
+  onEdit: (target: BudgetActionTarget) => void;
+  onOpenRowChange: (rowKey: string | null) => void;
+  openRowKey: string | null;
+  rows?: FixedOccupancyRow[];
+}) {
   return (
     <View style={styles.budgetPanel}>
-      <LedgerSectionHeader action="本月固定项" title="固定占用" />
+      <LedgerSectionHeader title="固定占用" />
       <Text style={styles.moduleDesc}>这些不是“预算多少”的问题，而是已经确定会发生的资金占用。</Text>
       <LedgerFullBleedList horizontalPadding={horizontalPadding}>
-        {fixedOccupancyRows.map((row, index) => (
-          <FixedOccupancyRowView key={row.title} last={index === fixedOccupancyRows.length - 1} row={row} />
+        {rows.map((row, index) => (
+          <SwipeableBudgetRow
+            key={row.id}
+            onDelete={() => onDelete({ budget: budgets.find((budget) => budget.id === row.id), kind: "fixed", title: row.title })}
+            onEdit={() => onEdit({ budget: budgets.find((budget) => budget.id === row.id), kind: "fixed", title: row.title })}
+            onOpenChange={onOpenRowChange}
+            openKey={openRowKey}
+            rowKey={`fixed-${row.id}`}
+          >
+            <FixedOccupancyRowView last={index === rows.length - 1} row={row} />
+          </SwipeableBudgetRow>
         ))}
       </LedgerFullBleedList>
+    </View>
+  );
+}
+
+function SwipeableBudgetRow({
+  children,
+  onDelete,
+  onEdit,
+  onOpenChange,
+  openKey,
+  rowKey,
+}: {
+  children: React.ReactNode;
+  onDelete: () => void;
+  onEdit: () => void;
+  onOpenChange: (rowKey: string | null) => void;
+  openKey: string | null;
+  rowKey: string;
+}) {
+  const translateX = React.useRef(new Animated.Value(0)).current;
+  const isOpen = openKey === rowKey;
+  const actionWidth = 144;
+
+  React.useEffect(() => {
+    Animated.spring(translateX, {
+      damping: 20,
+      mass: 0.65,
+      stiffness: 190,
+      toValue: isOpen ? -actionWidth : 0,
+      useNativeDriver: true,
+    }).start();
+  }, [isOpen, translateX]);
+
+  const panResponder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) => {
+          const horizontalIntent = Math.abs(gesture.dx) > 10 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.35;
+          return horizontalIntent;
+        },
+        onPanResponderMove: (_, gesture) => {
+          const base = isOpen ? -actionWidth : 0;
+          const nextValue = Math.min(0, Math.max(-actionWidth, base + gesture.dx));
+          translateX.setValue(nextValue);
+        },
+        onPanResponderRelease: (_, gesture) => {
+          const base = isOpen ? -actionWidth : 0;
+          const projected = base + gesture.dx;
+          if (gesture.vx < -0.55) {
+            onOpenChange(rowKey);
+            return;
+          }
+          if (gesture.vx > 0.55) {
+            onOpenChange(null);
+            return;
+          }
+          onOpenChange(projected < -actionWidth / 2 ? rowKey : null);
+        },
+        onPanResponderTerminate: () => {
+          onOpenChange(isOpen ? rowKey : null);
+        },
+      }),
+    [isOpen, onOpenChange, rowKey, translateX],
+  );
+
+  return (
+    <View style={styles.swipeShell}>
+      <View style={styles.swipeActions}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            onOpenChange(null);
+            onEdit();
+          }}
+          style={[styles.swipeAction, styles.swipeEditAction]}
+        >
+          <Text style={styles.swipeActionText}>编辑</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            onOpenChange(null);
+            onDelete();
+          }}
+          style={[styles.swipeAction, styles.swipeDeleteAction]}
+        >
+          <Text style={styles.swipeActionText}>删除</Text>
+        </Pressable>
+      </View>
+      <Animated.View
+        {...panResponder.panHandlers}
+        style={[styles.swipeContent, { transform: [{ translateX }] }]}
+      >
+        <Pressable disabled={!isOpen} onPress={() => onOpenChange(null)}>
+          {children}
+        </Pressable>
+      </Animated.View>
     </View>
   );
 }
 
 function NewBudgetSheet({
   activeType,
+  currentPeriod,
   onChangeType,
   onClose,
+  onSave,
   visible,
 }: {
   activeType: NewBudgetType;
+  currentPeriod: ReportPeriod;
   onChangeType: (type: NewBudgetType) => void;
   onClose: () => void;
+  onSave: (budget: BudgetPlan) => Promise<void>;
   visible: boolean;
 }) {
   return (
@@ -529,55 +964,167 @@ function NewBudgetSheet({
         })}
       </View>
 
-      {activeType === "category" ? <NewCategoryBudgetForm onClose={onClose} /> : null}
-      {activeType === "project" ? <NewProjectBudgetForm onClose={onClose} /> : null}
-      {activeType === "fixed" ? <NewFixedOccupancyForm onClose={onClose} /> : null}
+      {activeType === "category" ? (
+        <NewCategoryBudgetForm currentPeriod={currentPeriod} onClose={onClose} onSave={onSave} />
+      ) : null}
+      {activeType === "project" ? (
+        <NewProjectBudgetForm currentPeriod={currentPeriod} onClose={onClose} onSave={onSave} />
+      ) : null}
+      {activeType === "fixed" ? (
+        <NewFixedOccupancyForm currentPeriod={currentPeriod} onClose={onClose} onSave={onSave} />
+      ) : null}
     </BudgetSheetFrame>
   );
 }
 
-function NewCategoryBudgetForm({ onClose }: { onClose: () => void }) {
+function NewCategoryBudgetForm({
+  currentPeriod,
+  onClose,
+  onSave,
+}: {
+  currentPeriod: ReportPeriod;
+  onClose: () => void;
+  onSave: (budget: BudgetPlan) => Promise<void>;
+}) {
+  const [amount, setAmount] = React.useState("");
+  const [categoryName, setCategoryName] = React.useState("");
+  const [error, setError] = React.useState("");
   const [threshold, setThreshold] = React.useState<BudgetThreshold>("80%");
+  const clearError = () => {
+    if (error) setError("");
+  };
+
+  const submit = () => {
+    if (!categoryName.trim() || parseBudgetAmount(amount) <= 0) {
+      setError("请先填写分类名称和本月额度");
+      return;
+    }
+    setError("");
+    const timestamp = new Date().toISOString();
+    void onSave({
+      id: createBudgetId("category"),
+      type: "category",
+      periodId: currentPeriod.id,
+      title: categoryName.trim(),
+      category: categoryName.trim(),
+      amount: parseBudgetAmount(amount),
+      thresholdPercent: parseThreshold(threshold),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }).then(onClose);
+  };
 
   return (
     <View style={styles.budgetForm}>
       <FormSectionTitle subtitle="可控支出额度" title="分类预算" />
-      <FormField label="分类名称" value="餐饮" />
+      <FormField
+        hasError={Boolean(error && !categoryName.trim())}
+        label="分类名称"
+        onChangeText={(value) => {
+          setCategoryName(value);
+          clearError();
+        }}
+        placeholder="餐饮"
+        value={categoryName}
+      />
       <View style={styles.fieldInline}>
-        <FormField label="本月额度" value="¥1,200" />
+        <FormField
+          hasError={Boolean(error && parseBudgetAmount(amount) <= 0)}
+          keyboardType="numeric"
+          label="本月额度"
+          onChangeText={(value) => {
+            setAmount(value);
+            clearError();
+          }}
+          placeholder="¥1,200"
+          value={amount}
+        />
         <ChoiceSelect label="提醒阈值" onChange={setThreshold} options={thresholdOptions} value={threshold} />
       </View>
       <TemplateRow labels={categoryTemplates} title="常用分类" />
       <Text style={styles.formNote}>当前提醒阈值：{threshold}。分类预算会进入总览里的可控预算使用率。</Text>
-      <SheetActions onClose={onClose} primaryLabel="创建分类预算" />
+      {error ? <Text style={styles.formError}>{error}</Text> : null}
+      <SheetActions onClose={onClose} onPrimary={submit} primaryLabel="创建分类预算" />
     </View>
   );
 }
 
-function NewProjectBudgetForm({ onClose }: { onClose: () => void }) {
+function NewProjectBudgetForm({
+  currentPeriod,
+  onClose,
+  onSave,
+}: {
+  currentPeriod: ReportPeriod;
+  onClose: () => void;
+  onSave: (budget: BudgetPlan) => Promise<void>;
+}) {
+  const [error, setError] = React.useState("");
+  const [projectName, setProjectName] = React.useState("");
   const [threshold, setThreshold] = React.useState<BudgetThreshold>("80%");
-  const [items, setItems] = React.useState<ProjectBudgetItem[]>(initialProjectBudgetItems);
-  const nextItemIdRef = React.useRef(initialProjectBudgetItems.length + 1);
+  const [items, setItems] = React.useState<ProjectBudgetItem[]>(initialNewProjectBudgetItems);
+  const nextItemIdRef = React.useRef(initialNewProjectBudgetItems.length + 1);
   const projectTotal = items.reduce((sum, item) => sum + parseBudgetAmount(item.amount), 0);
+  const hasValidItem = items.some((item) => item.name.trim() && parseBudgetAmount(item.amount) > 0);
+  const clearError = () => {
+    if (error) setError("");
+  };
 
   const updateProjectItem = (id: number, patch: Partial<Pick<ProjectBudgetItem, "amount" | "name">>) => {
+    clearError();
     setItems((currentItems) => currentItems.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   };
 
   const addProjectItem = () => {
     const nextId = nextItemIdRef.current;
     nextItemIdRef.current += 1;
-    setItems((currentItems) => [...currentItems, { amount: "¥0", id: nextId, name: "新增预算项" }]);
+    setItems((currentItems) => [
+      ...currentItems,
+      { amount: "¥0", id: nextId, name: "新增预算项" },
+    ]);
+    clearError();
   };
 
   const removeProjectItem = (id: number) => {
     setItems((currentItems) => (currentItems.length > 1 ? currentItems.filter((item) => item.id !== id) : currentItems));
   };
 
+  const submit = () => {
+    if (!projectName.trim() || !hasValidItem) {
+      setError("请先填写项目名称，并至少填写一项有效预算明细");
+      return;
+    }
+    setError("");
+    const timestamp = new Date().toISOString();
+    void onSave({
+      id: createBudgetId("project"),
+      type: "project",
+      periodId: currentPeriod.id,
+      title: projectName.trim(),
+      tag: projectName.trim(),
+      amount: projectTotal,
+      thresholdPercent: parseThreshold(threshold),
+      note: items
+        .filter((item) => item.name.trim())
+        .map((item) => `${item.name.trim()} ${formatBudgetAmount(parseBudgetAmount(item.amount))}`)
+        .join(" / "),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }).then(onClose);
+  };
+
   return (
     <View style={styles.budgetForm}>
       <FormSectionTitle subtitle="预算包 · 自动汇总" title="项目预算" />
-      <FormField label="项目名称" value="小红书接单" />
+      <FormField
+        hasError={Boolean(error && !projectName.trim())}
+        label="项目名称"
+        onChangeText={(value) => {
+          setProjectName(value);
+          clearError();
+        }}
+        placeholder="小红书接单"
+        value={projectName}
+      />
       <View style={styles.projectPackage}>
         <FormSectionTitle subtitle="项目总预算 = 各项预算之和" title="预算明细" />
         <View style={styles.budgetItemList}>
@@ -585,16 +1132,18 @@ function NewProjectBudgetForm({ onClose }: { onClose: () => void }) {
             <View key={item.id} style={[styles.budgetItem, index < items.length - 1 && styles.rowDivider]}>
               <TextInput
                 onChangeText={(name) => updateProjectItem(item.id, { name })}
+                placeholder={item.namePlaceholder}
                 placeholderTextColor={theme.colors.textMuted}
                 value={item.name}
-                style={[styles.formInput, styles.itemNameInput]}
+                style={[styles.formInput, styles.itemNameInput, Boolean(error && !hasValidItem) && styles.formInputError]}
               />
               <TextInput
                 keyboardType="numeric"
                 onChangeText={(amount) => updateProjectItem(item.id, { amount })}
+                placeholder={item.amountPlaceholder}
                 placeholderTextColor={theme.colors.textMuted}
                 value={item.amount}
-                style={[styles.formInput, styles.itemAmountInput]}
+                style={[styles.formInput, styles.itemAmountInput, Boolean(error && !hasValidItem) && styles.formInputError]}
               />
               <Pressable
                 accessibilityRole="button"
@@ -624,22 +1173,97 @@ function NewProjectBudgetForm({ onClose }: { onClose: () => void }) {
       </View>
       <TemplateRow labels={projectTemplates} title="常用预算项" />
       <Text style={styles.formNote}>当前提醒阈值：{threshold}。项目预算是预算包，只管理投入额度；项目回报分析放在经营项目页。</Text>
-      <SheetActions onClose={onClose} primaryLabel="创建项目预算" />
+      {error ? <Text style={styles.formError}>{error}</Text> : null}
+      <SheetActions onClose={onClose} onPrimary={submit} primaryLabel="创建项目预算" />
     </View>
   );
 }
 
-function NewFixedOccupancyForm({ onClose }: { onClose: () => void }) {
+function NewFixedOccupancyForm({
+  currentPeriod,
+  onClose,
+  onSave,
+}: {
+  currentPeriod: ReportPeriod;
+  onClose: () => void;
+  onSave: (budget: BudgetPlan) => Promise<void>;
+}) {
+  const [amount, setAmount] = React.useState("");
+  const [date, setDate] = React.useState("");
+  const [error, setError] = React.useState("");
+  const [name, setName] = React.useState("");
   const [paymentStatus, setPaymentStatus] = React.useState<FixedPaymentStatus>("未支付");
   const [repeatCycle, setRepeatCycle] = React.useState<FixedRepeatCycle>("每月");
+  const clearError = () => {
+    if (error) setError("");
+  };
+
+  const submit = () => {
+    if (!name.trim() || parseBudgetAmount(amount) <= 0 || !date.trim()) {
+      setError("请先填写占用名称、金额和发生日期");
+      return;
+    }
+    setError("");
+    const fixedStatus: NonNullable<BudgetPlan["fixedStatus"]> =
+      paymentStatus === "已支付"
+        ? "paid"
+        : paymentStatus === "待扣款"
+          ? "pending"
+          : paymentStatus === "需保留"
+            ? "reserved"
+            : "unpaid";
+    const timestamp = new Date().toISOString();
+    void onSave({
+      id: createBudgetId("fixed"),
+      type: "fixed",
+      periodId: currentPeriod.id,
+      title: name.trim(),
+      category: name.trim(),
+      amount: parseBudgetAmount(amount),
+      thresholdPercent: 100,
+      fixedStatus,
+      dueDate: date.trim(),
+      note: repeatCycle,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }).then(onClose);
+  };
 
   return (
     <View style={styles.budgetForm}>
       <FormSectionTitle subtitle="确定资金占用" title="固定占用" />
-      <FormField label="占用名称" value="房租" />
+      <FormField
+        hasError={Boolean(error && !name.trim())}
+        label="占用名称"
+        onChangeText={(value) => {
+          setName(value);
+          clearError();
+        }}
+        placeholder="房租"
+        value={name}
+      />
       <View style={styles.fieldInline}>
-        <FormField label="金额" value="¥2,000" />
-        <FormField label="发生日期" value="5 月 20 日" />
+        <FormField
+          hasError={Boolean(error && parseBudgetAmount(amount) <= 0)}
+          keyboardType="numeric"
+          label="金额"
+          onChangeText={(value) => {
+            setAmount(value);
+            clearError();
+          }}
+          placeholder="¥2,000"
+          value={amount}
+        />
+        <FormField
+          hasError={Boolean(error && !date.trim())}
+          label="发生日期"
+          onChangeText={(value) => {
+            setDate(value);
+            clearError();
+          }}
+          placeholder="5 月 20 日"
+          value={date}
+        />
       </View>
       <View style={styles.fieldInline}>
         <ChoiceSelect
@@ -656,43 +1280,321 @@ function NewFixedOccupancyForm({ onClose }: { onClose: () => void }) {
         />
       </View>
       <Text style={styles.formNote}>当前状态：{paymentStatus} · {repeatCycle}。固定占用不进入可控预算使用率。</Text>
-      <SheetActions onClose={onClose} primaryLabel="创建固定占用" />
+      {error ? <Text style={styles.formError}>{error}</Text> : null}
+      <SheetActions onClose={onClose} onPrimary={submit} primaryLabel="创建固定占用" />
     </View>
   );
 }
 
-function EditBudgetSheet({ onClose, visible }: { onClose: () => void; visible: boolean }) {
+function EditBudgetSheet({
+  onClose,
+  onSave,
+  target,
+  visible,
+}: {
+  onClose: () => void;
+  onSave: (budget: BudgetPlan) => Promise<void>;
+  target: BudgetActionTarget | null;
+  visible: boolean;
+}) {
+  const title =
+    target?.kind === "category"
+      ? "编辑分类预算"
+      : target?.kind === "project"
+        ? "编辑项目预算"
+        : "编辑固定占用";
+
   return (
     <BudgetSheetFrame
-      description="调整预算额度、项目投入或固定占用。不会修改已入账交易。"
+      description="修改只影响预算管理中的计划项，不会修改已入账交易。"
       onClose={onClose}
-      title="编辑本月预算"
+      title={title}
       visible={visible}
     >
-      <View style={styles.sheetOptionList}>
-        {editBudgetOptions.map((option, index) => (
-          <Pressable
-            accessibilityRole="button"
-            key={option.title}
-            onPress={onClose}
-            style={[styles.sheetOption, index < editBudgetOptions.length - 1 && styles.rowDivider]}
-          >
-            <View style={styles.sheetOptionIcon}>
-              <AppIcon color={theme.colors.textSecondary} name={option.icon} size={17} strokeWidth={1.85} />
-            </View>
-            <View style={styles.sheetOptionText}>
-              <Text numberOfLines={1} style={styles.sheetOptionTitle}>
-                {option.title}
-              </Text>
-              <Text numberOfLines={1} style={styles.sheetOptionSubtitle}>
-                {option.subtitle}
-              </Text>
-            </View>
-            <Text style={styles.sheetOptionArrow}>›</Text>
-          </Pressable>
-        ))}
+      {target?.kind === "category" ? (
+        <EditCategoryBudgetForm budget={target.budget} key={target.title} onClose={onClose} onSave={onSave} title={target.title} />
+      ) : null}
+      {target?.kind === "project" ? (
+        <EditProjectBudgetForm budget={target.budget} key={target.title} onClose={onClose} onSave={onSave} title={target.title} />
+      ) : null}
+      {target?.kind === "fixed" ? (
+        <EditFixedOccupancyForm budget={target.budget} key={target.title} onClose={onClose} onSave={onSave} title={target.title} />
+      ) : null}
+    </BudgetSheetFrame>
+  );
+}
+
+function EditCategoryBudgetForm({
+  budget,
+  onClose,
+  onSave,
+  title,
+}: {
+  budget?: BudgetPlan;
+  onClose: () => void;
+  onSave: (budget: BudgetPlan) => Promise<void>;
+  title: string;
+}) {
+  const row = categoryBudgetRows.find((item) => item.title === title) ?? categoryBudgetRows[0];
+  const [amount, setAmount] = React.useState(budget ? formatBudgetAmount(budget.amount) : row.budgetAmount);
+  const [categoryName, setCategoryName] = React.useState(budget?.title ?? row.title);
+  const [threshold, setThreshold] = React.useState<BudgetThreshold>(
+    budget ? thresholdFromBudget(budget.thresholdPercent) : row.threshold,
+  );
+  const usedAmount = parseBudgetAmount(row.usedAmount);
+  const nextBudget = parseBudgetAmount(amount);
+  const overBudget = usedAmount > nextBudget ? usedAmount - nextBudget : 0;
+  const submit = () => {
+    if (!budget) {
+      onClose();
+      return;
+    }
+    void onSave({
+      ...budget,
+      title: categoryName.trim(),
+      category: categoryName.trim(),
+      amount: parseBudgetAmount(amount),
+      thresholdPercent: parseThreshold(threshold),
+    }).then(onClose);
+  };
+
+  return (
+    <View style={styles.budgetForm}>
+      <FormSectionTitle subtitle="可控支出额度" title="分类预算" />
+      <FormField label="分类名称" onChangeText={setCategoryName} value={categoryName} />
+      <View style={styles.fieldInline}>
+        <FormField keyboardType="numeric" label="本月额度" onChangeText={setAmount} value={amount} />
+        <ChoiceSelect label="提醒阈值" onChange={setThreshold} options={thresholdOptions} value={threshold} />
       </View>
-      <Text style={styles.sheetFoot}>预算是计划层，只和交易事实做对比，不改变报表与账本事实。</Text>
+      {overBudget > 0 ? (
+        <Text style={styles.formNote}>已用 {row.usedAmount}。保存后该分类仍会显示为超预算 {formatBudgetAmount(overBudget)}。</Text>
+      ) : (
+        <Text style={styles.formNote}>当前提醒阈值：{threshold}。保存只影响预算管理预览。</Text>
+      )}
+      <SheetActions onClose={onClose} onPrimary={submit} primaryLabel="保存修改" />
+    </View>
+  );
+}
+
+function EditProjectBudgetForm({
+  budget,
+  onClose,
+  onSave,
+  title,
+}: {
+  budget?: BudgetPlan;
+  onClose: () => void;
+  onSave: (budget: BudgetPlan) => Promise<void>;
+  title: string;
+}) {
+  const row = projectBudgetRows.find((item) => item.title === title) ?? projectBudgetRows[0];
+  const [items, setItems] = React.useState<ProjectBudgetItem[]>(row.items);
+  const [projectName, setProjectName] = React.useState(budget?.title ?? row.title);
+  const [threshold, setThreshold] = React.useState<BudgetThreshold>(
+    budget ? thresholdFromBudget(budget.thresholdPercent) : row.threshold,
+  );
+  const nextItemIdRef = React.useRef(Math.max(...row.items.map((item) => item.id)) + 1);
+  const projectTotal = items.reduce((sum, item) => sum + parseBudgetAmount(item.amount), 0);
+  const submit = () => {
+    if (!budget) {
+      onClose();
+      return;
+    }
+    void onSave({
+      ...budget,
+      title: projectName.trim(),
+      tag: projectName.trim(),
+      amount: projectTotal,
+      thresholdPercent: parseThreshold(threshold),
+      note: items.map((item) => `${item.name} ${item.amount}`).join(" / "),
+    }).then(onClose);
+  };
+
+  const updateProjectItem = (id: number, patch: Partial<Pick<ProjectBudgetItem, "amount" | "name">>) => {
+    setItems((currentItems) => currentItems.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  };
+
+  const addProjectItem = () => {
+    const nextId = nextItemIdRef.current;
+    nextItemIdRef.current += 1;
+    setItems((currentItems) => [
+      ...currentItems,
+      { amount: "¥0", id: nextId, name: "新增预算项" },
+    ]);
+  };
+
+  const removeProjectItem = (id: number) => {
+    setItems((currentItems) => (currentItems.length > 1 ? currentItems.filter((item) => item.id !== id) : currentItems));
+  };
+
+  return (
+    <View style={styles.budgetForm}>
+      <FormSectionTitle subtitle="预算包 · 自动汇总" title="项目预算" />
+      <FormField label="项目名称" onChangeText={setProjectName} value={projectName} />
+      <View style={styles.projectPackage}>
+        <FormSectionTitle subtitle="项目总预算 = 各项预算之和" title="预算明细" />
+        <View style={styles.budgetItemList}>
+          {items.map((item, index) => (
+            <View key={item.id} style={[styles.budgetItem, index < items.length - 1 && styles.rowDivider]}>
+              <TextInput
+                onChangeText={(name) => updateProjectItem(item.id, { name })}
+                placeholder={item.namePlaceholder}
+                placeholderTextColor={theme.colors.textMuted}
+                style={[styles.formInput, styles.itemNameInput]}
+                value={item.name}
+              />
+              <TextInput
+                keyboardType="numeric"
+                onChangeText={(amount) => updateProjectItem(item.id, { amount })}
+                placeholder={item.amountPlaceholder}
+                placeholderTextColor={theme.colors.textMuted}
+                style={[styles.formInput, styles.itemAmountInput]}
+                value={item.amount}
+              />
+              <Pressable
+                accessibilityRole="button"
+                disabled={items.length <= 1}
+                hitSlop={8}
+                onPress={() => removeProjectItem(item.id)}
+                style={[styles.removeBudgetItemButton, items.length <= 1 && styles.removeBudgetItemButtonDisabled]}
+              >
+                <Text style={styles.removeBudgetItemText}>×</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+        <Pressable accessibilityRole="button" onPress={addProjectItem} style={styles.addBudgetItemButton}>
+          <Text style={styles.addBudgetItemText}>＋ 添加预算项</Text>
+        </Pressable>
+      </View>
+      <View style={styles.projectTotalBox}>
+        <View>
+          <Text style={styles.projectTotalLabel}>项目总预算</Text>
+          <Text style={styles.projectTotalSub}>自动汇总预算明细</Text>
+        </View>
+        <Text style={styles.projectTotalAmount}>{formatBudgetAmount(projectTotal)}</Text>
+      </View>
+      <ChoiceSelect label="提醒阈值" onChange={setThreshold} options={thresholdOptions} value={threshold} />
+      <Text style={styles.formNote}>项目预算只管理投入额度；项目回报分析放在经营项目页。</Text>
+      <SheetActions onClose={onClose} onPrimary={submit} primaryLabel="保存修改" />
+    </View>
+  );
+}
+
+function EditFixedOccupancyForm({
+  budget,
+  onClose,
+  onSave,
+  title,
+}: {
+  budget?: BudgetPlan;
+  onClose: () => void;
+  onSave: (budget: BudgetPlan) => Promise<void>;
+  title: string;
+}) {
+  const row = fixedOccupancyRows.find((item) => item.title === title) ?? fixedOccupancyRows[1];
+  const [amount, setAmount] = React.useState(budget ? formatBudgetAmount(budget.amount) : row.amount);
+  const [date, setDate] = React.useState(budget?.dueDate ?? row.date);
+  const [name, setName] = React.useState(budget?.title ?? row.title);
+  const [paymentStatus, setPaymentStatus] = React.useState<FixedPaymentStatus>(row.status as FixedPaymentStatus);
+  const [repeatCycle, setRepeatCycle] = React.useState<FixedRepeatCycle>(row.repeatCycle);
+  const submit = () => {
+    if (!budget) {
+      onClose();
+      return;
+    }
+    const fixedStatus: NonNullable<BudgetPlan["fixedStatus"]> =
+      paymentStatus === "已支付"
+        ? "paid"
+        : paymentStatus === "待扣款"
+          ? "pending"
+          : paymentStatus === "需保留"
+            ? "reserved"
+            : "unpaid";
+    void onSave({
+      ...budget,
+      title: name.trim(),
+      category: name.trim(),
+      amount: parseBudgetAmount(amount),
+      fixedStatus,
+      dueDate: date.trim(),
+      note: repeatCycle,
+    }).then(onClose);
+  };
+
+  return (
+    <View style={styles.budgetForm}>
+      <FormSectionTitle subtitle="金额、日期和状态" title="固定占用" />
+      <FormField label="占用名称" onChangeText={setName} value={name} />
+      <View style={styles.fieldInline}>
+        <FormField keyboardType="numeric" label="金额" onChangeText={setAmount} value={amount} />
+        <FormField label="发生日期" onChangeText={setDate} value={date} />
+      </View>
+      <View style={styles.fieldInline}>
+        <ChoiceSelect
+          label="支付状态"
+          onChange={setPaymentStatus}
+          options={fixedPaymentStatusOptions}
+          value={paymentStatus}
+        />
+        <ChoiceSelect
+          label="重复周期"
+          onChange={setRepeatCycle}
+          options={fixedRepeatCycleOptions}
+          value={repeatCycle}
+        />
+      </View>
+      <Text style={styles.formNote}>当前状态：{paymentStatus} · {repeatCycle}。固定占用不显示进度条，不进入可控预算使用率。</Text>
+      <SheetActions onClose={onClose} onPrimary={submit} primaryLabel="保存修改" />
+    </View>
+  );
+}
+
+function DeleteConfirmSheet({
+  onClose,
+  onDelete,
+  target,
+  visible,
+}: {
+  onClose: () => void;
+  onDelete: (budgetId: string) => Promise<void>;
+  target: BudgetActionTarget | null;
+  visible: boolean;
+}) {
+  const copy =
+    target?.kind === "category"
+      ? {
+          body: "只会删除该分类的预算设置，不会删除已入账交易。",
+          title: "删除分类预算？",
+        }
+      : target?.kind === "project"
+        ? {
+            body: "只会删除该项目的预算计划，不会删除项目和交易记录。",
+            title: "删除项目预算？",
+          }
+        : {
+            body: "只会删除这条固定占用记录，不会影响已入账交易。",
+            title: "删除固定占用？",
+          };
+
+  return (
+    <BudgetSheetFrame description={copy.body} onClose={onClose} title={copy.title} visible={visible}>
+      <View style={styles.deleteConfirmCard}>
+        <Text style={styles.deleteConfirmTitle}>{target?.title ?? "预算项"}</Text>
+        <Text style={styles.deleteConfirmText}>删除后仅影响预算管理页展示，不影响账本事实和报表结果。</Text>
+      </View>
+      <SheetActions
+        danger
+        onClose={onClose}
+        onPrimary={() => {
+          if (!target?.budget) {
+            onClose();
+            return;
+          }
+          void onDelete(target.budget.id);
+        }}
+        primaryLabel="确认删除"
+      />
     </BudgetSheetFrame>
   );
 }
@@ -751,11 +1653,32 @@ function FormSectionTitle({ subtitle, title }: { subtitle: string; title: string
   );
 }
 
-function FormField({ label, value }: { label: string; value: string }) {
+function FormField({
+  hasError,
+  keyboardType,
+  label,
+  onChangeText,
+  placeholder,
+  value,
+}: {
+  hasError?: boolean;
+  keyboardType?: React.ComponentProps<typeof TextInput>["keyboardType"];
+  label: string;
+  onChangeText: (value: string) => void;
+  placeholder?: string;
+  value: string;
+}) {
   return (
     <View style={styles.formField}>
       <Text style={styles.formLabel}>{label}</Text>
-      <TextInput defaultValue={value} placeholderTextColor={theme.colors.textMuted} style={styles.formInput} />
+      <TextInput
+        keyboardType={keyboardType}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={theme.colors.textMuted}
+        style={[styles.formInput, hasError && styles.formInputError]}
+        value={value}
+      />
     </View>
   );
 }
@@ -774,7 +1697,7 @@ function ChoiceSelect<T extends string>({
   const [open, setOpen] = React.useState(false);
 
   return (
-    <View style={styles.formField}>
+    <View style={[styles.formField, open && styles.formFieldOpen]}>
       <Text style={styles.formLabel}>{label}</Text>
       <Pressable accessibilityRole="button" onPress={() => setOpen((current) => !current)} style={styles.formSelect}>
         <Text style={styles.formSelectValue}>{value}</Text>
@@ -820,14 +1743,28 @@ function TemplateRow({ labels, title }: { labels: string[]; title: string }) {
   );
 }
 
-function SheetActions({ onClose, primaryLabel }: { onClose: () => void; primaryLabel: string }) {
+function SheetActions({
+  danger,
+  onClose,
+  onPrimary,
+  primaryLabel,
+}: {
+  danger?: boolean;
+  onClose: () => void;
+  onPrimary?: () => void;
+  primaryLabel: string;
+}) {
   return (
     <View style={styles.sheetActions}>
       <Pressable accessibilityRole="button" onPress={onClose} style={styles.sheetSecondaryButton}>
         <Text style={styles.sheetSecondaryText}>取消</Text>
       </Pressable>
-      <Pressable accessibilityRole="button" onPress={onClose} style={styles.sheetPrimaryButton}>
-        <Text style={styles.sheetPrimaryText}>{primaryLabel}</Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onPrimary ?? onClose}
+        style={[styles.sheetPrimaryButton, danger && styles.sheetDangerButton]}
+      >
+        <Text style={[styles.sheetPrimaryText, danger && styles.sheetDangerText]}>{primaryLabel}</Text>
       </Pressable>
     </View>
   );
@@ -1038,6 +1975,77 @@ function formatBudgetAmount(value: number) {
   return `¥${Math.round(value).toLocaleString("zh-CN")}`;
 }
 
+function parseThreshold(value: BudgetThreshold): number {
+  return Number(value.replace("%", "")) || 80;
+}
+
+function thresholdFromBudget(value: number): BudgetThreshold {
+  if (value >= 100) return "100%";
+  if (value >= 90) return "90%";
+  return "80%";
+}
+
+function createBudgetId(type: NewBudgetType) {
+  return `budget-${type}-${Date.now()}`;
+}
+
+function getBudgetTone(status: BudgetProgress["status"]): BudgetTone | undefined {
+  if (status === "over") return "danger";
+  if (status === "warning") return "amber";
+  return "green";
+}
+
+function budgetProgressToCategoryRow(item: BudgetProgress, rank: number): CategoryBudgetRow {
+  const over = item.spent > item.budget.amount ? item.spent - item.budget.amount : 0;
+  return {
+    amount: `${formatBudgetAmount(item.spent)} / ${formatBudgetAmount(item.budget.amount)}`,
+    budgetAmount: formatBudgetAmount(item.budget.amount),
+    detail: over > 0 ? `已超 ${formatBudgetAmount(over)}` : undefined,
+    id: item.budget.id,
+    percent: `${item.usagePercent}%`,
+    progress: Math.min(100, item.usagePercent),
+    rank,
+    status: item.status === "over" ? "超支" : item.status === "warning" ? "留意" : undefined,
+    threshold: thresholdFromBudget(item.budget.thresholdPercent),
+    title: item.budget.title,
+    tone: getBudgetTone(item.status),
+    usedAmount: formatBudgetAmount(item.spent),
+  };
+}
+
+function budgetProgressToProjectRow(item: BudgetProgress): ProjectBudgetRow {
+  return {
+    amount: `${formatBudgetAmount(item.spent)} / ${formatBudgetAmount(item.budget.amount)}`,
+    id: item.budget.id,
+    items: [{ amount: formatBudgetAmount(item.budget.amount), id: 1, name: item.budget.note || "项目投入" }],
+    progress: Math.min(100, item.usagePercent),
+    remaining: item.remaining >= 0 ? `还剩 ${formatBudgetAmount(item.remaining)}` : `已超 ${formatBudgetAmount(Math.abs(item.remaining))}`,
+    status: `${item.usagePercent}%`,
+    threshold: thresholdFromBudget(item.budget.thresholdPercent),
+    title: item.budget.title,
+    tone: getBudgetTone(item.status),
+  };
+}
+
+function budgetProgressToFixedRow(item: BudgetProgress): FixedOccupancyRow {
+  const statusLabel: Record<NonNullable<BudgetPlan["fixedStatus"]>, string> = {
+    paid: "已支付",
+    pending: "待扣款",
+    reserved: "需保留",
+    unpaid: "未支付",
+  };
+  return {
+    amount: formatBudgetAmount(item.budget.amount),
+    date: item.budget.dueDate ?? "本月",
+    id: item.budget.id,
+    repeatCycle: "每月",
+    status: statusLabel[item.budget.fixedStatus ?? "unpaid"],
+    subtitle: item.budget.note || "固定占用",
+    title: item.budget.title,
+    tone: item.budget.fixedStatus === "paid" ? "green" : item.budget.fixedStatus === "reserved" ? "amber" : undefined,
+  };
+}
+
 function getBudgetToneStyle(tone?: BudgetTone) {
   if (tone === "amber") return styles.toneAmber;
   if (tone === "blue") return styles.toneBlue;
@@ -1240,6 +2248,23 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 6,
     minWidth: 0,
+    position: "relative",
+    zIndex: 1,
+  },
+  formFieldOpen: {
+    zIndex: 40,
+  },
+  formError: {
+    backgroundColor: "rgba(248,113,113,0.08)",
+    borderColor: "rgba(248,113,113,0.18)",
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    color: theme.colors.danger,
+    fontSize: 11,
+    fontWeight: "800",
+    lineHeight: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   formInput: {
     backgroundColor: "rgba(255,255,255,0.045)",
@@ -1253,6 +2278,10 @@ const styles = StyleSheet.create({
     minHeight: 39,
     paddingHorizontal: 11,
     paddingVertical: 8,
+  },
+  formInputError: {
+    backgroundColor: "rgba(248,113,113,0.065)",
+    borderColor: "rgba(248,113,113,0.38)",
   },
   formLabel: {
     color: theme.colors.textMuted,
@@ -1702,7 +2731,13 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.10)",
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
+    elevation: 16,
+    left: 0,
     overflow: "hidden",
+    position: "absolute",
+    right: 0,
+    top: 61,
+    zIndex: 50,
   },
   selectMenuOption: {
     paddingHorizontal: 11,
@@ -1840,6 +2875,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
   },
+  sheetDangerButton: {
+    backgroundColor: theme.colors.danger,
+  },
+  sheetDangerText: {
+    color: "#1a0505",
+  },
   sheetScroll: {
     maxHeight: 560,
   },
@@ -1863,6 +2904,25 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "900",
     lineHeight: 21,
+  },
+  deleteConfirmCard: {
+    backgroundColor: "rgba(248,113,113,0.08)",
+    borderColor: "rgba(248,113,113,0.18)",
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 6,
+    marginBottom: 10,
+    padding: 12,
+  },
+  deleteConfirmText: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  deleteConfirmTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 14,
+    fontWeight: "900",
   },
   sheetTypeButton: {
     alignItems: "center",
@@ -1922,6 +2982,39 @@ const styles = StyleSheet.create({
   },
   stackSegProject: {
     backgroundColor: theme.colors.blueText,
+  },
+  swipeAction: {
+    alignItems: "center",
+    height: "100%",
+    justifyContent: "center",
+    width: 72,
+  },
+  swipeActionText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  swipeActions: {
+    bottom: 0,
+    flexDirection: "row",
+    position: "absolute",
+    right: 0,
+    top: 0,
+    width: 144,
+  },
+  swipeContent: {
+    backgroundColor: "#111423",
+    minHeight: 1,
+  },
+  swipeDeleteAction: {
+    backgroundColor: "#f05252",
+  },
+  swipeEditAction: {
+    backgroundColor: "#c98124",
+  },
+  swipeShell: {
+    overflow: "hidden",
+    position: "relative",
   },
   templateChip: {
     backgroundColor: "rgba(255,255,255,0.048)",

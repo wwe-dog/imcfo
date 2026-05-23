@@ -1,4 +1,6 @@
 import type { AppIconName } from "../../components/AppIcon";
+import type { ReportPeriod, Transaction } from "../models";
+import { buildIncomeStatementSummary } from "../accounting/calculations";
 
 export type ProfitabilityTone = "danger" | "good" | "neutral" | "primary" | "warning";
 
@@ -102,7 +104,154 @@ const composition = (
   percentLabel: `${percent.toFixed(1)}%`,
 });
 
-export function buildProfitabilityAnalysisReport(): ProfitabilityAnalysisReport {
+const groupTransactionsByCategory = (transactions: Transaction[], type: "expense" | "income") => {
+  const rows = new Map<string, number>();
+  transactions
+    .filter((transaction) =>
+      type === "income"
+        ? transaction.type === "income"
+        : transaction.type === "expense" || transaction.type === "creditCardExpense",
+    )
+    .forEach((transaction) => {
+      rows.set(transaction.category || "未分类", (rows.get(transaction.category || "未分类") ?? 0) + transaction.amount);
+    });
+  return [...rows.entries()].sort((a, b) => b[1] - a[1]);
+};
+
+export function buildProfitabilityAnalysisReport(input?: {
+  period: ReportPeriod;
+  previousTransactions?: Transaction[];
+  transactions: Transaction[];
+}): ProfitabilityAnalysisReport {
+  if (input) {
+    const income = buildIncomeStatementSummary(input.transactions);
+    const previousIncome = buildIncomeStatementSummary(input.previousTransactions ?? []);
+    const netIncomeRate = income.savingsRate === null ? 0 : income.savingsRate * 100;
+    const incomeGroups = groupTransactionsByCategory(input.transactions, "income");
+    const expenseGroups = groupTransactionsByCategory(input.transactions, "expense");
+    const toComposition = (
+      [label, amount]: [string, number],
+      index: number,
+      total: number,
+      fallbackColor: string,
+    ) =>
+      composition(
+        label,
+        amount,
+        total > 0 ? (amount / total) * 100 : 0,
+        ["#2F7BEA", "#1FA67A", "#FF7A1A", "#7C5CE3", "#A07B56"][index] ?? fallbackColor,
+        `${label} 本期合计 ${currency(amount)}`,
+      );
+
+    const incomeComposition =
+      incomeGroups.length > 0
+        ? incomeGroups.map((item, index) => toComposition(item, index, income.totalIncome, "#2F7BEA"))
+        : [composition("暂无收入", 0, 0, "#2F7BEA", "本期暂无收入类交易")];
+    const expenseComposition =
+      expenseGroups.length > 0
+        ? expenseGroups.map((item, index) => toComposition(item, index, income.totalExpenses, "#FF7A1A"))
+        : [composition("暂无支出", 0, 0, "#FF7A1A", "本期暂无支出类交易")];
+    const trendPoints: NetIncomeTrendPoint[] = [
+      {
+        changeRate: null,
+        expense: currency(previousIncome.totalExpenses),
+        income: currency(previousIncome.totalIncome),
+        netIncome: previousIncome.profit,
+        netIncomeLabel: currency(previousIncome.profit),
+        netIncomeRate: previousIncome.savingsRate === null ? 0 : previousIncome.savingsRate * 100,
+        period: "上一期",
+      },
+      {
+        changeRate: previousIncome.profit === 0 ? null : ((income.profit - previousIncome.profit) / Math.abs(previousIncome.profit)) * 100,
+        expense: currency(income.totalExpenses),
+        income: currency(income.totalIncome),
+        netIncome: income.profit,
+        netIncomeLabel: currency(income.profit),
+        netIncomeRate,
+        period: input.period.label,
+      },
+    ];
+    const rootLabel = incomeComposition[0]?.label ?? "收入";
+
+    return {
+      analysisText: `本期收入 ${currency(income.totalIncome)}，支出 ${currency(income.totalExpenses)}，净收支 ${currency(income.profit)}。`,
+      conclusionSummary: income.profit >= 0 ? "本期收入能够覆盖支出，盈利能力为正。" : "本期支出超过收入，盈利能力承压。",
+      currentExpenseTotal: income.totalExpenses,
+      currentIncomeTotal: income.totalIncome,
+      currentNetIncome: income.profit,
+      expenseComposition,
+      footerNote: "数据来源于 IMCFO 本地账本，仅用于个人财务分析。",
+      incomeComposition,
+      incomeStructureRoot: {
+        amount: income.totalIncome,
+        children: incomeGroups.map(([label, amount], index) => ({
+          amount,
+          icon: "wallet",
+          id: `income-${index}`,
+          kind: "income",
+          label,
+          percentage: income.totalIncome > 0 ? (amount / income.totalIncome) * 100 : 0,
+        })),
+        icon: "wallet",
+        id: "total-income",
+        kind: "root",
+        label: "本期总收入",
+        rootLabel,
+      },
+      metricRows: [
+        {
+          change: previousIncome.totalIncome === 0 ? "-" : `${(((income.totalIncome - previousIncome.totalIncome) / previousIncome.totalIncome) * 100).toFixed(1)}%`,
+          changeTone: income.totalIncome >= previousIncome.totalIncome ? "good" : "warning",
+          current: currency(income.totalIncome),
+          dataSource: "利润表、交易记录",
+          formula: "本期收入类交易合计",
+          indicator: "本期收入",
+          interpretation: "衡量本期现金流入和收入规模。",
+          judgement: income.totalIncome >= previousIncome.totalIncome ? "增长" : "回落",
+          judgementTone: income.totalIncome >= previousIncome.totalIncome ? "good" : "warning",
+          previous: currency(previousIncome.totalIncome),
+        },
+        {
+          change: previousIncome.totalExpenses === 0 ? "-" : `${(((income.totalExpenses - previousIncome.totalExpenses) / previousIncome.totalExpenses) * 100).toFixed(1)}%`,
+          changeTone: income.totalExpenses <= previousIncome.totalExpenses ? "good" : "warning",
+          current: currency(income.totalExpenses),
+          dataSource: "利润表、交易记录",
+          formula: "本期支出类交易合计",
+          indicator: "本期支出",
+          interpretation: "衡量本期消费、固定支出和债务支出。",
+          judgement: income.totalExpenses <= previousIncome.totalExpenses ? "改善" : "上升",
+          judgementTone: income.totalExpenses <= previousIncome.totalExpenses ? "good" : "warning",
+          previous: currency(previousIncome.totalExpenses),
+        },
+        {
+          change: previousIncome.profit === 0 ? "-" : `${(((income.profit - previousIncome.profit) / Math.abs(previousIncome.profit)) * 100).toFixed(1)}%`,
+          changeTone: income.profit >= previousIncome.profit ? "good" : "warning",
+          current: currency(income.profit),
+          dataSource: "利润表",
+          formula: "收入 - 支出",
+          indicator: "本期净收支",
+          interpretation: "衡量收入覆盖支出后的留存结果。",
+          judgement: income.profit >= 0 ? "为正" : "为负",
+          judgementTone: income.profit >= 0 ? "good" : "danger",
+          previous: currency(previousIncome.profit),
+        },
+      ],
+      netIncomeRateLabel: `${netIncomeRate.toFixed(1)}%`,
+      periodLabel: input.period.label,
+      statusLabel: income.profit >= 0 ? "良好" : "承压",
+      subtitle: "判断本期收入是否覆盖支出，以及个人经营结果是否为正",
+      suggestions: [
+        {
+          title: income.profit >= 0 ? "保持收入覆盖" : "优先恢复正结余",
+          body: income.profit >= 0 ? "继续跟踪大额支出，保持净收支为正。" : "压缩非必要支出，并检查固定占用是否过高。",
+        },
+      ],
+      trendPoints,
+      trendPoints12: trendPoints,
+      unitLabel: "人民币元",
+    };
+  }
+
   const currentIncomeTotal = 28650;
   const currentExpenseTotal = 20217.81;
   const currentNetIncome = 8432.19;

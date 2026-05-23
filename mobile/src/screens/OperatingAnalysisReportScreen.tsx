@@ -11,7 +11,7 @@ import {
   type AnalysisTone,
   buildOperatingAnalysisReport,
 } from "../domain/reports/operatingAnalysisReport";
-import type { Asset, Liability, Transaction } from "../domain/models";
+import type { Asset, Liability, ReportPeriod, Transaction } from "../domain/models";
 import { theme } from "../styles/theme";
 
 interface OperatingAnalysisReportScreenProps {
@@ -20,6 +20,7 @@ interface OperatingAnalysisReportScreenProps {
   onBack: () => void;
   onOpenRecord?: () => void;
   onOpenProfitabilityAnalysis?: () => void;
+  period: ReportPeriod;
   transactions: Transaction[];
 }
 
@@ -38,7 +39,7 @@ const toneColor: Record<AnalysisTone, string> = {
 const toneSoft: Record<AnalysisTone, string> = {
   danger: theme.colors.dangerSoft,
   good: theme.colors.successSoft,
-  neutral: "#F7F4EF",
+  neutral: "rgba(255,255,255,0.055)",
   primary: theme.colors.blueSoft,
   warning: theme.colors.warningSoft,
 };
@@ -49,6 +50,7 @@ export default function OperatingAnalysisReportScreen({
   onBack,
   onOpenRecord,
   onOpenProfitabilityAnalysis,
+  period,
   transactions,
 }: OperatingAnalysisReportScreenProps) {
   const hasAnalysisBasis = transactions.length > 0 || assets.length > 0 || liabilities.length > 0;
@@ -69,7 +71,7 @@ export default function OperatingAnalysisReportScreen({
     );
   }
 
-  const report = buildOperatingAnalysisReport();
+  const report = buildOperatingAnalysisReport({ assets, liabilities, period, transactions });
 
   return (
     <View style={styles.reportRoot}>
@@ -147,9 +149,9 @@ export default function OperatingAnalysisReportScreen({
             markerLabel="28.6%"
             markerPercent={28.6}
             segments={[
-              { color: "#EAF8EF", label: "低风险\n(<20%)", size: 20 },
-              { color: "#EEF7E9", label: "合理区间\n(20%-50%)", size: 30 },
-              { color: "#FFF0EF", label: "高风险\n(>50%)", size: 50 },
+              { color: "rgba(74,222,128,0.14)", label: "低风险\n(<20%)", size: 20 },
+              { color: "rgba(59,139,255,0.14)", label: "合理区间\n(20%-50%)", size: 30 },
+              { color: "rgba(248,113,113,0.14)", label: "高风险\n(>50%)", size: 50 },
             ]}
           />
         </AnalysisBody>
@@ -648,7 +650,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   horizontalBarTrack: {
-    backgroundColor: "#F2EEE8",
+    backgroundColor: "rgba(255,255,255,0.075)",
     borderRadius: 4,
     flex: 1,
     height: 14,
@@ -691,7 +693,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   metricList: {
-    backgroundColor: "#FFFCF8",
+    backgroundColor: "rgba(255,255,255,0.035)",
     borderColor: theme.colors.divider,
     borderRadius: 7,
     borderWidth: 1,
@@ -762,7 +764,7 @@ const styles = StyleSheet.create({
     width: 1,
   },
   progressPane: {
-    backgroundColor: "#FFFCF8",
+    backgroundColor: "rgba(255,255,255,0.035)",
     borderColor: theme.colors.divider,
     borderRadius: 7,
     borderWidth: 1,
@@ -775,7 +777,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   progressTrack: {
-    backgroundColor: "#F0ECE6",
+    backgroundColor: "rgba(255,255,255,0.075)",
     borderRadius: 5,
     height: 11,
     overflow: "visible",
@@ -866,7 +868,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   riskHintRow: {
-    backgroundColor: "#FFFCF8",
+    backgroundColor: "rgba(255,255,255,0.035)",
     borderColor: theme.colors.divider,
     borderRadius: 6,
     borderWidth: 1,
@@ -949,7 +951,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   sparkPanel: {
-    backgroundColor: "#FFFCF8",
+    backgroundColor: "rgba(255,255,255,0.035)",
     borderColor: theme.colors.divider,
     borderRadius: 7,
     borderWidth: 1,
@@ -1046,14 +1048,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   structureTrack: {
-    backgroundColor: "#F0ECE6",
+    backgroundColor: "rgba(255,255,255,0.075)",
     borderRadius: 4,
     flex: 1,
     height: 14,
     overflow: "hidden",
   },
   structureVisual: {
-    backgroundColor: "#FFFCF8",
+    backgroundColor: "rgba(255,255,255,0.035)",
     borderColor: theme.colors.divider,
     borderRadius: 7,
     borderWidth: 1,
@@ -1108,7 +1110,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   tableHeaderRow: {
-    backgroundColor: "#F8F4EF",
+    backgroundColor: "rgba(255,255,255,0.045)",
   },
   tableRow: {
     flexDirection: "row",

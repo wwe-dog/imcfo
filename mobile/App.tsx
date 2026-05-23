@@ -23,6 +23,7 @@ import type {
 } from "./src/domain/accounting/transactionRules";
 import type { ReconciliationInput } from "./src/domain/accounting/reconciliationRules";
 import { filterTransactionsByReportPeriod } from "./src/domain/accounting/periodFilters";
+import { getEffectiveTransactions } from "./src/domain/accounting/transactionAuditRules";
 import AccountManagementScreen from "./src/screens/AccountManagementScreen";
 import AssetsLiabilitiesScreen from "./src/screens/AssetsLiabilitiesScreen";
 import DashboardScreen from "./src/screens/DashboardScreen";
@@ -82,6 +83,11 @@ function AppShell() {
     isLoading,
     reloadData,
     saveTransaction,
+    replaceTransaction,
+    voidTransactionById,
+    saveBudget,
+    deleteBudget,
+    saveSettings,
     saveReconciliation,
     saveAccount,
     disableAccount,
@@ -297,8 +303,16 @@ function AppShell() {
       case "record":
         return (
           <LedgerModuleScreen
+            budgets={data.budgets}
+            currentPeriod={data.currentPeriod}
+            onDeleteBudget={async (budgetId) => {
+              await deleteBudget(budgetId);
+            }}
             onOpenAssets={() => setActiveScreen("assets")}
             onOpenTransactions={() => setActiveScreen("transactions")}
+            onSaveBudget={async (budget) => {
+              await saveBudget(budget);
+            }}
             transactions={data.transactions}
           />
         );
@@ -310,6 +324,12 @@ function AppShell() {
             liabilities={data.liabilities}
             onBack={() => setActiveScreen("record")}
             onOpenRecord={() => setActiveScreen("record")}
+            onReplaceTransaction={async (transactionId, input, reason) => {
+              await replaceTransaction(transactionId, input, reason);
+            }}
+            onVoidTransaction={async (transactionId, reason) => {
+              await voidTransactionById(transactionId, reason);
+            }}
             recordsIndex={transactionRecordsIndex.index}
           />
         );
@@ -343,7 +363,10 @@ function AppShell() {
           />
         );
       case "reports":
-        const periodTransactions = filterTransactionsByReportPeriod(data.transactions, data.currentPeriod);
+        const reportTransactions = getEffectiveTransactions(data.transactions, {
+          includeVoided: data.settings.includeVoidedTransactionsInReports,
+        });
+        const periodTransactions = filterTransactionsByReportPeriod(reportTransactions, data.currentPeriod);
         return (
           <ReportsScreen
             assets={data.assets}
@@ -370,6 +393,10 @@ function AppShell() {
             onExport={handleExport}
             onImport={handleImport}
             onReset={handleReset}
+            onSaveSettings={async (settings) => {
+              await saveSettings(settings);
+            }}
+            settings={data.settings}
             storageMode="本地移动存储"
           />
         );

@@ -422,6 +422,7 @@ export default function DashboardScreen({
   onOpenSettings,
   onOpenTransactions,
   onScrollEnabledChange,
+  summary,
   transactions,
 }: DashboardScreenProps) {
   const [route, setRoute] = useState<DashboardRoute>("home");
@@ -447,6 +448,7 @@ export default function DashboardScreen({
           onBack={() => setRoute("home")}
           onOpenRecord={onOpenRecord}
           onOpenProfitabilityAnalysis={() => setRoute("profitabilityAnalysis")}
+          period={summary.period}
           transactions={transactions}
         />
       </ScreenTransition>
@@ -456,7 +458,11 @@ export default function DashboardScreen({
   if (route === "profitabilityAnalysis") {
     return (
       <ScreenTransition animateOnMount transitionKey="profitabilityAnalysis" variant="drilldown">
-        <ProfitabilityAnalysisScreen onBack={() => setRoute("operationAnalysisReport")} />
+        <ProfitabilityAnalysisScreen
+          onBack={() => setRoute("operationAnalysisReport")}
+          period={summary.period}
+          transactions={transactions}
+        />
       </ScreenTransition>
     );
   }
