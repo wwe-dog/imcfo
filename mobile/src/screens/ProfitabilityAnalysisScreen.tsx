@@ -3,6 +3,7 @@ import { Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from "r
 import Svg, { Circle, G, Line, Polyline, Rect, Text as SvgText } from "react-native-svg";
 import DrilldownIncomeSankeySection from "../components/DrilldownIncomeSankeySection";
 import AppIcon from "../components/AppIcon";
+import ScreenTransition from "../components/ScreenTransition";
 import { buildIncomeStructureFlowRoot } from "../domain/reports/incomeStructureFlow";
 import type { ReportPeriod, Transaction } from "../domain/models";
 import {
@@ -748,6 +749,7 @@ function InfoSheet({
   return (
     <Modal animationType="fade" transparent visible onRequestClose={onClose}>
       <Pressable onPress={onClose} style={styles.sheetBackdrop}>
+        <ScreenTransition animateOnMount transitionKey={`profitability-sheet-${sheet.type}`} variant="sheet">
         <Pressable onPress={(event) => event.stopPropagation()} style={styles.sheetPanel}>
           <View style={styles.sheetHandle} />
           <View style={styles.sheetHeader}>
@@ -760,6 +762,7 @@ function InfoSheet({
           </View>
           {content}
         </Pressable>
+        </ScreenTransition>
       </Pressable>
     </Modal>
   );

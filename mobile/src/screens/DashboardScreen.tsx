@@ -29,6 +29,7 @@ import Skeleton from "../components/Skeleton";
 import SkeletonCard, { SkeletonScreenShell } from "../components/SkeletonCard";
 import ScreenTransition from "../components/ScreenTransition";
 import type { Asset, Liability, ReportSummary, Transaction } from "../domain/models";
+import { useRouteTransition } from "../hooks/useRouteTransition";
 import {
   HOME_DASHBOARD_HARDCODED_SPEC,
   resolveHybridSphereGlassMaterial,
@@ -56,6 +57,10 @@ interface DashboardScreenProps {
 
 type DashboardRoute = "home" | "operationAnalysisReport" | "profitabilityAnalysis";
 type HubAction = HomeHubAction;
+
+const getDashboardRouteKey = (route: DashboardRoute): string => `dashboard-${route}`;
+const getDashboardRouteDepth = (route: DashboardRoute): number =>
+  route === "home" ? 0 : route === "operationAnalysisReport" ? 1 : 2;
 
 const REFERENCE_VIEWPORT_WIDTH = HOME_DASHBOARD_HARDCODED_SPEC.referenceViewport.width;
 const REFERENCE_VIEWPORT_HEIGHT = HOME_DASHBOARD_HARDCODED_SPEC.referenceViewport.height;
@@ -425,7 +430,11 @@ export default function DashboardScreen({
   summary,
   transactions,
 }: DashboardScreenProps) {
-  const [route, setRoute] = useState<DashboardRoute>("home");
+  const { direction, goBack, navigate, route, transitionKey } = useRouteTransition<DashboardRoute>(
+    "home",
+    getDashboardRouteKey,
+    getDashboardRouteDepth,
+  );
 
   useEffect(() => {
     onScrollEnabledChange?.(route !== "home");
@@ -441,13 +450,13 @@ export default function DashboardScreen({
 
   if (route === "operationAnalysisReport") {
     return (
-      <ScreenTransition animateOnMount transitionKey="operationAnalysisReport" variant="drilldown">
+      <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
         <OperatingAnalysisReportScreen
           assets={assets}
           liabilities={liabilities}
-          onBack={() => setRoute("home")}
+          onBack={() => goBack("home")}
           onOpenRecord={onOpenRecord}
-          onOpenProfitabilityAnalysis={() => setRoute("profitabilityAnalysis")}
+          onOpenProfitabilityAnalysis={() => navigate("profitabilityAnalysis")}
           period={summary.period}
           transactions={transactions}
         />
@@ -457,9 +466,9 @@ export default function DashboardScreen({
 
   if (route === "profitabilityAnalysis") {
     return (
-      <ScreenTransition animateOnMount transitionKey="profitabilityAnalysis" variant="drilldown">
+      <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
         <ProfitabilityAnalysisScreen
-          onBack={() => setRoute("operationAnalysisReport")}
+          onBack={() => goBack("operationAnalysisReport")}
           period={summary.period}
           transactions={transactions}
         />
@@ -468,16 +477,18 @@ export default function DashboardScreen({
   }
 
   return (
+    <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
     <FuturisticDashboardHome
       onOpenAccounts={onOpenAccounts}
       onOpenAssets={onOpenAssets}
-      onOpenOperationReport={() => setRoute("operationAnalysisReport")}
-      onOpenProfitabilityAnalysis={() => setRoute("profitabilityAnalysis")}
+      onOpenOperationReport={() => navigate("operationAnalysisReport")}
+      onOpenProfitabilityAnalysis={() => navigate("profitabilityAnalysis")}
       onOpenRecord={onOpenRecord}
       onOpenReports={onOpenReports}
       onOpenSettings={onOpenSettings}
       onOpenTransactions={onOpenTransactions}
     />
+    </ScreenTransition>
   );
 }
 

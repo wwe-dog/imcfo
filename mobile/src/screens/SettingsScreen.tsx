@@ -10,7 +10,9 @@ import {
   getLedgerScreenPadding,
   type LedgerRowTone,
 } from "../components/LedgerUI";
+import ScreenTransition from "../components/ScreenTransition";
 import type { AppSettings, ReportSummary } from "../domain/models";
+import { useRouteTransition } from "../hooks/useRouteTransition";
 import { theme } from "../styles/theme";
 import { formatCurrency } from "../utils/formatters";
 
@@ -40,6 +42,9 @@ type SettingsRoute =
   | { name: "help" }
   | { name: "about" }
   | { name: "storageInfo" };
+
+const getSettingsRouteKey = (route: SettingsRoute): string => `settings-${route.name}`;
+const getSettingsRouteDepth = (route: SettingsRoute): number => (route.name === "root" ? 0 : 1);
 
 type DetailRow = {
   icon?: AppIconName;
@@ -84,14 +89,18 @@ export default function SettingsScreen({
 }: SettingsScreenProps) {
   const { width } = useWindowDimensions();
   const horizontalPadding = getLedgerScreenPadding(width);
-  const [route, setRoute] = useState<SettingsRoute>({ name: "root" });
+  const { direction, goBack, navigate, route, transitionKey } = useRouteTransition<SettingsRoute>(
+    { name: "root" },
+    getSettingsRouteKey,
+    getSettingsRouteDepth,
+  );
   const [exportedJson, setExportedJson] = useState("");
   const [importJson, setImportJson] = useState("");
   const [importErrorMessage, setImportErrorMessage] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
-  const goRoot = () => setRoute({ name: "root" });
+  const goRoot = () => goBack({ name: "root" });
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -145,7 +154,8 @@ export default function SettingsScreen({
 
   if (route.name === "data") {
     return (
-      <View style={screenStyle}>
+      <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
+        <View style={screenStyle}>
         <View style={styles.stack}>
           <LedgerPageHeader onBack={goRoot} title="数据管理" />
           <LedgerGlassHero
@@ -181,7 +191,7 @@ export default function SettingsScreen({
             <LedgerValueRow
               icon="report"
               last
-              onPress={() => setRoute({ name: "storageInfo" })}
+              onPress={() => navigate({ name: "storageInfo" })}
               subtitle="查看本地优先、无云同步和备份边界"
               title="存储说明"
               value={storageMode}
@@ -255,26 +265,30 @@ export default function SettingsScreen({
             />
           </LedgerFullBleedList>
         </View>
-      </View>
+        </View>
+      </ScreenTransition>
     );
   }
 
   if (route.name !== "root") {
     return (
-      <StaticDetailView
-        appVersion={appVersion}
-        horizontalPadding={horizontalPadding}
-        onBack={goRoot}
-        onSaveSettings={onSaveSettings}
-        route={route}
-        settings={settings}
-        storageMode={storageMode}
-      />
+      <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
+        <StaticDetailView
+          appVersion={appVersion}
+          horizontalPadding={horizontalPadding}
+          onBack={goRoot}
+          onSaveSettings={onSaveSettings}
+          route={route}
+          settings={settings}
+          storageMode={storageMode}
+        />
+      </ScreenTransition>
     );
   }
 
   return (
-    <View style={screenStyle}>
+    <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
+      <View style={screenStyle}>
       <View style={styles.stack}>
         <LedgerPageHeader title="我的" />
         <LedgerGlassHero
@@ -291,10 +305,10 @@ export default function SettingsScreen({
 
         <LedgerSectionHeader title="常用工具" />
         <View style={styles.toolGrid}>
-          <ToolTile icon="data" onPress={() => setRoute({ name: "data" })} subtitle="备份、导入和清理" title="数据管理" tone="blue" />
+          <ToolTile icon="data" onPress={() => navigate({ name: "data" })} subtitle="备份、导入和清理" title="数据管理" tone="blue" />
           <ToolTile icon="reconcile" onPress={confirmReset} subtitle="恢复系统演示账本" title="恢复示例" tone="amber" />
-          <ToolTile icon="reports" onPress={() => setRoute({ name: "reportSettings" })} subtitle="报表模式与口径" title="报表设置" tone="green" />
-          <ToolTile icon="settings" onPress={() => setRoute({ name: "preferences" })} subtitle="本地偏好说明" title="记录偏好" tone="default" />
+          <ToolTile icon="reports" onPress={() => navigate({ name: "reportSettings" })} subtitle="报表模式与口径" title="报表设置" tone="green" />
+          <ToolTile icon="settings" onPress={() => navigate({ name: "preferences" })} subtitle="本地偏好说明" title="记录偏好" tone="default" />
         </View>
 
         <LedgerSectionHeader title="设置与管理" />
@@ -324,14 +338,14 @@ export default function SettingsScreen({
           />
           <LedgerValueRow
             icon="reports"
-            onPress={() => setRoute({ name: "reportSettings" })}
+            onPress={() => navigate({ name: "reportSettings" })}
             subtitle="个人财务三大报表、简明版和专业版"
             title="报表设置"
             value="本地"
           />
           <LedgerValueRow
             icon="report"
-            onPress={() => setRoute({ name: "help" })}
+            onPress={() => navigate({ name: "help" })}
             subtitle="本地优先、报表口径与版本说明"
             title="帮助与说明"
             value="查看"
@@ -339,7 +353,7 @@ export default function SettingsScreen({
           <LedgerValueRow
             icon="warning"
             last
-            onPress={() => setRoute({ name: "about" })}
+            onPress={() => navigate({ name: "about" })}
             subtitle="当前仍为本地 MVP"
             title="关于我为 CFO"
             tone="amber"
@@ -372,7 +386,8 @@ export default function SettingsScreen({
           />
         </LedgerFullBleedList>
       </View>
-    </View>
+      </View>
+    </ScreenTransition>
   );
 }
 

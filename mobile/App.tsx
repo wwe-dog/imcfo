@@ -1,5 +1,5 @@
 import { StatusBar } from "expo-status-bar";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Linking,
@@ -32,7 +32,7 @@ import RecordScreen from "./src/screens/RecordScreen";
 import ReportsScreen from "./src/screens/ReportsScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import TransactionRecordsScreen from "./src/screens/TransactionRecordsScreen";
-import ScreenTransition from "./src/components/ScreenTransition";
+import ScreenTransition, { type ScreenTransitionDirection } from "./src/components/ScreenTransition";
 import { BottomNavBar, type BottomNavTab } from "./src/components/BottomNavBar";
 import { RecordFanMenu, type RecordFanAction } from "./src/components/RecordFanMenu";
 import { RecordingScreen } from "./src/components/RecordingScreen";
@@ -67,12 +67,16 @@ export default function App() {
 
 function AppShell() {
   const [activeScreen, setActiveScreen] = useState<ScreenKey>("dashboard");
+  const [rootTransitionDirection, setRootTransitionDirection] =
+    useState<ScreenTransitionDirection>("neutral");
   const [isDashboardScrollEnabled, setIsDashboardScrollEnabled] = useState(false);
   const [isRecordFanOpen, setIsRecordFanOpen] = useState(false);
   const [isRecordingScreenOpen, setIsRecordingScreenOpen] = useState(false);
   const [isRecordWorkflowOpen, setIsRecordWorkflowOpen] = useState(false);
+  const [isRecordWorkflowDismissing, setIsRecordWorkflowDismissing] = useState(false);
   const [pendingRecordDraft, setPendingRecordDraft] = useState<PendingRecordDraft | null>(null);
   const [manualEntryNonce, setManualEntryNonce] = useState<number | null>(null);
+  const recordWorkflowCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const {
@@ -121,6 +125,47 @@ function AppShell() {
     activeScreen === "dashboard"
       ? isDashboardScrollEnabled
       : true;
+  const isRecordWorkflowVisible = isRecordWorkflowOpen || isRecordWorkflowDismissing;
+
+  useEffect(() => {
+    return () => {
+      if (recordWorkflowCloseTimer.current) {
+        clearTimeout(recordWorkflowCloseTimer.current);
+      }
+    };
+  }, []);
+
+  const navigateToScreen = useCallback(
+    (screen: ScreenKey, direction: ScreenTransitionDirection = "forward") => {
+      setIsRecordFanOpen(false);
+      setRootTransitionDirection(direction);
+      setActiveScreen(screen);
+    },
+    [],
+  );
+
+  const openRecordWorkflow = useCallback(() => {
+    if (recordWorkflowCloseTimer.current) {
+      clearTimeout(recordWorkflowCloseTimer.current);
+      recordWorkflowCloseTimer.current = null;
+    }
+    setIsRecordWorkflowDismissing(false);
+    setIsRecordWorkflowOpen(true);
+  }, []);
+
+  const closeRecordWorkflow = useCallback(() => {
+    setIsRecordWorkflowOpen(false);
+    setIsRecordWorkflowDismissing(true);
+    if (recordWorkflowCloseTimer.current) {
+      clearTimeout(recordWorkflowCloseTimer.current);
+    }
+    recordWorkflowCloseTimer.current = setTimeout(() => {
+      setIsRecordWorkflowDismissing(false);
+      setPendingRecordDraft(null);
+      setManualEntryNonce(null);
+      recordWorkflowCloseTimer.current = null;
+    }, 150);
+  }, []);
 
   const handleExport = async () => exportData();
 
@@ -133,8 +178,7 @@ function AppShell() {
   };
 
   const handleBottomTabPress = (key: string) => {
-    setIsRecordFanOpen(false);
-    setActiveScreen(key as BottomTabScreenKey);
+    navigateToScreen(key as BottomTabScreenKey, "neutral");
   };
 
   const handleRecordFanSelect = (action: RecordFanAction) => {
@@ -148,7 +192,7 @@ function AppShell() {
       setManualEntryNonce(Date.now());
     }
 
-    setIsRecordWorkflowOpen(true);
+    openRecordWorkflow();
   };
 
   const handleRecordingDraftReady = (
@@ -161,7 +205,7 @@ function AppShell() {
       transcriptionText,
     });
     setIsRecordingScreenOpen(false);
-    setIsRecordWorkflowOpen(true);
+    openRecordWorkflow();
   };
 
   const handleReset = async () => {
@@ -289,12 +333,12 @@ function AppShell() {
             assets={data.assets}
             isLoading={showScreenSkeleton}
             liabilities={data.liabilities}
-            onOpenAccounts={() => setActiveScreen("accounts")}
-            onOpenAssets={() => setActiveScreen("assets")}
-            onOpenRecord={() => setActiveScreen("record")}
-            onOpenReports={() => setActiveScreen("reports")}
-            onOpenSettings={() => setActiveScreen("settings")}
-            onOpenTransactions={() => setActiveScreen("transactions")}
+            onOpenAccounts={() => navigateToScreen("accounts", "forward")}
+            onOpenAssets={() => navigateToScreen("assets", "forward")}
+            onOpenRecord={() => navigateToScreen("record", "forward")}
+            onOpenReports={() => navigateToScreen("reports", "forward")}
+            onOpenSettings={() => navigateToScreen("settings", "forward")}
+            onOpenTransactions={() => navigateToScreen("transactions", "forward")}
             onScrollEnabledChange={setIsDashboardScrollEnabled}
             summary={summary}
             transactions={data.transactions}
@@ -308,8 +352,8 @@ function AppShell() {
             onDeleteBudget={async (budgetId) => {
               await deleteBudget(budgetId);
             }}
-            onOpenAssets={() => setActiveScreen("assets")}
-            onOpenTransactions={() => setActiveScreen("transactions")}
+            onOpenAssets={() => navigateToScreen("assets", "forward")}
+            onOpenTransactions={() => navigateToScreen("transactions", "forward")}
             onSaveBudget={async (budget) => {
               await saveBudget(budget);
             }}
@@ -322,8 +366,8 @@ function AppShell() {
             assets={data.assets}
             isPreparingRecordsIndex={showScreenSkeleton || transactionRecordsIndex.isPreparing}
             liabilities={data.liabilities}
-            onBack={() => setActiveScreen("record")}
-            onOpenRecord={() => setActiveScreen("record")}
+            onBack={() => navigateToScreen("record", "back")}
+            onOpenRecord={() => navigateToScreen("record", "back")}
             onReplaceTransaction={async (transactionId, input, reason) => {
               await replaceTransaction(transactionId, input, reason);
             }}
@@ -339,7 +383,7 @@ function AppShell() {
             accounts={data.accounts}
             isLoading={showScreenSkeleton}
             transactions={data.transactions}
-            onBack={() => setActiveScreen("record")}
+            onBack={() => navigateToScreen("record", "back")}
             onDeleteAccount={handleDeleteAccount}
             onDisableAccount={handleDisableAccount}
             onSaveReconciliation={handleSaveReconciliation}
@@ -353,10 +397,10 @@ function AppShell() {
             assets={data.assets}
             isLoading={showScreenSkeleton}
             liabilities={data.liabilities}
-            onBack={() => setActiveScreen("record")}
+            onBack={() => navigateToScreen("record", "back")}
             onDeleteAsset={handleDeleteAsset}
             onDeleteLiability={handleDeleteLiability}
-            onOpenAccounts={() => setActiveScreen("accounts")}
+            onOpenAccounts={() => navigateToScreen("accounts", "forward")}
             onSaveReconciliation={handleSaveReconciliation}
             onSaveAsset={handleSaveAsset}
             onSaveLiability={handleSaveLiability}
@@ -372,8 +416,8 @@ function AppShell() {
             assets={data.assets}
             isLoading={showScreenSkeleton}
             liabilities={data.liabilities}
-            onBack={() => setActiveScreen("dashboard")}
-            onOpenRecord={() => setActiveScreen("record")}
+            onBack={() => navigateToScreen("dashboard", "back")}
+            onOpenRecord={() => navigateToScreen("record", "forward")}
             period={data.currentPeriod}
             transactions={periodTransactions}
           />
@@ -386,9 +430,9 @@ function AppShell() {
             receivableAmount={receivableAmount}
             summary={summary}
             transactionCount={data.transactions.length}
-            onOpenAccounts={() => setActiveScreen("accounts")}
-            onOpenAssets={() => setActiveScreen("assets")}
-            onOpenTransactions={() => setActiveScreen("transactions")}
+            onOpenAccounts={() => navigateToScreen("accounts", "forward")}
+            onOpenAssets={() => navigateToScreen("assets", "forward")}
+            onOpenTransactions={() => navigateToScreen("transactions", "forward")}
             onClear={handleClear}
             onExport={handleExport}
             onImport={handleImport}
@@ -427,6 +471,7 @@ function AppShell() {
         >
           <ScreenTransition
             animateOnMount
+            direction={rootTransitionDirection}
             style={styles.virtualizedContent}
             transitionKey={activeScreen}
             variant={isBottomTabScreen(activeScreen) ? "tab" : "drilldown"}
@@ -449,6 +494,7 @@ function AppShell() {
         >
           <ScreenTransition
             animateOnMount
+            direction={rootTransitionDirection}
             transitionKey={activeScreen}
             variant={isBottomTabScreen(activeScreen) ? "tab" : "drilldown"}
           >
@@ -469,15 +515,19 @@ function AppShell() {
           tabs={bottomNavTabs}
         />
       </View>
-      {isRecordWorkflowOpen && data ? (
+      {isRecordWorkflowVisible && data ? (
         <View style={styles.recordWorkflowOverlay}>
+          <ScreenTransition
+            animateOnMount
+            direction={isRecordWorkflowDismissing ? "back" : "forward"}
+            phase={isRecordWorkflowDismissing ? "exit" : "enter"}
+            style={styles.recordWorkflowTransition}
+            transitionKey={isRecordWorkflowDismissing ? "record-workflow-exit" : "record-workflow-enter"}
+            variant="fullscreen"
+          >
           <Pressable
             accessibilityRole="button"
-            onPress={() => {
-              setIsRecordWorkflowOpen(false);
-              setPendingRecordDraft(null);
-              setManualEntryNonce(null);
-            }}
+            onPress={closeRecordWorkflow}
             style={[styles.recordWorkflowClose, { top: Math.max(insets.top, 12) + 8 }]}
           >
             <Text style={styles.recordWorkflowCloseText}>关闭</Text>
@@ -490,26 +540,27 @@ function AppShell() {
             onExternalDraftConsumed={() => setPendingRecordDraft(null)}
             onExternalManualEntryConsumed={() => setManualEntryNonce(null)}
             onOpenAccounts={() => {
-              setIsRecordWorkflowOpen(false);
-              setActiveScreen("accounts");
+              closeRecordWorkflow();
+              navigateToScreen("accounts", "forward");
             }}
             onOpenAssets={() => {
-              setIsRecordWorkflowOpen(false);
-              setActiveScreen("assets");
+              closeRecordWorkflow();
+              navigateToScreen("assets", "forward");
             }}
             onOpenReports={() => {
-              setIsRecordWorkflowOpen(false);
-              setActiveScreen("reports");
+              closeRecordWorkflow();
+              navigateToScreen("reports", "forward");
             }}
             onOpenTransactions={() => {
-              setIsRecordWorkflowOpen(false);
-              setActiveScreen("transactions");
+              closeRecordWorkflow();
+              navigateToScreen("transactions", "forward");
             }}
             onSave={async (input) => {
               await handleSaveTransaction(input);
-              setIsRecordWorkflowOpen(false);
+              closeRecordWorkflow();
             }}
           />
+          </ScreenTransition>
         </View>
       ) : null}
       <RecordFanMenu
@@ -580,6 +631,9 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: theme.colors.background,
     zIndex: 90,
+  },
+  recordWorkflowTransition: {
+    flex: 1,
   },
   tabBar: {
     backgroundColor: theme.colors.surface,

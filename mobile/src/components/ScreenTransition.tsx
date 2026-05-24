@@ -1,28 +1,82 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { Animated, Easing, StyleSheet, type StyleProp, type ViewStyle } from "react-native";
 
-type ScreenTransitionVariant = "drilldown" | "tab";
+export type ScreenTransitionDirection = "back" | "forward" | "neutral";
+export type ScreenTransitionPhase = "enter" | "exit";
+export type ScreenTransitionVariant = "drilldown" | "fullscreen" | "modal" | "sheet" | "tab";
 
 interface ScreenTransitionProps {
   animateOnMount?: boolean;
   children: ReactNode;
+  direction?: ScreenTransitionDirection;
+  phase?: ScreenTransitionPhase;
   style?: StyleProp<ViewStyle>;
   transitionKey: string;
   variant?: ScreenTransitionVariant;
 }
 
-const getTransitionConfig = (variant: ScreenTransitionVariant) => {
+const getTransitionConfig = (
+  variant: ScreenTransitionVariant,
+  direction: ScreenTransitionDirection,
+) => {
   if (variant === "tab") {
     return {
+      duration: 120,
+      scale: 1,
+      translateX: 0,
+      translateY: 4,
+    };
+  }
+
+  if (variant === "modal") {
+    return {
+      duration: 120,
+      scale: 0.99,
+      translateX: 0,
+      translateY: 0,
+    };
+  }
+
+  if (variant === "sheet") {
+    return {
+      duration: 160,
+      scale: 1,
+      translateX: 0,
+      translateY: 16,
+    };
+  }
+
+  if (variant === "fullscreen") {
+    return {
       duration: 150,
+      scale: 1,
+      translateX: 0,
+      translateY: 6,
+    };
+  }
+
+  if (direction === "back") {
+    return {
+      duration: 140,
+      scale: 1,
+      translateX: -8,
+      translateY: 0,
+    };
+  }
+
+  if (direction === "neutral") {
+    return {
+      duration: 120,
+      scale: 1,
       translateX: 0,
       translateY: 4,
     };
   }
 
   return {
-    duration: 210,
-    translateX: 12,
+    duration: 160,
+    scale: 1,
+    translateX: 8,
     translateY: 0,
   };
 };
@@ -30,27 +84,37 @@ const getTransitionConfig = (variant: ScreenTransitionVariant) => {
 export default function ScreenTransition({
   animateOnMount = false,
   children,
+  direction = "forward",
+  phase = "enter",
   style,
   transitionKey,
   variant = "drilldown",
 }: ScreenTransitionProps) {
   const progress = useRef(new Animated.Value(animateOnMount ? 0 : 1)).current;
+  const previousPhase = useRef(phase);
   const previousKey = useRef(transitionKey);
   const shouldAnimateOnMount = useRef(animateOnMount);
-  const config = getTransitionConfig(variant);
+  const config = getTransitionConfig(variant, direction);
 
   useEffect(() => {
-    if (previousKey.current === transitionKey && !shouldAnimateOnMount.current) return;
+    if (
+      previousKey.current === transitionKey &&
+      previousPhase.current === phase &&
+      !shouldAnimateOnMount.current
+    ) {
+      return;
+    }
     shouldAnimateOnMount.current = false;
+    previousPhase.current = phase;
     previousKey.current = transitionKey;
-    progress.setValue(0);
+    progress.setValue(phase === "exit" ? 1 : 0);
     Animated.timing(progress, {
       duration: config.duration,
       easing: Easing.out(Easing.cubic),
-      toValue: 1,
+      toValue: phase === "exit" ? 0 : 1,
       useNativeDriver: true,
     }).start();
-  }, [config.duration, progress, transitionKey]);
+  }, [config.duration, phase, progress, transitionKey]);
 
   const animatedStyle = {
     opacity: progress,
@@ -65,6 +129,12 @@ export default function ScreenTransition({
         translateY: progress.interpolate({
           inputRange: [0, 1],
           outputRange: [config.translateY, 0],
+        }),
+      },
+      {
+        scale: progress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [config.scale, 1],
         }),
       },
     ],

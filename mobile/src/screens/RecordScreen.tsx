@@ -12,6 +12,7 @@ import AppIcon from "../components/AppIcon";
 import type { AppIconName } from "../components/AppIcon";
 import InlineError from "../components/InlineError";
 import LiquidGlassVoiceInput from "../components/LiquidGlassVoiceInput";
+import ScreenTransition from "../components/ScreenTransition";
 import type { TransactionInput } from "../domain/accounting/transactionRules";
 import type { Account, Liability } from "../domain/models";
 import {
@@ -966,7 +967,7 @@ export default function RecordScreen({
       ) : null}
 
       <Modal
-        animationType="slide"
+        animationType="fade"
         onRequestClose={closeDraftSheet}
         transparent
         visible={isDraftSheetVisible && candidateDraft !== null}
@@ -974,6 +975,7 @@ export default function RecordScreen({
         <View style={styles.sheetOverlay}>
           <Pressable accessibilityLabel="关闭识别结果草稿" onPress={closeDraftSheet} style={styles.sheetBackdrop} />
           {candidateDraft ? (
+            <ScreenTransition animateOnMount transitionKey="record-draft-sheet" variant="sheet">
             <View style={[styles.draftSheet, { height: draftSheetMaxHeight, maxHeight: draftSheetMaxHeight }]}>
               <View style={styles.sheetHandle} />
               <View style={styles.sheetHeader}>
@@ -1191,6 +1193,7 @@ export default function RecordScreen({
                 ) : null}
               </View>
             </View>
+            </ScreenTransition>
           ) : null}
         </View>
       </Modal>

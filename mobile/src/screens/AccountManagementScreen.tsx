@@ -27,6 +27,7 @@ import {
   getLedgerScreenPadding,
 } from "../components/LedgerUI";
 import ScreenTransition from "../components/ScreenTransition";
+import { useRouteTransition } from "../hooks/useRouteTransition";
 import { sharedStyles, theme } from "../styles/theme";
 import { formatCurrency } from "../utils/formatters";
 
@@ -68,6 +69,11 @@ interface AccountReconciliationState {
 type AccountRoute =
   | { name: "overview" }
   | { name: "categoryDetail"; type: AccountType };
+
+const getAccountRouteKey = (route: AccountRoute): string =>
+  route.name === "categoryDetail" ? `account-category-${route.type}` : "account-overview";
+
+const getAccountRouteDepth = (route: AccountRoute): number => (route.name === "overview" ? 0 : 1);
 
 interface AccountFormSheetState {
   returnTo?: AccountType;
@@ -228,7 +234,11 @@ export default function AccountManagementScreen({
 }: AccountManagementScreenProps) {
   const { width } = useWindowDimensions();
   const horizontalPadding = getLedgerScreenPadding(width);
-  const [route, setRoute] = useState<AccountRoute>({ name: "overview" });
+  const { direction, goBack, navigate, route, transitionKey } = useRouteTransition<AccountRoute>(
+    { name: "overview" },
+    getAccountRouteKey,
+    getAccountRouteDepth,
+  );
   const [form, setForm] = useState<AccountFormState>(emptyForm());
   const [formSheet, setFormSheet] = useState<AccountFormSheetState | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -249,7 +259,7 @@ export default function AccountManagementScreen({
 
   const openCategoryDetail = (type: AccountType) => {
     setForm(emptyForm(type));
-    setRoute({ name: "categoryDetail", type });
+    navigate({ name: "categoryDetail", type });
   };
 
   const openCreateForm = (type?: AccountType, returnTo?: AccountType) => {
@@ -354,11 +364,11 @@ export default function AccountManagementScreen({
     }
 
     if (route.name === "categoryDetail") {
-      setRoute({ name: "overview" });
+      goBack({ name: "overview" });
       return;
     }
 
-    setRoute({ name: "overview" });
+    goBack({ name: "overview" });
   };
 
   const validateAndBuildInput = (): AccountInput | null => {
@@ -563,6 +573,7 @@ export default function AccountManagementScreen({
 
   if (route.name === "overview" && accounts.length === 0) {
     return (
+      <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
       <View style={styles.stack}>
         <EmptyStateScreen
           description={"添加现金、银行卡、支付宝等账户后，\n你的资金去向会更清晰。"}
@@ -578,6 +589,7 @@ export default function AccountManagementScreen({
         {renderAccountFormSheet()}
         {renderReconciliationModal()}
       </View>
+      </ScreenTransition>
     );
   }
 
@@ -595,7 +607,7 @@ export default function AccountManagementScreen({
       .slice(0, 3);
 
     return (
-      <ScreenTransition animateOnMount transitionKey={`account-category-${route.type}`} variant="drilldown">
+      <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
         <View style={styles.stack}>
           <FinanceTopBar
             onBack={handleBack}
@@ -656,6 +668,7 @@ export default function AccountManagementScreen({
   }
 
   return (
+    <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
     <View style={styles.stack}>
       <FinanceTopBar onBack={handleBack} onRightPress={() => openCreateForm()} title="账户管理" />
       <SummaryHeroCard>
@@ -700,6 +713,7 @@ export default function AccountManagementScreen({
       {renderAccountFormSheet()}
       {renderReconciliationModal()}
     </View>
+    </ScreenTransition>
   );
 }
 
@@ -803,6 +817,7 @@ function AccountFormSheet({
 
   return (
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
+      <ScreenTransition animateOnMount transitionKey={`account-sheet-${isAccountDetail ? "detail" : "new"}`} variant="sheet">
       <BottomSheetFrame
         onClose={onClose}
         onSave={onSave}
@@ -973,6 +988,7 @@ function AccountFormSheet({
           ) : null}
         </ScrollView>
       </BottomSheetFrame>
+      </ScreenTransition>
     </Modal>
   );
 }
@@ -1011,6 +1027,7 @@ function AccountReconciliationModal({
       visible={account !== undefined}
     >
       <Pressable onPress={onClose} style={styles.modalBackdrop}>
+        <ScreenTransition animateOnMount transitionKey={`account-reconciliation-${reconciliation.isConfirming ? "confirm" : "edit"}`} variant="modal">
         <Pressable onPress={(event) => event.stopPropagation()} style={styles.modalPanel}>
           {reconciliation.isConfirming ? (
             <>
@@ -1136,6 +1153,7 @@ function AccountReconciliationModal({
             </>
           )}
         </Pressable>
+        </ScreenTransition>
       </Pressable>
     </Modal>
   );

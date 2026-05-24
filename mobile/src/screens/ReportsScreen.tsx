@@ -11,12 +11,14 @@ import {
   getLedgerScreenPadding,
   type LedgerRowTone,
 } from "../components/LedgerUI";
+import ScreenTransition from "../components/ScreenTransition";
 import Skeleton from "../components/Skeleton";
 import SkeletonCard, { SkeletonScreenShell } from "../components/SkeletonCard";
 import type { Asset, Liability, ReportMode, ReportPeriod, Transaction } from "../domain/models";
 import { buildBalanceSheetSummary } from "../domain/reports/balanceSheet";
 import { buildCashFlowStatementSummary } from "../domain/reports/cashFlowStatement";
 import { buildIncomeStatementSummary } from "../domain/reports/incomeStatement";
+import { useRouteTransition } from "../hooks/useRouteTransition";
 import { theme } from "../styles/theme";
 import OperatingAnalysisReportScreen from "./OperatingAnalysisReportScreen";
 import ProfitabilityAnalysisScreen from "./ProfitabilityAnalysisScreen";
@@ -44,6 +46,15 @@ type ReportsRoute =
   | { name: "detail"; report: ReportKey }
   | { name: "operationAnalysis" }
   | { name: "profitabilityAnalysis" };
+
+const getReportsRouteKey = (route: ReportsRoute): string =>
+  route.name === "detail" ? `reports-detail-${route.report}` : `reports-${route.name}`;
+
+const getReportsRouteDepth = (route: ReportsRoute): number => {
+  if (route.name === "root") return 0;
+  if (route.name === "profitabilityAnalysis") return 2;
+  return 1;
+};
 
 const emptyReportsIllustration = require("../assets/empty/empty-reports.png");
 
@@ -142,7 +153,11 @@ export default function ReportsScreen({
 }: ReportsScreenProps) {
   const { width } = useWindowDimensions();
   const horizontalPadding = getLedgerScreenPadding(width);
-  const [route, setRoute] = useState<ReportsRoute>({ name: "root" });
+  const { direction, goBack, navigate, route, transitionKey } = useRouteTransition<ReportsRoute>(
+    { name: "root" },
+    getReportsRouteKey,
+    getReportsRouteDepth,
+  );
   const [mode, setMode] = useState<ReportMode>("simple");
   const balanceSheet = useMemo(() => buildBalanceSheetSummary(assets, liabilities), [assets, liabilities]);
   const incomeStatement = useMemo(() => buildIncomeStatementSummary(transactions), [transactions]);
@@ -199,38 +214,51 @@ export default function ReportsScreen({
 
   if (route.name === "operationAnalysis") {
     return (
-      <OperatingAnalysisReportScreen
-        assets={assets}
-        liabilities={liabilities}
-        onBack={() => setRoute({ name: "root" })}
-        onOpenRecord={onOpenRecord}
-        onOpenProfitabilityAnalysis={() => setRoute({ name: "profitabilityAnalysis" })}
-        period={period}
-        transactions={transactions}
-      />
+      <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
+        <OperatingAnalysisReportScreen
+          assets={assets}
+          liabilities={liabilities}
+          onBack={() => goBack({ name: "root" })}
+          onOpenRecord={onOpenRecord}
+          onOpenProfitabilityAnalysis={() => navigate({ name: "profitabilityAnalysis" })}
+          period={period}
+          transactions={transactions}
+        />
+      </ScreenTransition>
     );
   }
 
   if (route.name === "profitabilityAnalysis") {
-    return <ProfitabilityAnalysisScreen onBack={() => setRoute({ name: "operationAnalysis" })} period={period} transactions={transactions} />;
+    return (
+      <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
+        <ProfitabilityAnalysisScreen
+          onBack={() => goBack({ name: "operationAnalysis" })}
+          period={period}
+          transactions={transactions}
+        />
+      </ScreenTransition>
+    );
   }
 
   if (route.name === "detail") {
     return (
-      <ReportDetailView
-        horizontalPadding={horizontalPadding}
-        mode={mode}
-        onBack={() => setRoute({ name: "root" })}
-        onModeChange={setMode}
-        onReportChange={(report) => setRoute({ name: "detail", report })}
-        rowsByReport={rowsByReport}
-        selectedReport={route.report}
-      />
+      <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
+        <ReportDetailView
+          horizontalPadding={horizontalPadding}
+          mode={mode}
+          onBack={() => goBack({ name: "root" })}
+          onModeChange={setMode}
+          onReportChange={(report) => navigate({ name: "detail", report })}
+          rowsByReport={rowsByReport}
+          selectedReport={route.report}
+        />
+      </ScreenTransition>
     );
   }
 
   return (
-    <View style={[styles.screen, { marginHorizontal: -horizontalPadding, paddingHorizontal: horizontalPadding }]}>
+    <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
+      <View style={[styles.screen, { marginHorizontal: -horizontalPadding, paddingHorizontal: horizontalPadding }]}>
       <View style={styles.stack}>
         <LedgerPageHeader title="报表" />
         <LedgerGlassHero
@@ -251,7 +279,7 @@ export default function ReportsScreen({
             <ReportEntryRow
               key={item.key}
               last={index === reportTabs.length - 1}
-              onPress={() => setRoute({ name: "detail", report: item.key })}
+              onPress={() => navigate({ name: "detail", report: item.key })}
               rows={rowsByReport[item.key]}
               reportKey={item.key}
             />
@@ -262,7 +290,7 @@ export default function ReportsScreen({
         <LedgerFullBleedList horizontalPadding={horizontalPadding}>
           <LedgerValueRow
             icon="report"
-            onPress={() => setRoute({ name: "operationAnalysis" })}
+            onPress={() => navigate({ name: "operationAnalysis" })}
             subtitle="综合盈利、偿债、营运、成长和风险事项"
             title="经营分析报告"
             value="12 节"
@@ -271,7 +299,7 @@ export default function ReportsScreen({
           <LedgerValueRow
             icon="chart"
             last
-            onPress={() => setRoute({ name: "profitabilityAnalysis" })}
+            onPress={() => navigate({ name: "profitabilityAnalysis" })}
             subtitle="查看结余趋势、指标解释和收入结构流向"
             title="盈利能力分析"
             tone="green"
@@ -280,7 +308,8 @@ export default function ReportsScreen({
           />
         </LedgerFullBleedList>
       </View>
-    </View>
+      </View>
+    </ScreenTransition>
   );
 }
 

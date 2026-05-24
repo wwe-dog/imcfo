@@ -32,6 +32,7 @@ import {
   getLedgerScreenPadding,
 } from "../components/LedgerUI";
 import ScreenTransition from "../components/ScreenTransition";
+import { useRouteTransition } from "../hooks/useRouteTransition";
 import {
   assetAccountingSubjects,
   getAssetAccountingSubject,
@@ -69,6 +70,18 @@ type LedgerRoute =
   | { name: "overview" }
   | { kind: LedgerKind; name: "subject"; subjectId: string }
   | { id: string; kind: LedgerKind; name: "detail"; subjectId: string };
+
+const getLedgerRouteKey = (route: LedgerRoute): string => {
+  if (route.name === "subject") return `ledger-subject-${route.kind}-${route.subjectId}`;
+  if (route.name === "detail") return `ledger-detail-${route.kind}-${route.subjectId}-${route.id}`;
+  return "ledger-overview";
+};
+
+const getLedgerRouteDepth = (route: LedgerRoute): number => {
+  if (route.name === "detail") return 2;
+  if (route.name === "subject") return 1;
+  return 0;
+};
 type FormMode = "asset" | "liability" | null;
 type DeleteConfirmation =
   | { id: string; kind: "asset"; subjectId: string }
@@ -339,7 +352,11 @@ export default function AssetsLiabilitiesScreen({
   const horizontalPadding = getLedgerScreenPadding(width);
   const [activeKind, setActiveKind] = useState<LedgerKind>("asset");
   const [subjectSearchQuery, setSubjectSearchQuery] = useState("");
-  const [route, setRoute] = useState<LedgerRoute>({ name: "overview" });
+  const { direction, goBack, navigate, route, transitionKey } = useRouteTransition<LedgerRoute>(
+    { name: "overview" },
+    getLedgerRouteKey,
+    getLedgerRouteDepth,
+  );
   const [openHelpSubjectId, setOpenHelpSubjectId] = useState<string | null>(null);
   const [formMode, setFormMode] = useState<FormMode>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteConfirmation>(null);
@@ -404,11 +421,11 @@ export default function AssetsLiabilitiesScreen({
     }
 
     if (route.name === "detail") {
-      setRoute({ kind: route.kind, name: "subject", subjectId: route.subjectId });
+      goBack({ kind: route.kind, name: "subject", subjectId: route.subjectId });
       return;
     }
 
-    setRoute({ name: "overview" });
+    goBack({ name: "overview" });
   };
 
   const openAssetReconciliation = (asset: Asset) => {
@@ -552,12 +569,12 @@ export default function AssetsLiabilitiesScreen({
     setDeleteConfirmation(null);
     if (target.kind === "asset") {
       void onDeleteAsset(target.id);
-      setRoute({ kind: "asset", name: "subject", subjectId: target.subjectId });
+      navigate({ kind: "asset", name: "subject", subjectId: target.subjectId });
       return;
     }
 
     void onDeleteLiability(target.id);
-    setRoute({ kind: "liability", name: "subject", subjectId: target.subjectId });
+    navigate({ kind: "liability", name: "subject", subjectId: target.subjectId });
   };
 
   const renderOverview = () => {
@@ -571,7 +588,7 @@ export default function AssetsLiabilitiesScreen({
     const liabilityRows = visibleLiabilityGroups.length > 0 ? visibleLiabilityGroups : liabilityGroups.slice(0, 3);
 
     return (
-      <ScreenTransition animateOnMount transitionKey="ledger-overview" variant="drilldown">
+      <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
         <View style={styles.stack}>
           <LedgerTopBar onBack={onBack} title="资产负债" />
           <LedgerGlassHero
@@ -594,7 +611,7 @@ export default function AssetsLiabilitiesScreen({
                 icon={getSubjectIconName("asset", group.subject.id)}
                 key={group.subject.id}
                 last={index === assetRows.length - 1}
-                onPress={() => setRoute({ kind: "asset", name: "subject", subjectId: group.subject.id })}
+                onPress={() => navigate({ kind: "asset", name: "subject", subjectId: group.subject.id })}
                 subtitle={group.subject.rowExamples[0] ?? group.subject.description}
                 title={group.subject.displayName}
                 value={formatLedgerCurrency(group.amount)}
@@ -612,7 +629,7 @@ export default function AssetsLiabilitiesScreen({
                   icon={getSubjectIconName("liability", group.subject.id)}
                   key={group.subject.id}
                   last={index === liabilityRows.length - 1}
-                  onPress={() => setRoute({ kind: "liability", name: "subject", subjectId: group.subject.id })}
+                  onPress={() => navigate({ kind: "liability", name: "subject", subjectId: group.subject.id })}
                   subtitle={group.subject.rowExamples[0] ?? group.subject.description}
                   title={group.subject.displayName}
                   tone={status === "需关注" ? "amber" : "default"}
@@ -636,7 +653,7 @@ export default function AssetsLiabilitiesScreen({
     const items = kind === "asset" ? assetGroup?.items ?? [] : liabilityGroup?.items ?? [];
 
     return (
-      <ScreenTransition animateOnMount transitionKey={`ledger-subject-${subjectId}`} variant="drilldown">
+      <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
         <View style={styles.stack}>
           <LedgerTopBar onAdd={() => openCreateForm(kind, subjectId)} onBack={handleBack} title={subject.displayName} />
           <SummaryHeroCard style={styles.subjectSummaryCard}>
@@ -670,7 +687,7 @@ export default function AssetsLiabilitiesScreen({
                     key={asset.id}
                     last={index === items.length - 1}
                     note={asset.note}
-                    onPress={() => setRoute({ id: asset.id, kind, name: "detail", subjectId })}
+                    onPress={() => navigate({ id: asset.id, kind, name: "detail", subjectId })}
                     title={asset.name}
                   />
                 ))
@@ -681,7 +698,7 @@ export default function AssetsLiabilitiesScreen({
                     key={liability.id}
                     last={index === items.length - 1}
                     note={liability.note ?? liability.dueDate}
-                    onPress={() => setRoute({ id: liability.id, kind, name: "detail", subjectId })}
+                    onPress={() => navigate({ id: liability.id, kind, name: "detail", subjectId })}
                     title={liability.name}
                   />
                 ))}
@@ -699,7 +716,7 @@ export default function AssetsLiabilitiesScreen({
 
     if (!asset && !liability) {
       return (
-        <ScreenTransition animateOnMount transitionKey="ledger-detail-missing" variant="drilldown">
+        <ScreenTransition animateOnMount direction={direction} transitionKey="ledger-detail-missing" variant="drilldown">
           <View style={styles.stack}>
             <LedgerTopBar onBack={handleBack} title="明细不存在" />
             <EmptyBox description="该资产或负债可能已经被删除。" title="明细不存在" />
@@ -709,7 +726,7 @@ export default function AssetsLiabilitiesScreen({
     }
 
     return (
-      <ScreenTransition animateOnMount transitionKey={`ledger-detail-${kind}-${id}`} variant="drilldown">
+      <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
         <View style={styles.stack}>
           <LedgerTopBar onBack={handleBack} title={asset?.name ?? liability?.name ?? "明细详情"} />
           {asset ? (
@@ -1047,6 +1064,7 @@ function AssetLiabilityFormModal({
 }) {
   return (
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={formMode !== null}>
+      <ScreenTransition animateOnMount transitionKey={`asset-liability-form-${formMode ?? "closed"}`} variant="sheet">
       <Pressable onPress={onClose} style={styles.modalBackdrop}>
         <Pressable onPress={(event) => event.stopPropagation()} style={styles.modalPanel}>
           <View style={styles.sheetHandle} />
@@ -1154,6 +1172,7 @@ function AssetLiabilityFormModal({
           </ScrollView>
         </Pressable>
       </Pressable>
+      </ScreenTransition>
     </Modal>
   );
 }
@@ -1242,6 +1261,7 @@ function DeleteConfirmationModal({
 
   return (
     <Modal animationType="fade" onRequestClose={onCancel} transparent visible={confirmation !== null}>
+      <ScreenTransition animateOnMount transitionKey={`asset-liability-delete-${confirmation?.kind ?? "closed"}`} variant="modal">
       <Pressable onPress={onCancel} style={styles.modalBackdrop}>
         <Pressable onPress={(event) => event.stopPropagation()} style={styles.confirmPanel}>
           <View style={styles.sheetHandle} />
@@ -1257,6 +1277,7 @@ function DeleteConfirmationModal({
           </View>
         </Pressable>
       </Pressable>
+      </ScreenTransition>
     </Modal>
   );
 }
@@ -1281,6 +1302,7 @@ function AssetReconciliationModal({
 
   return (
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={asset !== undefined}>
+      <ScreenTransition animateOnMount transitionKey={`asset-reconciliation-${reconciliation.isConfirming ? "confirm" : "edit"}`} variant="modal">
       <Pressable onPress={onClose} style={styles.modalBackdrop}>
         <Pressable onPress={(event) => event.stopPropagation()} style={styles.modalPanel}>
           <View style={styles.sheetHandle} />
@@ -1372,6 +1394,7 @@ function AssetReconciliationModal({
           </ScrollView>
         </Pressable>
       </Pressable>
+      </ScreenTransition>
     </Modal>
   );
 }

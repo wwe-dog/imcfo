@@ -44,6 +44,7 @@ import {
   type TransactionDisplayRecord,
   type TransactionRecordsIndex,
 } from "../domain/transactions/transactionDisplayIndex";
+import { useRouteTransition } from "../hooks/useRouteTransition";
 import { theme } from "../styles/theme";
 import { formatCurrency } from "../utils/formatters";
 
@@ -85,6 +86,16 @@ interface TransactionSection {
   dateKey: string;
   dateLabel: string;
 }
+
+type TransactionRecordsRoute =
+  | { name: "list" }
+  | { name: "detail"; recordId: string };
+
+const getTransactionRecordsRouteKey = (route: TransactionRecordsRoute): string =>
+  route.name === "detail" ? `transaction-detail-${route.recordId}` : "transaction-list";
+
+const getTransactionRecordsRouteDepth = (route: TransactionRecordsRoute): number =>
+  route.name === "detail" ? 1 : 0;
 
 const timeFilterOptions: Array<{ label: string; value: TimeFilter }> = [
   { label: "全部", value: "all" },
@@ -454,6 +465,11 @@ export default function TransactionRecordsScreen({
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [quickFilter, setQuickFilter] = useState<TransactionQuickFilter>("all");
+  const { direction, goBack, navigate, transitionKey } = useRouteTransition<TransactionRecordsRoute>(
+    { name: "list" },
+    getTransactionRecordsRouteKey,
+    getTransactionRecordsRouteDepth,
+  );
   const [selectedRecord, setSelectedRecord] = useState<TransactionDisplayRecord | null>(null);
   const [isFilterVisible, setIsFilterVisible] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(() => createDefaultFilters(recordsIndex?.latestDateKey));
@@ -546,16 +562,29 @@ export default function TransactionRecordsScreen({
     setIsFilterVisible(true);
   }, [appliedFilters]);
 
+  const handleSelectRecord = useCallback(
+    (record: TransactionDisplayRecord) => {
+      setSelectedRecord(record);
+      navigate({ name: "detail", recordId: record.id });
+    },
+    [navigate],
+  );
+
+  const handleBackToList = useCallback(() => {
+    goBack({ name: "list" });
+    setSelectedRecord(null);
+  }, [goBack]);
+
   const renderTransactionRow = useCallback(
     ({ index, item, section }: { index: number; item: TransactionDisplayRecord; section: TransactionSection }) => (
       <TransactionRow
         horizontalPadding={horizontalPadding}
         isLast={index === section.data.length - 1}
-        onSelect={setSelectedRecord}
+        onSelect={handleSelectRecord}
         record={item}
       />
     ),
-    [horizontalPadding],
+    [handleSelectRecord, horizontalPadding],
   );
 
   const renderDateHeader = useCallback(
@@ -569,11 +598,11 @@ export default function TransactionRecordsScreen({
 
   if (selectedRecord) {
     return (
-      <ScreenTransition animateOnMount transitionKey={`transaction-detail-${selectedRecord.id}`} variant="drilldown">
+      <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
         <TransactionDetail
           assets={assets}
           liabilities={liabilities}
-          onBack={() => setSelectedRecord(null)}
+          onBack={handleBackToList}
           onReplaceTransaction={onReplaceTransaction}
           onVoidTransaction={onVoidTransaction}
           record={selectedRecord}
@@ -583,6 +612,7 @@ export default function TransactionRecordsScreen({
   }
 
   return (
+    <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
     <View style={styles.screen}>
       <LedgerPageHeader onBack={onBack} title="交易记录" />
 
@@ -666,6 +696,7 @@ export default function TransactionRecordsScreen({
         />
       ) : null}
     </View>
+    </ScreenTransition>
   );
 }
 
@@ -768,6 +799,7 @@ function TransactionDetail({
       <Modal animationType="fade" onRequestClose={() => setEditing(false)} transparent visible={isEditing}>
         <View style={styles.editModalRoot}>
           <Pressable onPress={() => setEditing(false)} style={styles.filterBackdrop} />
+          <ScreenTransition animateOnMount transitionKey="transaction-edit-panel" variant="modal">
           <View style={styles.editPanel}>
             <Text style={styles.filterTitle}>编辑替换交易</Text>
             <Text style={styles.filterSubtitle}>保存后会作废原记录，并生成新的有效交易。</Text>
@@ -837,6 +869,7 @@ function TransactionDetail({
               </Pressable>
             </View>
           </View>
+          </ScreenTransition>
         </View>
       </Modal>
     </ScrollView>
@@ -902,7 +935,7 @@ function FilterPanel({
     if (!visible) return;
     panelProgress.setValue(0);
     Animated.timing(panelProgress, {
-      duration: 180,
+      duration: 160,
       easing: Easing.out(Easing.cubic),
       toValue: 1,
       useNativeDriver: true,
@@ -968,7 +1001,7 @@ function FilterPanel({
                 {
                   translateY: panelProgress.interpolate({
                     inputRange: [0, 1],
-                    outputRange: [-8, 0],
+                    outputRange: [16, 0],
                   }),
                 },
                 {

@@ -23,9 +23,11 @@ import {
   getLedgerScreenPadding,
   type LedgerRowTone,
 } from "../components/LedgerUI";
+import ScreenTransition from "../components/ScreenTransition";
 import { calculateBudgetProgress, type BudgetProgress } from "../domain/accounting/budgetRules";
 import type { BudgetPlan, ReportPeriod, Transaction } from "../domain/models";
 import { getEffectiveTransactions } from "../domain/accounting/transactionAuditRules";
+import { useRouteTransition } from "../hooks/useRouteTransition";
 import { theme } from "../styles/theme";
 import { formatCurrency } from "../utils/formatters";
 
@@ -42,6 +44,9 @@ type ActiveBudgetSheet =
   | { type: "edit"; target: BudgetActionTarget }
   | { type: "new" }
   | null;
+
+const getLedgerModuleRouteKey = (route: LedgerModuleRoute): string => `ledger-module-${route}`;
+const getLedgerModuleRouteDepth = (route: LedgerModuleRoute): number => (route === "root" ? 0 : 1);
 
 interface LedgerModuleScreenProps {
   budgets: BudgetPlan[];
@@ -308,7 +313,11 @@ export default function LedgerModuleScreen({
   onSaveBudget,
   transactions,
 }: LedgerModuleScreenProps) {
-  const [route, setRoute] = React.useState<LedgerModuleRoute>("root");
+  const { direction, goBack, navigate, route, transitionKey } = useRouteTransition<LedgerModuleRoute>(
+    "root",
+    getLedgerModuleRouteKey,
+    getLedgerModuleRouteDepth,
+  );
   const { width } = useWindowDimensions();
   const horizontalPadding = getLedgerScreenPadding(width);
   const effectiveTransactions = React.useMemo(() => getEffectiveTransactions(transactions), [transactions]);
@@ -318,11 +327,12 @@ export default function LedgerModuleScreen({
     [budgets, currentPeriod, transactions],
   );
 
-  const goRoot = () => setRoute("root");
+  const goRoot = () => goBack("root");
 
   return (
     <View style={[styles.screen, { marginHorizontal: -horizontalPadding, paddingHorizontal: horizontalPadding }]}>
       {route === "root" ? (
+        <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
         <View style={styles.scrollContent}>
           <LedgerPageHeader title="账本" />
 
@@ -348,7 +358,7 @@ export default function LedgerModuleScreen({
             />
             <EntryTile
               icon="reports"
-              onPress={() => setRoute("budget")}
+              onPress={() => navigate("budget")}
               subtitle="管理预算额度、项目预算和固定占用。"
               title="预算管理"
             />
@@ -360,7 +370,7 @@ export default function LedgerModuleScreen({
             />
             <EntryTile
               icon="chart"
-              onPress={() => setRoute("projects")}
+              onPress={() => navigate("projects")}
               subtitle="追踪副业、项目和长期现金流。"
               title="经营项目"
             />
@@ -381,21 +391,25 @@ export default function LedgerModuleScreen({
             )}
           </LedgerFullBleedList>
         </View>
+        </ScreenTransition>
       ) : null}
 
       {route === "budget" ? (
-        <BudgetManagementView
-          budgets={budgets}
-          currentPeriod={currentPeriod}
-          horizontalPadding={horizontalPadding}
-          onBack={goRoot}
-          onDeleteBudget={onDeleteBudget}
-          onSaveBudget={onSaveBudget}
-          progress={budgetProgress}
-        />
+        <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
+          <BudgetManagementView
+            budgets={budgets}
+            currentPeriod={currentPeriod}
+            horizontalPadding={horizontalPadding}
+            onBack={goRoot}
+            onDeleteBudget={onDeleteBudget}
+            onSaveBudget={onSaveBudget}
+            progress={budgetProgress}
+          />
+        </ScreenTransition>
       ) : null}
 
       {route === "projects" ? (
+        <ScreenTransition animateOnMount direction={direction} transitionKey={transitionKey} variant="drilldown">
         <View style={styles.scrollContent}>
           <LedgerPageHeader onBack={goRoot} title="经营项目" />
           <LedgerGlassHero
@@ -425,6 +439,7 @@ export default function LedgerModuleScreen({
             ))}
           </LedgerFullBleedList>
         </View>
+        </ScreenTransition>
       ) : null}
     </View>
   );
@@ -1616,6 +1631,7 @@ function BudgetSheetFrame({
     <Modal animationType="fade" onRequestClose={onClose} statusBarTranslucent transparent visible={visible}>
       <View style={styles.sheetOverlay}>
         <Pressable accessibilityRole="button" onPress={onClose} style={styles.sheetBackdrop} />
+        <ScreenTransition animateOnMount transitionKey={`budget-sheet-${title}`} variant="sheet">
         <LinearGradient
           colors={["rgba(31,36,54,0.96)", "rgba(20,24,41,0.98)", "rgba(14,17,31,0.99)"]}
           style={styles.budgetSheet}
@@ -1639,6 +1655,7 @@ function BudgetSheetFrame({
             {children}
           </ScrollView>
         </LinearGradient>
+        </ScreenTransition>
       </View>
     </Modal>
   );
